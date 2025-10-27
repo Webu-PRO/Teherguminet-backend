@@ -35,11 +35,6 @@ const formatCors = (value: string | undefined, defaults: string[]) => {
 loadEnv(process.env.NODE_ENV || "development", process.cwd());
 
 const sharedRedisUrl = process.env.REDIS_URL;
-const resolveBackendUrl = () => {
-  const url = process.env.MEDUSA_BACKEND_URL || "http://localhost:9000";
-  return url.endsWith("/") ? url.slice(0, -1) : url;
-};
-const backendUrl = resolveBackendUrl();
 const normalizeS3Prefix = (value: string | undefined) => {
   if (!value) {
     return undefined;
