@@ -1,4 +1,3 @@
-import path from "path";
 import { loadEnv, defineConfig } from "@medusajs/utils";
 
 const DEFAULT_STORE_CORS = [
