@@ -49,24 +49,23 @@ const normalizeS3Prefix = (value: string | undefined) => {
   return trimmed ? trimmed : undefined;
 };
 const s3Prefix = normalizeS3Prefix(process.env.S3_PREFIX);
-const plugins = [
-  {
-    resolve: "medusa-file-s3",
-    options: {
-      s3_url: process.env.S3_URL,
-      bucket: process.env.S3_BUCKET,
-      region: process.env.S3_REGION,
-      access_key_id: process.env.S3_ACCESS_KEY_ID,
-      secret_access_key: process.env.S3_SECRET_ACCESS_KEY,
-      cache_control: process.env.S3_CACHE_CONTROL,
-      download_file_duration: process.env.S3_DOWNLOAD_FILE_DURATION,
-      prefix: s3Prefix,
-      aws_config_object: {
-        customUserAgent: process.env.S3_CUSTOM_AGENT,
-      },
-    },
-  },
-];
+const resolveOptionalNumber = (value: string | undefined) => {
+  if (!value) {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+};
+const s3DownloadDuration = resolveOptionalNumber(
+  process.env.S3_DOWNLOAD_FILE_DURATION
+);
+const s3AdditionalClientConfig =
+  process.env.S3_CUSTOM_AGENT && process.env.S3_CUSTOM_AGENT.trim().length > 0
+    ? {
+        customUserAgent: process.env.S3_CUSTOM_AGENT.trim(),
+      }
+    : undefined;
 
 module.exports = defineConfig({
   projectConfig: {
@@ -76,15 +75,14 @@ module.exports = defineConfig({
       storeCors: formatCors(process.env.STORE_CORS, DEFAULT_STORE_CORS),
       adminCors: formatCors(process.env.ADMIN_CORS, DEFAULT_ADMIN_CORS),
       authCors: formatCors(process.env.AUTH_CORS, DEFAULT_AUTH_CORS),
-      jwtSecret: process.env.JWT_SECRET || "supersecret",
-      cookieSecret: process.env.COOKIE_SECRET || "supersecret",
+        jwtSecret: process.env.JWT_SECRET || "supersecret",
+        cookieSecret: process.env.COOKIE_SECRET || "supersecret",
+      },
+      databaseDriverOptions: {
+        ssl: false,
+        sslmode: "disable",
+      },
     },
-    databaseDriverOptions: {
-      ssl: false,
-      sslmode: "disable",
-    },
-  },
-  plugins,
   modules: {
     order: {},
     b2b: {
@@ -106,13 +104,22 @@ module.exports = defineConfig({
       },
     },
     file: {
-      resolve: "@medusajs/file-local",
+      resolve: "@medusajs/file-s3",
       options: {
-        backend_url: `${backendUrl}/static`,
-        upload_dir:
-          process.env.FILE_UPLOAD_DIR || path.join(process.cwd(), "static"),
-        private_upload_dir:
-          process.env.FILE_PRIVATE_UPLOAD_DIR || path.join(process.cwd(), "static"),
+        authentication_method: "access-key",
+        file_url: process.env.S3_URL,
+        bucket: process.env.S3_BUCKET,
+        region: process.env.S3_REGION,
+        access_key_id: process.env.S3_ACCESS_KEY_ID,
+        secret_access_key: process.env.S3_SECRET_ACCESS_KEY,
+        cache_control: process.env.S3_CACHE_CONTROL,
+        ...(s3DownloadDuration
+          ? { download_file_duration: s3DownloadDuration }
+          : {}),
+        ...(s3Prefix ? { prefix: `${s3Prefix}/` } : {}),
+        ...(s3AdditionalClientConfig
+          ? { additional_client_config: s3AdditionalClientConfig }
+          : {}),
       },
     },
     eventBus: {
