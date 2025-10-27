@@ -98,16 +98,19 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
     }
   }
 
-  let approvals = []
+  type CartApprovalList = Awaited<
+    ReturnType<B2BModuleService["getCartApprovals"]>
+  >
+  let approvals: CartApprovalList = []
 
   try {
     approvals = await b2bService.getCartApprovals(cartId)
   } catch (error) {
     const logger = req.scope.resolve(ContainerRegistrationKeys.LOGGER)
+    const message =
+      (error as Error)?.message ?? "Unknown error while loading approvals"
     logger?.warn(
-      "Failed to load cart approvals for cart %s: %s",
-      cartId,
-      (error as Error)?.message ?? error
+      `Failed to load cart approvals for cart ${cartId}: ${message}`
     )
   }
 
