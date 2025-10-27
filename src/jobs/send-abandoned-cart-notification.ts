@@ -1,0 +1,100 @@
+import type { MedusaContainer } from "@medusajs/framework/types"
+import { sendAbandonedCartsWorkflow } from "../workflows/send-abandoned-carts"
+
+const DEFAULT_THRESHOLD_MINUTES = 60 * 24 // 1 day
+
+export default async function abandonedCartJob(
+  container: MedusaContainer
+) {
+  const logger = container.resolve("logger")
+  const query = container.resolve("query")
+
+  const thresholdMinutes =
+    Number(process.env.ABANDONED_CART_THRESHOLD_MINUTES) ||
+    DEFAULT_THRESHOLD_MINUTES
+
+  const thresholdDate = new Date(
+    Date.now() - thresholdMinutes * 60 * 1000
+  )
+
+  let offset = 0
+  const limit = 50
+  let total = 0
+  let processed = 0
+
+  do {
+    const { data: carts, metadata } = await query.graph({
+      entity: "cart",
+      fields: [
+        "id",
+        "email",
+        "metadata",
+        "items.id",
+        "items.title",
+        "items.quantity",
+        "items.unit_price",
+        "items.thumbnail",
+        "customer.id",
+        "customer.email",
+        "customer.first_name",
+        "customer.last_name",
+        "shipping_address.first_name",
+        "shipping_address.last_name",
+        "region.currency_code",
+      ],
+      filters: {
+        updated_at: {
+          $lt: thresholdDate,
+        },
+        email: {
+          $ne: null,
+        },
+        completed_at: null,
+      },
+      pagination: {
+        skip: offset,
+        take: limit,
+      },
+    })
+
+    total = metadata?.count ?? carts.length
+
+    if (!carts.length) {
+      break
+    }
+
+    const cartsWithItems = carts.filter(
+      (cart: any) =>
+        cart.items?.length &&
+        !cart.metadata?.abandoned_notification
+    )
+
+    if (cartsWithItems.length) {
+      try {
+        await sendAbandonedCartsWorkflow(container).run({
+          input: {
+            carts: cartsWithItems,
+          },
+        })
+        processed += cartsWithItems.length
+      } catch (error) {
+        logger.error(
+          `Failed to send abandoned cart notifications: ${
+            error instanceof Error ? error.message : error
+          }`
+        )
+      }
+    }
+
+    offset += limit
+  } while (offset < total)
+
+  logger.info(
+    `Abandoned cart job completed. Notifications sent: ${processed}`
+  )
+}
+
+export const config = {
+  name: "abandoned-cart-notification",
+  schedule: "0 0 * * *", // every day at midnight
+}
