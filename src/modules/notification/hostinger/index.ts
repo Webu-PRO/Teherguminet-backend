@@ -1,15 +1,20 @@
-import nodemailer, { type Transporter, type SendMailOptions } from "nodemailer"
+import nodemailer from "nodemailer"
 import {
   AbstractNotificationProviderService,
   MedusaError,
+  ModuleProvider,
+  Modules,
 } from "@medusajs/framework/utils"
-import type { Logger, NotificationTypes } from "@medusajs/framework/types"
+import type {
+  Logger,
+  NotificationTypes,
+} from "@medusajs/framework/types"
 
 type InjectedDependencies = {
   logger: Logger
 }
 
-type HostingerProviderOptions = {
+type HostingerSMTPProviderOptions = {
   channels: string[]
   host: string
   port: number
@@ -19,20 +24,20 @@ type HostingerProviderOptions = {
   from: string
 }
 
-export default class HostingerSMTPProvider extends AbstractNotificationProviderService {
+class HostingerSMTPNotificationService extends AbstractNotificationProviderService {
   static identifier = "hostinger-smtp"
 
   protected readonly logger_: Logger
-  protected readonly transporter_: Transporter
-  protected readonly options_: HostingerProviderOptions
+  protected readonly transporter_: nodemailer.Transporter
+  protected readonly options_: HostingerSMTPProviderOptions
 
   constructor(
     { logger }: InjectedDependencies,
-    options: HostingerProviderOptions
+    options: HostingerSMTPProviderOptions
   ) {
     super()
 
-    HostingerSMTPProvider.validateOptions(options)
+    HostingerSMTPNotificationService.validateOptions(options)
 
     this.logger_ = logger
     this.options_ = options
@@ -48,7 +53,7 @@ export default class HostingerSMTPProvider extends AbstractNotificationProviderS
   }
 
   static validateOptions(options: Record<string, unknown>) {
-    const requiredOptions = [
+    const required = [
       "channels",
       "host",
       "port",
@@ -57,7 +62,7 @@ export default class HostingerSMTPProvider extends AbstractNotificationProviderS
       "from",
     ]
 
-    for (const key of requiredOptions) {
+    for (const key of required) {
       if (!options[key]) {
         throw new MedusaError(
           MedusaError.Types.INVALID_DATA,
@@ -66,7 +71,7 @@ export default class HostingerSMTPProvider extends AbstractNotificationProviderS
       }
     }
 
-    if (!Array.isArray(options.channels) || options.channels.length === 0) {
+    if (!Array.isArray(options.channels) || !options.channels.length) {
       throw new MedusaError(
         MedusaError.Types.INVALID_DATA,
         `Notification provider option "channels" must be a non-empty array`
@@ -75,7 +80,7 @@ export default class HostingerSMTPProvider extends AbstractNotificationProviderS
   }
 
   getIdentifier(): string {
-    return HostingerSMTPProvider.identifier
+    return HostingerSMTPNotificationService.identifier
   }
 
   getSupportedChannels(): string[] {
@@ -92,7 +97,8 @@ export default class HostingerSMTPProvider extends AbstractNotificationProviderS
       )
     }
 
-    const from = notification.from?.trim() || this.options_.from
+    const from =
+      notification.from?.trim() ?? this.options_.from
     const subject =
       notification.content?.subject ||
       (typeof notification.data?.subject === "string"
@@ -111,38 +117,35 @@ export default class HostingerSMTPProvider extends AbstractNotificationProviderS
         ? notification.data.text
         : undefined)
 
-    const mailOptions: SendMailOptions = {
+    const attachments = notification.attachments?.map((attachment) => ({
+      filename: attachment.filename,
+      content: attachment.content
+        ? Buffer.from(attachment.content, "base64")
+        : undefined,
+      contentType: attachment.content_type,
+      encoding: attachment.content ? "base64" : undefined,
+      contentDisposition: attachment.disposition,
+      cid: attachment.cid,
+    }))
+
+    const message = {
       from,
       to: notification.to,
       subject,
       html,
       text,
+      attachments,
     }
 
-    if (!mailOptions.html && !mailOptions.text && notification.data) {
-      mailOptions.text = JSON.stringify(notification.data, null, 2)
-    }
-
-    if (notification.attachments?.length) {
-      mailOptions.attachments = notification.attachments.map((attachment) => ({
-        filename: attachment.filename,
-        content: attachment.content
-          ? Buffer.from(attachment.content, "base64")
-          : undefined,
-        contentType: attachment.content_type,
-        encoding: attachment.content ? "base64" : undefined,
-        contentDisposition: attachment.disposition,
-        cid: attachment.cid,
-      }))
+    if (!message.html && !message.text && notification.data) {
+      message.text = JSON.stringify(notification.data, null, 2)
     }
 
     try {
-      const info = await this.transporter_.sendMail(mailOptions)
-
+      const info = await this.transporter_.sendMail(message)
       this.logger_.info(
         `Sent notification ${info.messageId} to ${notification.to}`
       )
-
       return { id: info.messageId }
     } catch (error) {
       this.logger_.error(
@@ -158,4 +161,14 @@ export default class HostingerSMTPProvider extends AbstractNotificationProviderS
       )
     }
   }
+
+  async resend(
+    notification: NotificationTypes.ProviderSendNotificationDTO
+  ): Promise<NotificationTypes.ProviderSendNotificationResultsDTO> {
+    return this.send(notification)
+  }
 }
+
+export default ModuleProvider(Modules.NOTIFICATION, {
+  services: [HostingerSMTPNotificationService],
+})
