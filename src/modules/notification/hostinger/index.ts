@@ -51,19 +51,23 @@ class HostingerSMTPNotificationService extends AbstractNotificationProviderServi
       },
     })
 
-    this.logger_.info(
-      `Hostinger SMTP provider configured (host=${options.host}, port=${options.port}, secure=${options.secure}, channels=${options.channels.join(",")})`
-    )
+    const configMessage = `Hostinger SMTP provider configured (host=${options.host}, port=${options.port}, secure=${options.secure}, channels=${options.channels.join(",")})`
+    
+    this.logger_.info(configMessage)
+    console.log(configMessage)
 
     this.transporter_.verify().then(
       () =>
-        this.logger_.info(
-          "Hostinger SMTP connection verified successfully"
-        ),
+        {
+          this.logger_.info("Hostinger SMTP connection verified successfully")
+          console.log("Hostinger SMTP connection verified successfully")
+        },
       (error) =>
-        this.logger_.warn(
-          `Hostinger SMTP verification failed: ${error instanceof Error ? error.message : error}`
-        )
+        {
+          const msg = `Hostinger SMTP verification failed: ${error instanceof Error ? error.message : error}`
+          this.logger_.warn(msg)
+          console.error(msg)
+        }
     )
   }
 
@@ -112,9 +116,9 @@ class HostingerSMTPNotificationService extends AbstractNotificationProviderServi
       )
     }
 
-    this.logger_.info(
-      `Hostinger SMTP: sending notification to ${notification.to} (channel=${notification.channel}, template=${notification.template})`
-    )
+    const sendingMessage = `Hostinger SMTP: sending notification to ${notification.to} (channel=${notification.channel}, template=${notification.template})`
+    this.logger_.info(sendingMessage)
+    console.log(sendingMessage)
 
     const from =
       notification.from?.trim() ?? this.options_.from
@@ -161,14 +165,18 @@ class HostingerSMTPNotificationService extends AbstractNotificationProviderServi
 
     try {
       const info = await this.transporter_.sendMail(message)
-      this.logger_.info(
-        `Hostinger SMTP: notification sent (messageId=${info.messageId}, to=${notification.to})`
-      )
+      {
+        const msg = `Hostinger SMTP: notification sent (messageId=${info.messageId}, to=${notification.to})`
+        this.logger_.info(msg)
+        console.log(msg)
+      }
       return { id: info.messageId }
     } catch (error) {
-      this.logger_.error(
-        `Hostinger SMTP: failed to send notification to ${notification.to} - ${error instanceof Error ? error.message : error}`
-      )
+      {
+        const msg = `Hostinger SMTP: failed to send notification to ${notification.to} - ${error instanceof Error ? error.message : error}`
+        this.logger_.error(msg)
+        console.error(msg, error)
+      }
 
       throw new MedusaError(
         MedusaError.Types.UNEXPECTED_STATE,
