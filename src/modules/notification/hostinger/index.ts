@@ -125,7 +125,6 @@ class HostingerSMTPNotificationService extends AbstractNotificationProviderServi
       contentType: attachment.content_type,
       encoding: attachment.content ? "base64" : undefined,
       contentDisposition: attachment.disposition,
-      cid: attachment.cid,
     }))
 
     const message = {

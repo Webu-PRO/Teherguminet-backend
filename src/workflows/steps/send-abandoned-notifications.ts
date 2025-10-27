@@ -10,6 +10,7 @@ import type {
 
 type AbandonedCart = CartDTO & {
   customer: CustomerDTO | null
+  region?: { currency_code?: string | null } | null
 }
 
 type SendAbandonedNotificationsInput = {
@@ -24,7 +25,7 @@ const buildCartHtml = (
     cart.items?.length
       ? cart.items
           .map((item) => {
-            const price = (item.unit_price ?? 0) / 100
+            const price = Number(item.unit_price ?? 0) / 100
             return `
             <tr>
               <td style="padding: 8px 12px; border-bottom: 1px solid #eee;">
@@ -34,7 +35,7 @@ const buildCartHtml = (
               <td style="padding: 8px 12px; text-align:right; border-bottom: 1px solid #eee;">
                 ${price.toLocaleString("hu-HU", {
                   style: "currency",
-                  currency: cart.region?.currency_code?.toUpperCase() ?? "HUF",
+                  currency: ((cart.region?.currency_code ?? "HUF").toUpperCase()),
                 })}
               </td>
             </tr>`
