@@ -37,7 +37,7 @@ services:
       - redis
     environment:
       - NODE_ENV=${NODE_ENV:-production}
-      - DATABASE_URL=${DATABASE_URL:-postgres://deadpool:Kroschu.1236547890@postgres:5432/medusa-store}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://deadpool:Kroschu.1236547890@postgres:5432/medusa-store}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
     env_file:
       - .env
