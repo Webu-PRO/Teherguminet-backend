@@ -35,6 +35,7 @@
     "@mikro-orm/postgresql": "6.4.3",
     "awilix": "^8.0.1",
     "medusa-file-s3": "^1.4.2",
+    "nodemailer": "^6.9.16",
     "pg": "^8.13.0",
     "posthog-node": "^4.17.1"
   },

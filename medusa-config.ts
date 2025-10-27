@@ -60,6 +60,56 @@ const s3AdditionalClientConfig =
         customUserAgent: process.env.S3_CUSTOM_AGENT.trim(),
       }
     : undefined;
+const resolveOptionalBoolean = (value: string | undefined) => {
+  if (!value) {
+    return undefined;
+  }
+
+  return ["true", "1", "yes", "y"].includes(value.toLowerCase());
+};
+const resolveBooleanWithFallback = (
+  value: string | undefined,
+  fallback: boolean
+) => {
+  const parsed = resolveOptionalBoolean(value);
+  return typeof parsed === "boolean" ? parsed : fallback;
+};
+const smtpPort = resolveOptionalNumber(process.env.SMTP_PORT);
+const smtpSecure = resolveBooleanWithFallback(
+  process.env.SMTP_SECURE,
+  smtpPort === 465
+);
+const notificationProviders: Array<Record<string, unknown>> = [
+  {
+    resolve: "@medusajs/medusa/notification-local",
+    id: "local",
+    options: {
+      channels: ["feed"],
+    },
+  },
+];
+
+if (
+  process.env.SMTP_HOST &&
+  process.env.SMTP_USER &&
+  process.env.SMTP_PASS
+) {
+  notificationProviders.push({
+    resolve: "./src/modules/notification/hostinger",
+    id: "hostinger-smtp",
+    options: {
+      channels: ["email"],
+      host: process.env.SMTP_HOST,
+      port: smtpPort ?? 587,
+      secure: smtpSecure,
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+      from:
+        process.env.SMTP_FROM ??
+        "Teherguminet.hu <noreply@therguminet.hu>",
+    },
+  });
+}
 
 module.exports = defineConfig({
   projectConfig: {
@@ -97,22 +147,6 @@ module.exports = defineConfig({
         ],
       },
     },
-    email: {
-      resolve: "@medusajs/email",
-      options: {
-        provider: "smtp",
-        config: {
-          host: process.env.SMTP_HOST,
-          port: resolveOptionalNumber(process.env.SMTP_PORT) ?? 587,
-          secure: process.env.SMTP_SECURE === "true",
-          auth: {
-            user: process.env.SMTP_USER,
-            pass: process.env.SMTP_PASS,
-          },
-          from: process.env.SMTP_FROM ?? "noreply@therguminet.hu",
-        },
-      },
-    },
     file: {
       resolve: "@medusajs/file",
       options: {
@@ -144,6 +178,12 @@ module.exports = defineConfig({
       resolve: "@medusajs/event-bus-redis",
       options: {
         redisUrl: process.env.EVENT_BUS_REDIS_URL || sharedRedisUrl,
+      },
+    },
+    notification: {
+      resolve: "@medusajs/medusa/notification",
+      options: {
+        providers: notificationProviders,
       },
     },
   },
