@@ -51,12 +51,9 @@ class HostingerSMTPNotificationService extends AbstractNotificationProviderServi
       },
     })
 
-    this.logger_.info("Hostinger SMTP provider configured", {
-      host: options.host,
-      port: options.port,
-      secure: options.secure,
-      channels: options.channels,
-    })
+    this.logger_.info(
+      `Hostinger SMTP provider configured (host=${options.host}, port=${options.port}, secure=${options.secure}, channels=${options.channels.join(",")})`
+    )
 
     this.transporter_.verify().then(
       () =>
@@ -65,9 +62,7 @@ class HostingerSMTPNotificationService extends AbstractNotificationProviderServi
         ),
       (error) =>
         this.logger_.warn(
-          `Hostinger SMTP verification failed: ${
-            error instanceof Error ? error.message : error
-          }`
+          `Hostinger SMTP verification failed: ${error instanceof Error ? error.message : error}`
         )
     )
   }
@@ -117,11 +112,9 @@ class HostingerSMTPNotificationService extends AbstractNotificationProviderServi
       )
     }
 
-    this.logger_.info("Hostinger SMTP: sending notification", {
-      to: notification.to,
-      channel: notification.channel,
-      template: notification.template,
-    })
+    this.logger_.info(
+      `Hostinger SMTP: sending notification to ${notification.to} (channel=${notification.channel}, template=${notification.template})`
+    )
 
     const from =
       notification.from?.trim() ?? this.options_.from
@@ -169,20 +162,12 @@ class HostingerSMTPNotificationService extends AbstractNotificationProviderServi
     try {
       const info = await this.transporter_.sendMail(message)
       this.logger_.info(
-        `Hostinger SMTP: notification sent`,
-        {
-          messageId: info.messageId,
-          to: notification.to,
-        }
+        `Hostinger SMTP: notification sent (messageId=${info.messageId}, to=${notification.to})`
       )
       return { id: info.messageId }
     } catch (error) {
       this.logger_.error(
-        `Hostinger SMTP: failed to send notification`,
-        {
-          to: notification.to,
-          error: error instanceof Error ? error.stack ?? error.message : error,
-        }
+        `Hostinger SMTP: failed to send notification to ${notification.to} - ${error instanceof Error ? error.message : error}`
       )
 
       throw new MedusaError(
