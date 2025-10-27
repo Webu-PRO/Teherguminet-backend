@@ -98,22 +98,30 @@ module.exports = defineConfig({
       },
     },
     file: {
-      resolve: "@medusajs/file-s3",
+      resolve: "@medusajs/file",
       options: {
-        authentication_method: "access-key",
-        file_url: process.env.S3_URL,
-        bucket: process.env.S3_BUCKET,
-        region: process.env.S3_REGION,
-        access_key_id: process.env.S3_ACCESS_KEY_ID,
-        secret_access_key: process.env.S3_SECRET_ACCESS_KEY,
-        cache_control: process.env.S3_CACHE_CONTROL,
-        ...(s3DownloadDuration
-          ? { download_file_duration: s3DownloadDuration }
-          : {}),
-        ...(s3Prefix ? { prefix: `${s3Prefix}/` } : {}),
-        ...(s3AdditionalClientConfig
-          ? { additional_client_config: s3AdditionalClientConfig }
-          : {}),
+        providers: [
+          {
+            resolve: "@medusajs/file-s3",
+            id: "s3",
+            options: {
+              authentication_method: "access-key",
+              file_url: process.env.S3_URL,
+              bucket: process.env.S3_BUCKET,
+              region: process.env.S3_REGION,
+              access_key_id: process.env.S3_ACCESS_KEY_ID,
+              secret_access_key: process.env.S3_SECRET_ACCESS_KEY,
+              cache_control: process.env.S3_CACHE_CONTROL,
+              ...(s3DownloadDuration
+                ? { download_file_duration: s3DownloadDuration }
+                : {}),
+              ...(s3Prefix ? { prefix: `${s3Prefix}/` } : {}),
+              ...(s3AdditionalClientConfig
+                ? { additional_client_config: s3AdditionalClientConfig }
+                : {}),
+            },
+          },
+        ],
       },
     },
     eventBus: {
