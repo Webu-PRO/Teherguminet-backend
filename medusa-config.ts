@@ -69,14 +69,14 @@ module.exports = defineConfig({
       storeCors: formatCors(process.env.STORE_CORS, DEFAULT_STORE_CORS),
       adminCors: formatCors(process.env.ADMIN_CORS, DEFAULT_ADMIN_CORS),
       authCors: formatCors(process.env.AUTH_CORS, DEFAULT_AUTH_CORS),
-        jwtSecret: process.env.JWT_SECRET || "supersecret",
-        cookieSecret: process.env.COOKIE_SECRET || "supersecret",
-      },
-      databaseDriverOptions: {
-        ssl: false,
-        sslmode: "disable",
-      },
+      jwtSecret: process.env.JWT_SECRET || "supersecret",
+      cookieSecret: process.env.COOKIE_SECRET || "supersecret",
     },
+    databaseDriverOptions: {
+      ssl: false,
+      sslmode: "disable",
+    },
+  },
   modules: {
     order: {},
     b2b: {
