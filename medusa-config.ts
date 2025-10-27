@@ -40,12 +40,38 @@ const resolveBackendUrl = () => {
   return url.endsWith("/") ? url.slice(0, -1) : url;
 };
 const backendUrl = resolveBackendUrl();
+const normalizeS3Prefix = (value: string | undefined) => {
+  if (!value) {
+    return undefined;
+  }
+
+  const trimmed = value.replace(/^\/+|\/+$/g, "");
+  return trimmed ? trimmed : undefined;
+};
+const s3Prefix = normalizeS3Prefix(process.env.S3_PREFIX);
+const plugins = [
+  {
+    resolve: "medusa-file-s3",
+    options: {
+      s3_url: process.env.S3_URL,
+      bucket: process.env.S3_BUCKET,
+      region: process.env.S3_REGION,
+      access_key_id: process.env.S3_ACCESS_KEY_ID,
+      secret_access_key: process.env.S3_SECRET_ACCESS_KEY,
+      cache_control: process.env.S3_CACHE_CONTROL,
+      download_file_duration: process.env.S3_DOWNLOAD_FILE_DURATION,
+      prefix: s3Prefix,
+      aws_config_object: {
+        customUserAgent: process.env.S3_CUSTOM_AGENT,
+      },
+    },
+  },
+];
 
 module.exports = defineConfig({
   projectConfig: {
     databaseUrl: process.env.DATABASE_URL,
     redisUrl: sharedRedisUrl,
-    backendUrl,
     http: {
       storeCors: formatCors(process.env.STORE_CORS, DEFAULT_STORE_CORS),
       adminCors: formatCors(process.env.ADMIN_CORS, DEFAULT_ADMIN_CORS),
@@ -58,6 +84,7 @@ module.exports = defineConfig({
       sslmode: "disable",
     },
   },
+  plugins,
   modules: {
     order: {},
     b2b: {
