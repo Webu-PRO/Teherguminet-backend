@@ -81,7 +81,7 @@ const smtpSecure = resolveBooleanWithFallback(
 );
 const notificationProviders: Array<Record<string, unknown>> = [
   {
-    resolve: "@medusajs/medusa/notification-local",
+    resolve: "@medusajs/notification-local",
     id: "local",
     options: {
       channels: ["feed"],
@@ -181,7 +181,7 @@ module.exports = defineConfig({
       },
     },
     notification: {
-      resolve: "@medusajs/medusa/notification",
+      resolve: "@medusajs/notification",
       options: {
         providers: notificationProviders,
       },
