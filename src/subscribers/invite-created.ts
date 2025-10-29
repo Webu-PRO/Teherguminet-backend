@@ -10,6 +10,7 @@ import type {
   CreateNotificationDTO,
   INotificationModuleService,
   IUserModuleService,
+  InviteDTO,
   Logger,
 } from "@medusajs/types"
 
@@ -177,7 +178,7 @@ export default async function inviteCreatedHandler({
     return
   }
 
-  let detailedInvites
+  let detailedInvites: InviteDTO[] = []
   try {
     detailedInvites = await userModuleService.listInvites({
       id: inviteIds,
@@ -191,7 +192,7 @@ export default async function inviteCreatedHandler({
     return
   }
 
-  const inviteById = new Map(
+  const inviteById = new Map<string, InviteDTO>(
     detailedInvites.map((invite) => [invite.id, invite])
   )
 
