@@ -89,7 +89,20 @@ const notificationProviders: Array<Record<string, unknown>> = [
   },
 ];
 
-if (
+const hasSendGridConfig =
+  Boolean(process.env.SENDGRID_API_KEY) && Boolean(process.env.SENDGRID_FROM);
+
+if (hasSendGridConfig) {
+  notificationProviders.push({
+    resolve: "@medusajs/medusa/notification-sendgrid",
+    id: "sendgrid",
+    options: {
+      channels: ["email"],
+      api_key: process.env.SENDGRID_API_KEY,
+      from: process.env.SENDGRID_FROM,
+    },
+  });
+} else if (
   process.env.SMTP_HOST &&
   process.env.SMTP_USER &&
   process.env.SMTP_PASS
