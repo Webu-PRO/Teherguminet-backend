@@ -91,6 +91,8 @@ const notificationProviders: Array<Record<string, unknown>> = [
 
 const hasSendGridConfig =
   Boolean(process.env.SENDGRID_API_KEY) && Boolean(process.env.SENDGRID_FROM);
+const hasResendConfig =
+  Boolean(process.env.RESEND_API_KEY) && Boolean(process.env.RESEND_FROM_EMAIL);
 
 if (hasSendGridConfig) {
   notificationProviders.push({
@@ -120,6 +122,18 @@ if (hasSendGridConfig) {
       from:
         process.env.SMTP_FROM ??
         "Teherguminet.hu <noreply@therguminet.hu>",
+    },
+  });
+}
+
+if (hasResendConfig) {
+  notificationProviders.push({
+    resolve: "./src/modules/resend",
+    id: "resend",
+    options: {
+      channels: ["email"],
+      api_key: process.env.RESEND_API_KEY,
+      from: process.env.RESEND_FROM_EMAIL,
     },
   });
 }
