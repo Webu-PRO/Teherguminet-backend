@@ -14,53 +14,57 @@ import {
   Text,
 } from "@react-email/components"
 
+type OrderAddress = {
+  first_name?: string | null
+  last_name?: string | null
+  address_1?: string | null
+  address_2?: string | null
+  city?: string | null
+  province?: string | null
+  postal_code?: string | null
+  country_code?: string | null
+  [key: string]: unknown
+} | null
+
+type OrderItem = {
+  id: string
+  title?: string | null
+  product_title?: string | null
+  subtitle?: string | null
+  quantity?: number | null
+  total?: number | null
+  unit_price?: number | null
+  thumbnail?: string | null
+  [key: string]: unknown
+}
+
+type OrderShippingMethod = {
+  id: string
+  name?: string | null
+  amount?: number | null
+  [key: string]: unknown
+}
+
+type OrderCustomer = {
+  first_name?: string | null
+  [key: string]: unknown
+} | null
+
 export type OrderPlacedEmailProps = {
   order: {
     id: string
-    display_id?: number | null
+    display_id?: number | string | null
     email?: string | null
     currency_code?: string | null
     total?: number | null
     subtotal?: number | null
     shipping_total?: number | null
-    shipping_address?: {
-      first_name?: string | null
-      last_name?: string | null
-      address_1?: string | null
-      address_2?: string | null
-      city?: string | null
-      province?: string | null
-      postal_code?: string | null
-      country_code?: string | null
-    } | null
-    billing_address?: {
-      first_name?: string | null
-      last_name?: string | null
-      address_1?: string | null
-      address_2?: string | null
-      city?: string | null
-      province?: string | null
-      postal_code?: string | null
-      country_code?: string | null
-    } | null
-    items?: Array<{
-      id: string
-      title?: string | null
-      product_title?: string | null
-      subtitle?: string | null
-      quantity?: number | null
-      total?: number | null
-      unit_price?: number | null
-      thumbnail?: string | null
-    }>
-    shipping_methods?: Array<{
-      id: string
-      name?: string | null
-      amount?: number | null
-    }>
-    customer?: {
-      first_name?: string | null
-    } | null
+    shipping_address?: OrderAddress
+    billing_address?: OrderAddress
+    items?: OrderItem[]
+    shipping_methods?: OrderShippingMethod[]
+    customer?: OrderCustomer
+    [key: string]: unknown
   }
 }
 
@@ -175,13 +179,20 @@ export const OrderPlacedEmailComponent = ({
 }: OrderPlacedEmailProps) => {
   const currency = order.currency_code ?? "usd"
   const displayId = order.display_id ?? order.id
+  const displayLabel =
+    displayId === null || displayId === undefined
+      ? order.id
+      : typeof displayId === "number"
+        ? displayId.toString()
+        : displayId
   const customerName =
     order.customer?.first_name || order.shipping_address?.first_name || "there"
+  const previewText = `Order #${displayLabel} confirmation`
 
   return (
     <Html>
       <Head />
-      <Preview>Order #{displayId} confirmation</Preview>
+      <Preview>{previewText}</Preview>
       <Body style={styles.body}>
         <Container style={styles.container}>
           <Heading style={styles.heading}>
@@ -194,7 +205,7 @@ export const OrderPlacedEmailComponent = ({
 
           <Section style={styles.section}>
             <Text style={styles.muted}>Order number</Text>
-            <Text style={styles.text}>{order.id}</Text>
+            <Text style={styles.text}>{displayLabel}</Text>
             <Text style={styles.muted}>Placed for</Text>
             <Text style={styles.text}>{order.email ?? "—"}</Text>
             <Text style={styles.muted}>Total</Text>
