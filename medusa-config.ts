@@ -84,7 +84,7 @@ const notificationProviders: Array<Record<string, unknown>> = [
     resolve: "@medusajs/notification-local",
     id: "local",
     options: {
-      channels: ["feed"],
+      channels: ["feed", "email"],
     },
   },
 ];

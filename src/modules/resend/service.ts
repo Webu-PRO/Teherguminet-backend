@@ -14,6 +14,10 @@ import {
   OrderPlacedEmailComponent,
   type OrderPlacedEmailProps,
 } from "./emails/order-placed"
+import {
+  userInvitedEmail,
+  type UserInvitedEmailProps,
+} from "./emails/user-invited"
 
 type ResendOptions = {
   api_key: string
@@ -33,6 +37,7 @@ type InjectedDependencies = {
 
 enum Templates {
   ORDER_PLACED = "order-placed",
+  USER_INVITED = "user-invited",
 }
 
 type TemplateRenderer = (props: unknown) => ReactElement
@@ -40,6 +45,8 @@ type TemplateRenderer = (props: unknown) => ReactElement
 const templates: Partial<Record<Templates, TemplateRenderer>> = {
   [Templates.ORDER_PLACED]: (props) =>
     OrderPlacedEmailComponent(props as OrderPlacedEmailProps),
+  [Templates.USER_INVITED]: (props) =>
+    userInvitedEmail(props as UserInvitedEmailProps),
 }
 
 class ResendNotificationProviderService extends AbstractNotificationProviderService {
@@ -108,6 +115,8 @@ class ResendNotificationProviderService extends AbstractNotificationProviderServ
     switch (template) {
       case Templates.ORDER_PLACED:
         return "Order Confirmation"
+      case Templates.USER_INVITED:
+        return "You've been invited to join our platform"
       default:
         return "New Email"
     }

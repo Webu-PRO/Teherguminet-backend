@@ -269,9 +269,11 @@ export default async function inviteCreatedHandler({
     return {
       to: invite.email,
       channel: "email",
-      template: "invite-created",
+      template: "user-invited",
       data: {
+        email: invite.email,
         invite_link: inviteLink,
+        invite_url: inviteLink,
         token: invite.token,
         encoded_token: encodedToken,
         expires_at: invite.expiresAt
