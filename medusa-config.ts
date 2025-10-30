@@ -84,47 +84,13 @@ const notificationProviders: Array<Record<string, unknown>> = [
     resolve: "@medusajs/notification-local",
     id: "local",
     options: {
-      channels: ["feed", "email"],
+      channels: ["feed"],
     },
   },
 ];
 
-const hasSendGridConfig =
-  Boolean(process.env.SENDGRID_API_KEY) && Boolean(process.env.SENDGRID_FROM);
 const hasResendConfig =
   Boolean(process.env.RESEND_API_KEY) && Boolean(process.env.RESEND_FROM_EMAIL);
-
-if (hasSendGridConfig) {
-  notificationProviders.push({
-    resolve: "@medusajs/medusa/notification-sendgrid",
-    id: "sendgrid",
-    options: {
-      channels: ["email"],
-      api_key: process.env.SENDGRID_API_KEY,
-      from: process.env.SENDGRID_FROM,
-    },
-  });
-} else if (
-  process.env.SMTP_HOST &&
-  process.env.SMTP_USER &&
-  process.env.SMTP_PASS
-) {
-  notificationProviders.push({
-    resolve: "./src/modules/notification/hostinger",
-    id: "hostinger-smtp",
-    options: {
-      channels: ["email"],
-      host: process.env.SMTP_HOST,
-      port: smtpPort ?? 587,
-      secure: smtpSecure,
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-      from:
-        process.env.SMTP_FROM ??
-        "Teherguminet.hu <noreply@therguminet.hu>",
-    },
-  });
-}
 
 if (hasResendConfig) {
   notificationProviders.push({
