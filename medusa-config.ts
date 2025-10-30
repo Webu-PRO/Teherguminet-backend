@@ -74,11 +74,6 @@ const resolveBooleanWithFallback = (
   const parsed = resolveOptionalBoolean(value);
   return typeof parsed === "boolean" ? parsed : fallback;
 };
-const smtpPort = resolveOptionalNumber(process.env.SMTP_PORT);
-const smtpSecure = resolveBooleanWithFallback(
-  process.env.SMTP_SECURE,
-  smtpPort === 465
-);
 const notificationProviders: Array<Record<string, unknown>> = [
   {
     resolve: "@medusajs/notification-local",
