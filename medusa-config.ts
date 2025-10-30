@@ -60,20 +60,6 @@ const s3AdditionalClientConfig =
         customUserAgent: process.env.S3_CUSTOM_AGENT.trim(),
       }
     : undefined;
-const resolveOptionalBoolean = (value: string | undefined) => {
-  if (!value) {
-    return undefined;
-  }
-
-  return ["true", "1", "yes", "y"].includes(value.toLowerCase());
-};
-const resolveBooleanWithFallback = (
-  value: string | undefined,
-  fallback: boolean
-) => {
-  const parsed = resolveOptionalBoolean(value);
-  return typeof parsed === "boolean" ? parsed : fallback;
-};
 const notificationProviders: Array<Record<string, unknown>> = [
   {
     resolve: "@medusajs/notification-local",
