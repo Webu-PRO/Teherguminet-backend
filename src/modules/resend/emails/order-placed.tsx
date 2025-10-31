@@ -1,15 +1,12 @@
+import * as React from "react"
 import {
   Body,
-  Column,
   Container,
   Head,
   Heading,
   Hr,
   Html,
-  Img,
-  Link,
   Preview,
-  Row,
   Section,
   Text,
 } from "@react-email/components"
@@ -17,24 +14,16 @@ import {
 type OrderAddress = {
   first_name?: string | null
   last_name?: string | null
-  address_1?: string | null
-  address_2?: string | null
-  city?: string | null
-  province?: string | null
-  postal_code?: string | null
-  country_code?: string | null
   [key: string]: unknown
 } | null
 
 type OrderItem = {
-  id: string
+  id?: string | null
   title?: string | null
   product_title?: string | null
-  subtitle?: string | null
   quantity?: number | null
   total?: number | null
   unit_price?: number | null
-  thumbnail?: string | null
   [key: string]: unknown
 }
 
@@ -59,6 +48,7 @@ export type OrderPlacedEmailProps = {
     total?: number | null
     subtotal?: number | null
     shipping_total?: number | null
+    item_total?: number | null
     shipping_address?: OrderAddress
     billing_address?: OrderAddress
     items?: OrderItem[]
@@ -68,551 +58,392 @@ export type OrderPlacedEmailProps = {
   }
 }
 
-const styles = {
-  body: {
-    backgroundColor: "#f4f4f5",
-    fontFamily: '"Helvetica Neue", Arial, sans-serif',
-    margin: "0",
-    padding: "40px 0",
-  },
-  container: {
-    backgroundColor: "#ffffff",
-    borderRadius: "12px",
-    margin: "0 auto",
-    maxWidth: "600px",
-    padding: "32px",
-  },
-  heading: {
-    fontSize: "24px",
-    margin: "0 0 16px",
-    color: "#111827",
-  },
-  subheading: {
-    fontSize: "16px",
-    fontWeight: 600,
-    margin: "0 0 12px",
-    color: "#111827",
-  },
-  text: {
-    fontSize: "14px",
-    lineHeight: "20px",
-    color: "#374151",
-    margin: "0 0 12px",
-  },
-  muted: {
-    fontSize: "12px",
-    lineHeight: "18px",
-    color: "#6b7280",
-    margin: "4px 0",
-  },
-  section: {
-    marginBottom: "24px",
-  },
-  itemRow: {
-    backgroundColor: "#f9fafb",
-    borderRadius: "10px",
-    padding: "16px",
-    marginBottom: "12px",
-  },
-  thumbnail: {
-    borderRadius: "8px",
-    objectFit: "cover" as const,
-  },
-  hr: {
-    borderColor: "#e5e7eb",
-    margin: "24px 0",
-  },
-  link: {
-    color: "#2563eb",
-    textDecoration: "none",
-    fontSize: "14px",
-  },
-  footerText: {
-    fontSize: "12px",
-    lineHeight: "18px",
-    color: "#6b7280",
-    margin: "0 0 16px",
-  },
+const DEFAULT_STOREFRONT_URL = "https://therguminet.hu"
+const F1_RED = "#E10600"
+const PANEL_BG = "rgba(20,20,22,0.92)"
+const TEXT_LIGHT = "#F5F5F7"
+
+const sectionStyle: React.CSSProperties = {
+  borderRadius: "18px",
+  padding: "32px",
+  background: PANEL_BG,
+  color: TEXT_LIGHT,
+  border: "1px solid rgba(225,6,0,0.22)",
+  boxShadow: "0 14px 32px rgba(0,0,0,0.45)",
 }
 
-const formatAddress = (
-  address: OrderPlacedEmailProps["order"]["shipping_address"] | null | undefined
-) => {
-  if (!address) {
-    return "—"
-  }
-
-  const name = [address.first_name, address.last_name]
-    .filter(Boolean)
-    .join(" ")
-  const lines = [
-    name,
-    [address.address_1, address.address_2].filter(Boolean).join(", "),
-    [address.postal_code, address.city].filter(Boolean).join(" "),
-    address.province,
-    address.country_code?.toUpperCase(),
-  ]
-    .filter(Boolean)
-    .join("\n")
-
-  return lines || "—"
+const textStyle: React.CSSProperties = {
+  fontFamily: '"Helvetica Neue", Arial, sans-serif',
+  fontSize: "15px",
+  lineHeight: "22px",
+  margin: "0 0 12px",
+  color: TEXT_LIGHT,
 }
 
-const formatAmount = (value: number | null | undefined, currencyCode: string) => {
-  if (typeof value !== "number") {
-    return "—"
+const strongText: React.CSSProperties = {
+  ...textStyle,
+  fontWeight: 600,
+}
+
+const normalizeBaseUrl = (raw?: string | null) => {
+  if (!raw) {
+    return DEFAULT_STOREFRONT_URL
   }
+
+  const trimmed = raw.trim()
+
+  if (!trimmed) {
+    return DEFAULT_STOREFRONT_URL
+  }
+
+  const hasProtocol = /^https?:\/\//i.test(trimmed)
+  const candidate = hasProtocol ? trimmed : `https://${trimmed}`
 
   try {
-    return new Intl.NumberFormat("en-US", {
+    const url = new URL(candidate)
+    url.hash = ""
+    url.search = ""
+    return url.toString().replace(/\/+$/, "")
+  } catch {
+    return DEFAULT_STOREFRONT_URL
+  }
+}
+
+const buildOrderUrl = (orderId: string | null | undefined) => {
+  const base =
+    process.env.ORDER_CONFIRMATION_URL_BASE ??
+    process.env.STOREFRONT_URL ??
+    DEFAULT_STOREFRONT_URL
+  const normalizedBase = normalizeBaseUrl(base)
+
+  if (!orderId) {
+    return normalizedBase
+  }
+
+  const sanitizedId = encodeURIComponent(orderId.trim())
+  const pathname = `/hu/store/orders/${sanitizedId}`
+
+  try {
+    return new URL(pathname, normalizedBase).toString()
+  } catch {
+    return `${normalizedBase}${pathname}`
+  }
+}
+
+const formatAmount = (
+  value: number | null | undefined,
+  currencyCode: string
+) => {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return "—"
+  }
+
+  const currency = currencyCode?.toUpperCase?.() || "EUR"
+
+  try {
+    return new Intl.NumberFormat("hu-HU", {
       style: "currency",
-      currency: currencyCode.toUpperCase(),
-      minimumFractionDigits: 2,
+      currency,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
     }).format(value)
   } catch {
-    return `${value.toFixed(2)} ${currencyCode.toUpperCase()}`
+    return `${value.toFixed(2)} ${currency}`
   }
+}
+
+const resolveOrderId = (order: OrderPlacedEmailProps["order"]) => {
+  const displayId = order.display_id
+
+  if (typeof displayId === "number" && Number.isFinite(displayId)) {
+    return `TG-${displayId.toString().padStart(6, "0")}`
+  }
+
+  if (typeof displayId === "string" && displayId.trim().length > 0) {
+    return displayId.trim()
+  }
+
+  return order.id || "Rendelésed"
+}
+
+const resolveCustomerName = (order: OrderPlacedEmailProps["order"]) =>
+  order.customer?.first_name?.trim() ||
+  order.shipping_address?.first_name?.trim() ||
+  "Partnerünk"
+
+type PreparedOrderItem = {
+  key: string
+  name: string
+  quantity: number
+  price: string
+}
+
+const prepareOrderItems = (
+  order: OrderPlacedEmailProps["order"],
+  currencyCode: string
+): PreparedOrderItem[] => {
+  const items = Array.isArray(order.items) ? order.items : []
+
+  return items.map((item, index) => {
+    const name =
+      item.product_title?.trim() ||
+      item.title?.trim() ||
+      `Termék ${index + 1}`
+    const quantity =
+      typeof item.quantity === "number" && !Number.isNaN(item.quantity)
+        ? item.quantity
+        : 1
+    const priceSource =
+      typeof item.total === "number" ? item.total : item.unit_price
+    const price = formatAmount(priceSource ?? null, currencyCode)
+
+    return {
+      key: item.id?.toString() ?? `${name}-${index}`,
+      name,
+      quantity,
+      price,
+    }
+  })
 }
 
 export const OrderPlacedEmailComponent = ({
   order,
 }: OrderPlacedEmailProps) => {
-  const currency = order.currency_code ?? "usd"
-  const displayId = order.display_id ?? order.id
-  const displayLabel =
-    displayId === null || displayId === undefined
-      ? order.id
-      : typeof displayId === "number"
-        ? displayId.toString()
-        : displayId
-  const customerName =
-    order.customer?.first_name || order.shipping_address?.first_name || "there"
-  const previewText = `Order #${displayLabel} confirmation`
+  const currency = order.currency_code?.toUpperCase?.() || "EUR"
+  const orderId = resolveOrderId(order)
+  const customerName = resolveCustomerName(order)
+  const orderUrl = buildOrderUrl(orderId)
+  const items = prepareOrderItems(order, currency)
+  const subtotal = formatAmount(
+    order.subtotal ?? order.item_total ?? null,
+    currency
+  )
+  const shipping = formatAmount(order.shipping_total ?? null, currency)
+  const total = formatAmount(order.total ?? null, currency)
 
   return (
     <Html>
       <Head />
-      <Preview>{previewText}</Preview>
-      <Body style={styles.body}>
-        <Container style={styles.container}>
-          <Heading style={styles.heading}>
-            Thanks for your order, {customerName}!
-          </Heading>
-          <Text style={styles.text}>
-            We&apos;re getting your order ready to be shipped. Here&apos;s a
-            quick summary of what you purchased.
-          </Text>
-
-          <Section style={styles.section}>
-            <Text style={styles.muted}>Order number</Text>
-            <Text style={styles.text}>{displayLabel}</Text>
-            <Text style={styles.muted}>Placed for</Text>
-            <Text style={styles.text}>{order.email ?? "—"}</Text>
-            <Text style={styles.muted}>Total</Text>
-            <Text style={styles.text}>
-              {formatAmount(order.total, currency)}
+      <Preview>Rendelés visszaigazolása: {orderId}</Preview>
+      <Body
+        style={{
+          background: "#0C0C0F",
+          margin: 0,
+          padding: "32px 0",
+        }}
+      >
+        <Container
+          style={{
+            width: "100%",
+            maxWidth: "560px",
+            margin: "0 auto",
+            padding: "0 24px",
+          }}
+        >
+          <Section style={sectionStyle}>
+            <Heading
+              as="h2"
+              style={{
+                fontFamily: '"Helvetica Neue", Arial, sans-serif',
+                fontWeight: 700,
+                fontSize: "24px",
+                margin: "0 0 16px",
+                color: TEXT_LIGHT,
+              }}
+            >
+              Köszönjük, {customerName}!
+            </Heading>
+            <Text style={textStyle}>
+              Megerősítjük, hogy a{" "}
+              <strong style={{ color: TEXT_LIGHT }}>{orderId}</strong> számú
+              rendelésedet rögzítettük. Amint összekészítettük az abroncsokat a
+              raktárunkban, külön e-mailben értesítünk a kiszállítás
+              részleteiről.
             </Text>
-          </Section>
 
-          {!!order.items?.length && (
-            <Section style={styles.section}>
-              <Heading style={styles.subheading}>Items</Heading>
-              {order.items.map((item) => (
-                <Section key={item.id} style={styles.itemRow}>
-                  <Row>
-                    {item.thumbnail ? (
-                      <Column style={{ width: "80px" }}>
-                        <Img
-                          src={item.thumbnail}
-                          alt={item.product_title ?? item.title ?? "Product"}
-                          width="64"
-                          height="64"
-                          style={styles.thumbnail}
-                        />
-                      </Column>
-                    ) : null}
-                    <Column>
-                      <Text style={styles.text}>
-                        {item.product_title ?? item.title ?? "Item"}{" "}
-                        {item.subtitle ? `— ${item.subtitle}` : ""}
-                      </Text>
-                      <Text style={styles.muted}>
-                        Quantity: {item.quantity ?? 1}
-                      </Text>
-                      <Text style={styles.muted}>
-                        Total: {formatAmount(item.total, currency)}
-                      </Text>
-                    </Column>
-                  </Row>
-                </Section>
-              ))}
-            </Section>
-          )}
-
-          {!!order.shipping_methods?.length && (
-            <Section style={styles.section}>
-              <Heading style={styles.subheading}>Shipping</Heading>
-              {order.shipping_methods.map((method) => (
-                <Text key={method.id} style={styles.text}>
-                  {method.name ?? "Standard Shipping"} —{" "}
-                  {formatAmount(method.amount, currency)}
+            <Section
+              style={{
+                margin: "24px 0",
+                padding: "20px",
+                borderRadius: "14px",
+                background:
+                  "linear-gradient(135deg, rgba(225,6,0,0.18) 0%, rgba(225,6,0,0.04) 100%)",
+              }}
+            >
+              <Heading
+                as="h3"
+                style={{
+                  fontFamily: '"Helvetica Neue", Arial, sans-serif',
+                  fontWeight: 600,
+                  fontSize: "16px",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.08em",
+                  color: F1_RED,
+                  margin: "0 0 12px",
+                }}
+              >
+                Rendelési összefoglaló
+              </Heading>
+              {items.length ? (
+                items.map((item) => (
+                  <Section
+                    key={item.key}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: "16px",
+                      padding: "10px 0",
+                    }}
+                  >
+                    <Text style={{ ...textStyle, margin: 0 }}>
+                      {item.quantity}× {item.name}
+                    </Text>
+                    <Text style={{ ...strongText, margin: 0 }}>{item.price}</Text>
+                  </Section>
+                ))
+              ) : (
+                <Text style={{ ...textStyle, margin: 0 }}>
+                  A rendeléshez nem tartoznak tételadatok.
                 </Text>
-              ))}
+              )}
+              <Hr style={{ borderColor: "rgba(255,255,255,0.08)" }} />
+              <SummaryRow label="Részösszeg" value={subtotal} />
+              <SummaryRow label="Szállítás" value={shipping} />
+              <SummaryRow label="Fizetendő végösszeg" value={total} accent />
             </Section>
-          )}
 
-          <Section style={styles.section}>
-            <Heading style={styles.subheading}>Shipping address</Heading>
-            <Text style={{ ...styles.text, whiteSpace: "pre-line" }}>
-              {formatAddress(order.shipping_address)}
+            <Text style={textStyle}>
+              A rendelés aktuális állapotát bármikor ellenőrizheted az alábbi
+              gombra kattintva:
+            </Text>
+
+            <a
+              href={orderUrl}
+              style={{
+                display: "inline-block",
+                padding: "14px 28px",
+                borderRadius: "999px",
+                background: F1_RED,
+                color: "#fff",
+                fontFamily: '"Helvetica Neue", Arial, sans-serif',
+                fontSize: "15px",
+                fontWeight: 600,
+                textDecoration: "none",
+                letterSpacing: "0.02em",
+                boxShadow: "0 10px 24px rgba(225,6,0,0.35)",
+                marginBottom: "24px",
+              }}
+            >
+              Rendelés megtekintése
+            </a>
+
+            <Text style={textStyle}>
+              Kérdésed van? Vedd fel velünk a kapcsolatot a{" "}
+              <a
+                href="mailto:hello@tehergumi.net"
+                style={{ color: F1_RED, fontWeight: 600, textDecoration: "none" }}
+              >
+                hello@tehergumi.net
+              </a>{" "}
+              címen vagy a +36 1 234 5678 telefonszámon.
+            </Text>
+
+            <Text style={{ ...textStyle, color: "rgba(255,255,255,0.7)" }}>
+              Üdvözlettel,
+              <br />
+              A Tehergumi.net csapata
             </Text>
           </Section>
 
-          <Section style={styles.section}>
-            <Heading style={styles.subheading}>Billing address</Heading>
-            <Text style={{ ...styles.text, whiteSpace: "pre-line" }}>
-              {formatAddress(order.billing_address)}
-            </Text>
-          </Section>
-
-          <Hr style={styles.hr} />
-
-          <Text style={styles.footerText}>
-            We&apos;ll send you another email when your order ships. If you have
-            any questions, just reply to this email—we&apos;re always happy to
-            help.
+          <Text
+            style={{
+              ...textStyle,
+              color: "rgba(255,255,255,0.45)",
+              textAlign: "center",
+              fontSize: "12px",
+            }}
+          >
+            Ez egy automatikusan generált üzenet, kérjük ne válaszolj rá
+            közvetlenül.
           </Text>
-          <Link href="https://therguminet.hu" style={styles.link}>
-            Visit Teherguminet.hu
-          </Link>
         </Container>
       </Body>
     </Html>
   )
 }
 
+const SummaryRow = ({
+  label,
+  value,
+  accent = false,
+}: {
+  label: string
+  value: string
+  accent?: boolean
+}) => (
+  <Section
+    style={{
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      gap: "16px",
+      padding: "4px 0",
+    }}
+  >
+    <Text
+      style={{
+        ...textStyle,
+        margin: 0,
+        color: accent ? TEXT_LIGHT : "rgba(245,245,247,0.88)",
+        fontWeight: accent ? 700 : 500,
+      }}
+    >
+      {label}
+    </Text>
+    <Text
+      style={{
+        ...strongText,
+        margin: 0,
+        fontSize: accent ? "18px" : strongText.fontSize,
+        color: accent ? F1_RED : strongText.color,
+      }}
+    >
+      {value}
+    </Text>
+  </Section>
+)
+
 export const mockOrder: OrderPlacedEmailProps = {
   order: {
     id: "order_01JSNXDH9BPJWWKVW03B9E9KW8",
     display_id: 1,
-    email: "afsaf@gmail.com",
+    email: "partner@tehergumi.net",
     currency_code: "eur",
-    total: 20,
-    subtotal: 20,
-    discount_total: 0,
-    shipping_total: 10,
-    tax_total: 0,
-    item_subtotal: 10,
-    item_total: 10,
-    item_tax_total: 0,
-    customer_id: "cus_01JSNXD6VQC1YH56E4TGC81NWX",
+    total: 2830,
+    subtotal: 2830,
+    shipping_total: 0,
+    item_total: 2830,
+    customer: {
+      first_name: "Partner",
+    },
+    shipping_address: {
+      first_name: "Partner",
+      last_name: "Teszt",
+    },
     items: [
       {
         id: "ordli_01JSNXDH9C47KZ43WQ3TBFXZA9",
-        title: "L",
-        subtitle: "Medusa Sweatshirt",
-        thumbnail:
-          "https://medusa-public-images.s3.eu-west-1.amazonaws.com/sweatshirt-vintage-front.png",
-        variant_id: "variant_01JSNXAQCZ5X81A3NRSVFJ3ZHQ",
-        product_id: "prod_01JSNXAQBQ6MFV5VHKN420NXQW",
-        product_title: "Medusa Sweatshirt",
-        product_description:
-          "Reimagine the feeling of a classic sweatshirt. With our cotton sweatshirt, everyday essentials no longer have to be ordinary.",
-        product_subtitle: null,
-        product_type: null,
-        product_type_id: null,
-        product_collection: null,
-        product_handle: "sweatshirt",
-        variant_sku: "SWEATSHIRT-L",
-        variant_barcode: null,
-        variant_title: "L",
-        variant_option_values: null,
-        requires_shipping: true,
-        is_giftcard: false,
-        is_discountable: true,
-        is_tax_inclusive: false,
-        is_custom_price: false,
-        metadata: {},
-        raw_compare_at_unit_price: null,
-        raw_unit_price: {
-          value: "10",
-          precision: 20,
-        },
-        created_at: new Date(),
-        updated_at: new Date(),
-        deleted_at: null,
-        tax_lines: [],
-        adjustments: [],
-        compare_at_unit_price: null,
-        unit_price: 10,
-        quantity: 1,
-        raw_quantity: {
-          value: "1",
-          precision: 20,
-        },
-        detail: {
-          id: "orditem_01JSNXDH9DK1XMESEZPADYFWKY",
-          version: 1,
-          metadata: null,
-          order_id: "order_01JSNXDH9BPJWWKVW03B9E9KW8",
-          raw_unit_price: null,
-          raw_compare_at_unit_price: null,
-          raw_quantity: {
-            value: "1",
-            precision: 20,
-          },
-          raw_fulfilled_quantity: {
-            value: "0",
-            precision: 20,
-          },
-          raw_delivered_quantity: {
-            value: "0",
-            precision: 20,
-          },
-          raw_shipped_quantity: {
-            value: "0",
-            precision: 20,
-          },
-          raw_return_requested_quantity: {
-            value: "0",
-            precision: 20,
-          },
-          raw_return_received_quantity: {
-            value: "0",
-            precision: 20,
-          },
-          raw_return_dismissed_quantity: {
-            value: "0",
-            precision: 20,
-          },
-          raw_written_off_quantity: {
-            value: "0",
-            precision: 20,
-          },
-          created_at: new Date(),
-          updated_at: new Date(),
-          deleted_at: null,
-          item_id: "ordli_01JSNXDH9C47KZ43WQ3TBFXZA9",
-          unit_price: null,
-          compare_at_unit_price: null,
-          quantity: 1,
-          fulfilled_quantity: 0,
-          delivered_quantity: 0,
-          shipped_quantity: 0,
-          return_requested_quantity: 0,
-          return_received_quantity: 0,
-          return_dismissed_quantity: 0,
-          written_off_quantity: 0,
-        },
-        subtotal: 10,
-        total: 10,
-        original_total: 10,
-        discount_total: 0,
-        discount_subtotal: 0,
-        discount_tax_total: 0,
-        tax_total: 0,
-        original_tax_total: 0,
-        refundable_total_per_unit: 10,
-        refundable_total: 10,
-        fulfilled_total: 0,
-        shipped_total: 0,
-        return_requested_total: 0,
-        return_received_total: 0,
-        return_dismissed_total: 0,
-        write_off_total: 0,
-        raw_subtotal: {
-          value: "10",
-          precision: 20,
-        },
-        raw_total: {
-          value: "10",
-          precision: 20,
-        },
-        raw_original_total: {
-          value: "10",
-          precision: 20,
-        },
-        raw_discount_total: {
-          value: "0",
-          precision: 20,
-        },
-        raw_discount_subtotal: {
-          value: "0",
-          precision: 20,
-        },
-        raw_discount_tax_total: {
-          value: "0",
-          precision: 20,
-        },
-        raw_tax_total: {
-          value: "0",
-          precision: 20,
-        },
-        raw_original_tax_total: {
-          value: "0",
-          precision: 20,
-        },
-        raw_refundable_total_per_unit: {
-          value: "10",
-          precision: 20,
-        },
-        raw_refundable_total: {
-          value: "10",
-          precision: 20,
-        },
-        raw_fulfilled_total: {
-          value: "0",
-          precision: 20,
-        },
-        raw_shipped_total: {
-          value: "0",
-          precision: 20,
-        },
-        raw_return_requested_total: {
-          value: "0",
-          precision: 20,
-        },
-        raw_return_received_total: {
-          value: "0",
-          precision: 20,
-        },
-        raw_return_dismissed_total: {
-          value: "0",
-          precision: 20,
-        },
-        raw_write_off_total: {
-          value: "0",
-          precision: 20,
-        },
+        title: "Michelin X Multi Z 315/80 R22.5",
+        quantity: 4,
+        total: 1870,
       },
-    ],
-    shipping_address: {
-      id: "caaddr_01JSNXD6W0TGPH2JQD18K97B25",
-      customer_id: null,
-      company: "",
-      first_name: "safasf",
-      last_name: "asfaf",
-      address_1: "asfasf",
-      address_2: "",
-      city: "asfasf",
-      country_code: "dk",
-      province: "",
-      postal_code: "asfasf",
-      phone: "",
-      metadata: null,
-      created_at: "2025-04-25T07:25:48.801Z",
-      updated_at: "2025-04-25T07:25:48.801Z",
-      deleted_at: null,
-    },
-    billing_address: {
-      id: "caaddr_01JSNXD6W0V7RNZH63CPG26K5W",
-      customer_id: null,
-      company: "",
-      first_name: "safasf",
-      last_name: "asfaf",
-      address_1: "asfasf",
-      address_2: "",
-      city: "asfasf",
-      country_code: "dk",
-      province: "",
-      postal_code: "asfasf",
-      phone: "",
-      metadata: null,
-      created_at: "2025-04-25T07:25:48.801Z",
-      updated_at: "2025-04-25T07:25:48.801Z",
-      deleted_at: null,
-    },
-    shipping_methods: [
       {
-        id: "ordsm_01JSNXDH9B9DDRQXJT5J5AE5V1",
-        name: "Standard Shipping",
-        description: null,
-        is_tax_inclusive: false,
-        is_custom_amount: false,
-        shipping_option_id: "so_01JSNXAQA64APG6BNHGCMCTN6V",
-        data: {},
-        metadata: null,
-        raw_amount: {
-          value: "10",
-          precision: 20,
-        },
-        created_at: new Date(),
-        updated_at: new Date(),
-        deleted_at: null,
-        tax_lines: [],
-        adjustments: [],
-        amount: 10,
-        order_id: "order_01JSNXDH9BPJWWKVW03B9E9KW8",
-        detail: {
-          id: "ordspmv_01JSNXDH9B5RAF4FH3M1HH3TEA",
-          version: 1,
-          order_id: "order_01JSNXDH9BPJWWKVW03B9E9KW8",
-          return_id: null,
-          exchange_id: null,
-          claim_id: null,
-          created_at: new Date(),
-          updated_at: new Date(),
-          deleted_at: null,
-          shipping_method_id: "ordsm_01JSNXDH9B9DDRQXJT5J5AE5V1",
-        },
-        subtotal: 10,
-        total: 10,
-        original_total: 10,
-        discount_total: 0,
-        discount_subtotal: 0,
-        discount_tax_total: 0,
-        tax_total: 0,
-        original_tax_total: 0,
-        raw_subtotal: {
-          value: "10",
-          precision: 20,
-        },
-        raw_total: {
-          value: "10",
-          precision: 20,
-        },
-        raw_original_total: {
-          value: "10",
-          precision: 20,
-        },
-        raw_discount_total: {
-          value: "0",
-          precision: 20,
-        },
-        raw_discount_subtotal: {
-          value: "0",
-          precision: 20,
-        },
-        raw_discount_tax_total: {
-          value: "0",
-          precision: 20,
-        },
-        raw_tax_total: {
-          value: "0",
-          precision: 20,
-        },
-        raw_original_tax_total: {
-          value: "0",
-          precision: 20,
-        },
+        id: "ordli_01JSNXDH9C47KZ43WQ3TBFXZA8",
+        title: "Continental Hybrid HS3 385/65 R22.5",
+        quantity: 2,
+        total: 960,
       },
     ],
-    customer: {
-      id: "cus_01JSNXD6VQC1YH56E4TGC81NWX",
-      company_name: null,
-      first_name: null,
-      last_name: null,
-      email: "afsaf@gmail.com",
-      phone: null,
-      has_account: false,
-      metadata: null,
-      created_by: null,
-      created_at: "2025-04-25T07:25:48.791Z",
-      updated_at: "2025-04-25T07:25:48.791Z",
-      deleted_at: null,
-    },
   },
 }
-
-// @ts-ignore - used by the React Email dev server
-export default () => <OrderPlacedEmailComponent {...mockOrder} />
