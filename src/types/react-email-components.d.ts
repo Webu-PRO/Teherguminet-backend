@@ -1,14 +1,28 @@
 declare module "@react-email/components" {
-  import type { ComponentType, CSSProperties } from "react"
+  import type {
+    AnchorHTMLAttributes,
+    ComponentType,
+    CSSProperties,
+    ReactNode,
+  } from "react"
 
   export interface BaseProps {
     style?: CSSProperties
-    children?: React.ReactNode
+    className?: string
+    children?: ReactNode
     [key: string]: unknown
   }
 
+  export type AnchorProps = BaseProps &
+    AnchorHTMLAttributes<HTMLAnchorElement>
+
   export interface HeadingProps extends BaseProps {
     as?: keyof JSX.IntrinsicElements
+  }
+
+  export interface TailwindProps {
+    children: ReactNode
+    config?: Record<string, unknown>
   }
 
   export const Html: ComponentType<BaseProps>
@@ -20,4 +34,7 @@ declare module "@react-email/components" {
   export const Text: ComponentType<BaseProps>
   export const Heading: ComponentType<HeadingProps>
   export const Hr: ComponentType<BaseProps>
+  export const Button: ComponentType<AnchorProps>
+  export const Link: ComponentType<AnchorProps>
+  export const Tailwind: ComponentType<TailwindProps>
 }
