@@ -5,21 +5,21 @@ import {
 import { Modules } from "@medusajs/framework/utils"
 import type {
   CartDTO,
+  CartLineItemDTO,
   CustomerDTO,
 } from "@medusajs/framework/types"
 
-type AbandonedCartItem =
-  CartDTO["items"] extends Array<infer T> ? T : never
+export type AbandonedCartItem = CartLineItemDTO & {
+  variant?: {
+    title?: string | null
+    thumbnail?: string | null
+  } | null
+}
 
-type AbandonedCart = CartDTO & {
+export type AbandonedCart = CartDTO & {
   customer: CustomerDTO | null
   region?: { currency_code?: string | null } | null
-  items?: (AbandonedCartItem & {
-    variant?: {
-      title?: string | null
-      thumbnail?: string | null
-    } | null
-  })[]
+  items?: AbandonedCartItem[]
 }
 
 type SendAbandonedNotificationsInput = {

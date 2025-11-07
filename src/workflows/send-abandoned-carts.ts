@@ -5,17 +5,12 @@ import {
 } from "@medusajs/framework/workflows-sdk"
 import {
   sendAbandonedNotificationsStep,
+  type AbandonedCart,
 } from "./steps/send-abandoned-notifications"
 import { updateCartsStep } from "@medusajs/medusa/core-flows"
-import type {
-  CartDTO,
-  CustomerDTO,
-} from "@medusajs/framework/types"
 
 export type SendAbandonedCartsWorkflowInput = {
-  carts: (CartDTO & {
-    customer: CustomerDTO | null
-  })[]
+  carts: AbandonedCart[]
 }
 
 export const sendAbandonedCartsWorkflow = createWorkflow(
