@@ -8,9 +8,18 @@ import type {
   CustomerDTO,
 } from "@medusajs/framework/types"
 
+type AbandonedCartItem =
+  CartDTO["items"] extends Array<infer T> ? T : never
+
 type AbandonedCart = CartDTO & {
   customer: CustomerDTO | null
   region?: { currency_code?: string | null } | null
+  items?: (AbandonedCartItem & {
+    variant?: {
+      title?: string | null
+      thumbnail?: string | null
+    } | null
+  })[]
 }
 
 type SendAbandonedNotificationsInput = {

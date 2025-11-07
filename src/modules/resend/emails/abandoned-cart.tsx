@@ -1,15 +1,12 @@
 import {
   Body,
   Button,
-  Column,
   Container,
   Head,
   Heading,
   Hr,
   Html,
-  Img,
   Preview,
-  Row,
   Section,
   Tailwind,
   Text,
@@ -33,7 +30,6 @@ export type AbandonedCartEmailProps = {
 
 const PANEL_BG =
   "radial-gradient(circle at top, rgba(225,6,0,0.35), rgba(8,8,13,1) 60%)"
-const CARD_BG = "rgba(13,14,21,0.92)"
 
 const formatAmount = (
   value?: number | null,
@@ -117,39 +113,44 @@ export const AbandonedCartEmail = ({
                 Kosár részletei / Detaily košíka
               </Heading>
               <Section className="mt-4 space-y-3">
-                {items.length ? (
-                  items.map((item) => (
-                    <Row
-                      key={item.id}
-                      className="items-center rounded-2xl border border-white/6 bg-[rgba(255,255,255,0.02)] p-4"
-                    >
-                      <Column className="w-[72px]">
-                        {item.thumbnail ? (
-                          <Img
-                            src={item.thumbnail}
-                            width="64"
-                            height="64"
-                            alt={item.title ?? "Product"}
-                            className="rounded-xl border border-white/5 object-cover"
-                          />
-                        ) : (
-                          <div className="flex h-[64px] w-[64px] items-center justify-center rounded-xl border border-dashed border-white/10 text-[11px] text-white/40">
-                            Nincs kép
-                          </div>
-                        )}
-                      </Column>
-                      <Column className="pl-4">
-                        <Text className="m-0 text-[15px] font-semibold leading-6 text-white">
-                          {item.title ?? "Termék"}
-                        </Text>
-                        <Text className="m-0 text-[13px] text-white/70">
-                          {formatAmount(item.unit_price, currencyCode)} ·{" "}
-                          {item.quantity ?? 1} db / ks
-                        </Text>
-                      </Column>
-                    </Row>
-                  ))
-                ) : (
+            {items.length ? (
+              items.map((item) => (
+                <Section
+                  key={item.id}
+                  className="flex flex-row items-center gap-4 rounded-2xl border border-white/6 bg-[rgba(255,255,255,0.02)] px-4 py-4"
+                >
+                  <div className="flex h-[64px] w-[64px] items-center justify-center rounded-xl border border-white/5 bg-white/5">
+                    {item.thumbnail ? (
+                      <img
+                        src={item.thumbnail}
+                        width="64"
+                        height="64"
+                        alt={item.title ?? "Product"}
+                        style={{
+                          borderRadius: "12px",
+                          objectFit: "cover",
+                          width: "64px",
+                          height: "64px",
+                        }}
+                      />
+                    ) : (
+                      <span className="text-[10px] uppercase tracking-[0.2em] text-white/50">
+                        Nincs kép
+                      </span>
+                    )}
+                  </div>
+                  <div>
+                    <Text className="m-0 text-[15px] font-semibold leading-6 text-white">
+                      {item.title ?? "Termék"}
+                    </Text>
+                    <Text className="m-0 text-[13px] text-white/70">
+                      {formatAmount(item.unit_price, currencyCode)} ·{" "}
+                      {item.quantity ?? 1} db / ks
+                    </Text>
+                  </div>
+                </Section>
+              ))
+            ) : (
                   <Text className="rounded-2xl border border-dashed border-white/20 px-5 py-4 text-[14px] text-white/70">
                     A kosarad üresnek tűnik, de bármikor visszatérhetsz böngészni.
                     <br />
