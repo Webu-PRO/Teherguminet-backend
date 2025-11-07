@@ -18,6 +18,10 @@ import {
   userInvitedEmail,
   type UserInvitedEmailProps,
 } from "./emails/user-invited"
+import {
+  AbandonedCartEmail,
+  type AbandonedCartEmailProps,
+} from "./emails/abandoned-cart"
 
 type ResendOptions = {
   api_key: string
@@ -38,6 +42,7 @@ type InjectedDependencies = {
 enum Templates {
   ORDER_PLACED = "order-placed",
   USER_INVITED = "user-invited",
+  ABANDONED_CART = "abandoned-cart",
 }
 
 type TemplateRenderer = (props: unknown) => ReactElement
@@ -47,6 +52,8 @@ const templates: Partial<Record<Templates, TemplateRenderer>> = {
     OrderPlacedEmailComponent(props as OrderPlacedEmailProps),
   [Templates.USER_INVITED]: (props) =>
     userInvitedEmail(props as UserInvitedEmailProps),
+  [Templates.ABANDONED_CART]: (props) =>
+    AbandonedCartEmail(props as AbandonedCartEmailProps),
 }
 
 class ResendNotificationProviderService extends AbstractNotificationProviderService {
@@ -117,6 +124,8 @@ class ResendNotificationProviderService extends AbstractNotificationProviderServ
         return "Order Confirmation"
       case Templates.USER_INVITED:
         return "You've been invited to join our platform"
+      case Templates.ABANDONED_CART:
+        return "Reminder: your cart is waiting"
       default:
         return "New Email"
     }

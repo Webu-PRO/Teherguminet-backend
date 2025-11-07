@@ -17,59 +17,21 @@ type SendAbandonedNotificationsInput = {
   carts: AbandonedCart[]
 }
 
-const buildCartHtml = (
-  cart: AbandonedCart,
-  storefrontUrl: string
-): string => {
-  const itemsHtml =
-    cart.items?.length
-      ? cart.items
-          .map((item) => {
-            const price = Number(item.unit_price ?? 0) / 100
-            return `
-            <tr>
-              <td style="padding: 8px 12px; border-bottom: 1px solid #eee;">
-                <strong>${item.title}</strong><br/>
-                <small>Qty: ${item.quantity}</small>
-              </td>
-              <td style="padding: 8px 12px; text-align:right; border-bottom: 1px solid #eee;">
-                ${price.toLocaleString("hu-HU", {
-                  style: "currency",
-                  currency: ((cart.region?.currency_code ?? "HUF").toUpperCase()),
-                })}
-              </td>
-            </tr>`
-          })
-          .join("")
-      : ""
+const SUPPORT_EMAIL =
+  process.env.SUPPORT_EMAIL || "hello@tehergumi.net"
+const SUPPORT_PHONE =
+  process.env.SUPPORT_PHONE || "+36 1 234 5678"
+const TEMPLATE_NAME = "abandoned-cart"
 
-  const recoverUrl = new URL(
-    `/cart/recover/${cart.id}`,
-    storefrontUrl
-  ).toString()
-
-  const firstName =
-    cart.customer?.first_name ??
-    cart.shipping_address?.first_name ??
-    "Kedves vásárló"
-
-  return `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <h2>Szia ${firstName}! A kosarad még vár rád 🛒</h2>
-      <p>Úgy tűnik, néhány termék maradt a kosaradban. Egyetlen kattintással befejezheted a rendelést.</p>
-      <table style="width:100%; border-collapse: collapse; margin-top:16px;">
-        ${itemsHtml}
-      </table>
-      <div style="text-align:center; margin: 24px 0;">
-        <a href="${recoverUrl}"
-           style="background:#2563eb;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;display:inline-block;">
-          Tovább a kosárhoz
-        </a>
-      </div>
-      <p style="font-size:12px;color:#6b7280;">Ha közben segítségre lenne szükséged, írj nekünk a <a href="mailto:info@therguminet.hu">info@therguminet.hu</a> címen.</p>
-    </div>
-  `
-}
+const prepareCartItems = (cart: AbandonedCart) =>
+  (cart.items ?? []).map((item, index) => ({
+    id: item.id || `${cart.id}-item-${index}`,
+    title: item.title ?? item.variant?.title ?? "Termék",
+    quantity:
+      typeof item.quantity === "number" ? item.quantity : 1,
+    unit_price: item.unit_price ?? 0,
+    thumbnail: item.thumbnail ?? item.variant?.thumbnail,
+  }))
 
 export const sendAbandonedNotificationsStep = createStep(
   "send-abandoned-notifications",
@@ -89,28 +51,40 @@ export const sendAbandonedNotificationsStep = createStep(
       Modules.NOTIFICATION
     )
 
-    const notificationsPayload =
-      input.carts.map((cart) => ({
-        to: cart.email!,
-        channel: "email",
-        template: "hostinger-smpt-template",
-        content: {
-          subject:
-            "Emlékeztető: a kosarad még vár rád!",
-          html: buildCartHtml(cart, storefrontUrl),
-          text: `Szia ${
-            cart.customer?.first_name ??
-            cart.shipping_address?.first_name ??
-            ""
-          }! A kosarad még vár rád: ${new URL(
-            `/cart/recover/${cart.id}`,
-            storefrontUrl
-          ).toString()}`,
-        },
-        data: {
-          cart_id: cart.id,
-        },
-      }))
+    const notificationsPayload = input.carts
+      .filter((cart) => Boolean(cart.email))
+      .map((cart) => {
+        const recoverUrl = new URL(
+          `/cart/recover/${cart.id}`,
+          storefrontUrl
+        ).toString()
+        const firstName =
+          cart.customer?.first_name ??
+          cart.shipping_address?.first_name ??
+          null
+        const currencyCode = (
+          cart.region?.currency_code ?? "HUF"
+        ).toUpperCase()
+
+        return {
+          to: cart.email!,
+          channel: "email",
+          template: TEMPLATE_NAME,
+          data: {
+            customerName: firstName,
+            recoverUrl,
+            currencyCode,
+            storefrontUrl,
+            supportEmail: SUPPORT_EMAIL,
+            supportPhone: SUPPORT_PHONE,
+            items: prepareCartItems(cart),
+          },
+        }
+      })
+
+    if (!notificationsPayload.length) {
+      return new StepResponse({ notifications: [] })
+    }
 
     const notifications =
       await notificationModuleService.createNotifications(
