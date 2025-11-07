@@ -35,11 +35,11 @@ const TEMPLATE_NAME = "abandoned-cart"
 const prepareCartItems = (cart: AbandonedCart) =>
   (cart.items ?? []).map((item, index) => ({
     id: item.id || `${cart.id}-item-${index}`,
-    title: item.title ?? item.variant?.title ?? "Termék",
+    title: item.title ?? "Termék",
     quantity:
       typeof item.quantity === "number" ? item.quantity : 1,
     unit_price: item.unit_price ?? 0,
-    thumbnail: item.thumbnail ?? item.variant?.thumbnail,
+    thumbnail: item.thumbnail,
   }))
 
 export const sendAbandonedNotificationsStep = createStep(
