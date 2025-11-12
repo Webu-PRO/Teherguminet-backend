@@ -154,6 +154,9 @@ module.exports = defineConfig({
         redisUrl: process.env.EVENT_BUS_REDIS_URL || sharedRedisUrl,
       },
     },
+    invoinve: {
+      resolve: "./src/modules/invoice-generator",
+    },
     notification: {
       resolve: "@medusajs/notification",
       options: {
