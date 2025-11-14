@@ -52,6 +52,16 @@ If you deploy the backend on `https://admin.teherguminet.hu` (for example throug
 
 Coolify exposes a “Environment Variables” panel per service—add or update the variables there so the values propagate to the container. The project now falls back to these domains automatically when the variables are omitted, so you can keep local origins for development and append production URLs separated by commas as needed.
 
+## Email Delivery (Resend)
+
+This backend exclusively uses the custom Resend notification provider defined in `medusa-config.ts`. To avoid silent delivery failures:
+
+- Set `RESEND_API_KEY` and `RESEND_FROM_EMAIL` in the backend environment. The `from` address must belong to a domain that is verified in the Resend dashboard.
+- Remove any obsolete SMTP or SendGrid variables when deploying—Medusa won’t read them, and leaving them behind can cause confusion when debugging.
+- After updating the environment, restart the backend so the notification provider registry is synced and the new credentials are used for order confirmations and invoices.
+
+Every `order.placed` event now creates a notification linked to the order in Medusa, so you can audit the sent emails directly from the admin UI.
+
 ## What is Medusa
 
 Medusa is a set of commerce modules and tools that allow you to build rich, reliable, and performant commerce applications without reinventing core commerce logic. The modules can be customized and used to build advanced ecommerce stores, marketplaces, or any product that needs foundational commerce primitives. All modules are open-source and freely available on npm.

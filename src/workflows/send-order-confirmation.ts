@@ -44,17 +44,24 @@ export const sendOrderConfirmationWorkflow = createWorkflow(
     })
 
     const notification = when({ orders }, (data) => !!data.orders[0]?.email).then(
-      () =>
-        sendNotificationStep([
+      () => {
+        const order = orders[0]
+
+        return sendNotificationStep([
           {
-            to: orders[0].email!,
+            to: order.email!,
             channel: "email",
             template: "order-placed",
             data: {
-              order: orders[0],
+              order,
             },
+            resource_id: order.id,
+            resource_type: "order",
+            trigger_type: "order.placed",
+            idempotency_key: `order-placed-${order.id}`,
           },
         ])
+      }
     )
 
     return new WorkflowResponse({
