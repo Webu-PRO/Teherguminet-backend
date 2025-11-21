@@ -128,6 +128,8 @@ module.exports = defineConfig({
               webhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
               // Capture Stripe payment intents immediately instead of manual capture
               capture: true,
+              // Ensure Stripe automatically selects available payment methods
+              automaticPaymentMethods: true,
             },
           },
         ],
