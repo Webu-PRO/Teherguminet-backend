@@ -211,15 +211,15 @@ class ResendNotificationProviderService extends AbstractNotificationProviderServ
     let emailOptions: CreateEmailOptions
 
     if (!template) {
-      const hasRawContent =
-        Boolean(notification.content?.html) ||
-        Boolean(notification.content?.text)
+      const html = notification.content?.html
+      const text = notification.content?.text
+      const hasRawContent = Boolean(html) || Boolean(text)
 
       if (hasRawContent) {
         emailOptions = {
           ...commonOptions,
-          html: notification.content?.html,
-          text: notification.content?.text,
+          ...(html ? { html } : {}),
+          ...(text ? { text } : {}),
         }
       } else {
         this.logger.error(

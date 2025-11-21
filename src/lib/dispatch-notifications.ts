@@ -6,7 +6,9 @@ import type {
 
 type NotificationRecord = Awaited<
   ReturnType<INotificationModuleService["createNotifications"]>
->[number]
+> extends Array<infer T>
+  ? T
+  : never
 
 type DispatchOptions = {
   concurrency?: number
@@ -60,11 +62,9 @@ export const dispatchNotificationsIndividually = async (
           .filter(Boolean)
           .join(" ")
 
-        if (logger?.warn) {
-          logger.warn(message, error as Error)
-        } else {
-          console.warn(message, error)
-        }
+        logger?.warn?.(message)
+        logger?.error?.(message, error as Error)
+        console.warn(message, error)
       }
     }
   }
