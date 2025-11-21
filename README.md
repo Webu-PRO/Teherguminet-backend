@@ -57,6 +57,7 @@ Coolify exposes a “Environment Variables” panel per service—add or update 
 This backend exclusively uses the custom Resend notification provider defined in `medusa-config.ts`. To avoid silent delivery failures:
 
 - Set `RESEND_API_KEY` and `RESEND_FROM_EMAIL` in the backend environment. The `from` address must belong to a domain that is verified in the Resend dashboard.
+- Optionally set `RESEND_FROM_NAME` for a branded sender label and `RESEND_REPLY_TO` if replies should land in a monitored inbox.
 - Remove any obsolete SMTP or SendGrid variables when deploying—Medusa won’t read them, and leaving them behind can cause confusion when debugging.
 - After updating the environment, restart the backend so the notification provider registry is synced and the new credentials are used for order confirmations and invoices.
 

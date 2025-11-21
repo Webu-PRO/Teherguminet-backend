@@ -74,14 +74,24 @@ const hasResendConfig =
   Boolean(process.env.RESEND_API_KEY) && Boolean(process.env.RESEND_FROM_EMAIL);
 
 if (hasResendConfig) {
+  const resendOptions: Record<string, unknown> = {
+    channels: ["email"],
+    api_key: process.env.RESEND_API_KEY,
+    from: process.env.RESEND_FROM_EMAIL,
+  };
+
+  if (process.env.RESEND_FROM_NAME?.trim()) {
+    resendOptions.from_name = process.env.RESEND_FROM_NAME.trim();
+  }
+
+  if (process.env.RESEND_REPLY_TO?.trim()) {
+    resendOptions.reply_to = process.env.RESEND_REPLY_TO.trim();
+  }
+
   notificationProviders.push({
     resolve: "./src/modules/resend",
     id: "resend",
-    options: {
-      channels: ["email"],
-      api_key: process.env.RESEND_API_KEY,
-      from: process.env.RESEND_FROM_EMAIL,
-    },
+    options: resendOptions,
   });
 }
 
@@ -116,6 +126,8 @@ module.exports = defineConfig({
             options: {
               apiKey: process.env.STRIPE_API_KEY,
               webhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
+              // Capture Stripe payment intents immediately instead of manual capture
+              capture: true,
             },
           },
         ],

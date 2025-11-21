@@ -14,6 +14,8 @@ import type {
   Logger,
 } from "@medusajs/types"
 
+import { dispatchNotificationsIndividually } from "../lib/dispatch-notifications"
+
 type InviteEventPayload = {
   id: string
   token?: string | null
@@ -292,7 +294,11 @@ export default async function inviteCreatedHandler({
   })
 
   try {
-    await notificationModuleService.createNotifications(notifications)
+    await dispatchNotificationsIndividually(
+      notificationModuleService,
+      notifications,
+      logger
+    )
     logInfo(
       logger,
       `invite-created subscriber: sent ${notifications.length} invitation email(s)`

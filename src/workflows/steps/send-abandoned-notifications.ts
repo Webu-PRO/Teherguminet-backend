@@ -7,7 +7,10 @@ import type {
   CartDTO,
   CartLineItemDTO,
   CustomerDTO,
+  Logger,
 } from "@medusajs/framework/types"
+
+import { dispatchNotificationsIndividually } from "../../lib/dispatch-notifications"
 
 export type AbandonedCartItem = CartLineItemDTO & {
   variant?: {
@@ -95,10 +98,18 @@ export const sendAbandonedNotificationsStep = createStep(
       return new StepResponse({ notifications: [] })
     }
 
-    const notifications =
-      await notificationModuleService.createNotifications(
-        notificationsPayload
-      )
+    let logger: Logger | undefined
+    try {
+      logger = container.resolve("logger")
+    } catch {
+      logger = undefined
+    }
+
+    const notifications = await dispatchNotificationsIndividually(
+      notificationModuleService,
+      notificationsPayload,
+      logger
+    )
 
     return new StepResponse({
       notifications,

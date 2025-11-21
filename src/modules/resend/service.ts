@@ -26,6 +26,8 @@ import {
 type ResendOptions = {
   api_key: string
   from: string
+  from_name?: string
+  reply_to?: string
   html_templates?: Record<
     string,
     {
@@ -54,6 +56,38 @@ const templates: Partial<Record<Templates, TemplateRenderer>> = {
     userInvitedEmail(props as UserInvitedEmailProps),
   [Templates.ABANDONED_CART]: (props) =>
     AbandonedCartEmail(props as AbandonedCartEmailProps),
+}
+
+const BRAND_NAME = "Tehergumi.net"
+
+const resolveOrderReference = (data: unknown): string | null => {
+  const order = (data as any)?.order ?? data
+
+  if (!order) {
+    return null
+  }
+
+  const rawId = order.display_id ?? order.id
+  if (typeof rawId === "number") {
+    return rawId.toString()
+  }
+
+  if (typeof rawId === "string" && rawId.trim().length) {
+    return rawId.trim()
+  }
+
+  return null
+}
+
+const formatFrom = (from: string, brandName: string, customName?: string) => {
+  const trimmed = from.trim()
+
+  if (trimmed.includes("<") && trimmed.includes(">")) {
+    return trimmed
+  }
+
+  const name = customName?.trim() || brandName
+  return `${name} <${trimmed}>`
 }
 
 class ResendNotificationProviderService extends AbstractNotificationProviderService {
@@ -114,46 +148,75 @@ class ResendNotificationProviderService extends AbstractNotificationProviderServ
     return templates[template]
   }
 
-  getTemplateSubject(template: Templates) {
+  getTemplateSubject(notification: ProviderSendNotificationDTO) {
+    const template = notification.template as Templates
+
     if (this.options.html_templates?.[template]?.subject) {
       return this.options.html_templates[template].subject
     }
 
     switch (template) {
-      case Templates.ORDER_PLACED:
-        return "Order Confirmation"
-      case Templates.USER_INVITED:
-        return "You've been invited to join our platform"
+      case Templates.ORDER_PLACED: {
+        const orderRef = resolveOrderReference(notification.data)
+        return orderRef
+          ? `Order #${orderRef} confirmed – ${BRAND_NAME}`
+          : `Order confirmed – ${BRAND_NAME}`
+      }
+      case Templates.USER_INVITED: {
+        const email = (notification.data as any)?.email ?? notification.to
+        return email
+          ? `You're invited to ${BRAND_NAME} – ${email}`
+          : `You're invited to ${BRAND_NAME}`
+      }
       case Templates.ABANDONED_CART:
-        return "Reminder: your cart is waiting"
+        return `Complete your ${BRAND_NAME} cart`
       default:
-        return "New Email"
+        return `New message from ${BRAND_NAME}`
     }
   }
 
   async send(
     notification: ProviderSendNotificationDTO
   ): Promise<ProviderSendNotificationResultsDTO> {
+    const subject =
+      notification.content?.subject ??
+      this.getTemplateSubject(notification)
     const template = this.getTemplate(notification.template as Templates)
-
-    if (!template) {
-      this.logger.error(
-        `Couldn't find an email template for ${notification.template}. The valid options are ${Object.values(
-          Templates
-        )}`
-      )
-      return {}
-    }
-
     const commonOptions = {
-      from: this.options.from,
+      from: formatFrom(
+        this.options.from,
+        BRAND_NAME,
+        this.options.from_name
+      ),
       to: [notification.to],
-      subject: this.getTemplateSubject(notification.template as Templates),
+      subject,
+      ...(this.options.reply_to
+        ? { reply_to: this.options.reply_to }
+        : {}),
     }
 
     let emailOptions: CreateEmailOptions
 
-    if (typeof template === "string") {
+    if (!template) {
+      const hasRawContent =
+        Boolean(notification.content?.html) ||
+        Boolean(notification.content?.text)
+
+      if (hasRawContent) {
+        emailOptions = {
+          ...commonOptions,
+          html: notification.content?.html,
+          text: notification.content?.text,
+        }
+      } else {
+        this.logger.error(
+          `Couldn't find an email template for ${notification.template}. The valid options are ${Object.values(
+            Templates
+          )}`
+        )
+        return {}
+      }
+    } else if (typeof template === "string") {
       emailOptions = {
         ...commonOptions,
         html: template,
