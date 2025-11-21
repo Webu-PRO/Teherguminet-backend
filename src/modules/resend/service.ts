@@ -15,6 +15,10 @@ import {
   type OrderPlacedEmailProps,
 } from "./emails/order-placed"
 import {
+  PaymentReceiptEmail,
+  type PaymentReceiptEmailProps,
+} from "./emails/payment-receipt"
+import {
   userInvitedEmail,
   type UserInvitedEmailProps,
 } from "./emails/user-invited"
@@ -43,6 +47,7 @@ type InjectedDependencies = {
 
 enum Templates {
   ORDER_PLACED = "order-placed",
+  PAYMENT_RECEIPT = "payment-receipt",
   USER_INVITED = "user-invited",
   ABANDONED_CART = "abandoned-cart",
 }
@@ -52,6 +57,8 @@ type TemplateRenderer = (props: unknown) => ReactElement
 const templates: Partial<Record<Templates, TemplateRenderer>> = {
   [Templates.ORDER_PLACED]: (props) =>
     OrderPlacedEmailComponent(props as OrderPlacedEmailProps),
+  [Templates.PAYMENT_RECEIPT]: (props) =>
+    PaymentReceiptEmail(props as PaymentReceiptEmailProps),
   [Templates.USER_INVITED]: (props) =>
     userInvitedEmail(props as UserInvitedEmailProps),
   [Templates.ABANDONED_CART]: (props) =>
@@ -156,6 +163,12 @@ class ResendNotificationProviderService extends AbstractNotificationProviderServ
     }
 
     switch (template) {
+      case Templates.PAYMENT_RECEIPT: {
+        const orderRef = resolveOrderReference((notification.data as any)?.order)
+        return orderRef
+          ? `Payment receipt for order #${orderRef} – ${BRAND_NAME}`
+          : `Payment receipt – ${BRAND_NAME}`
+      }
       case Templates.ORDER_PLACED: {
         const orderRef = resolveOrderReference(notification.data)
         return orderRef
