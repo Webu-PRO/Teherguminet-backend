@@ -327,6 +327,49 @@ const prepareOrderItems = (
   })
 }
 
+const resolveLanguageFromOrder = (
+  order: OrderPlacedEmailProps["order"]
+): LanguageCode => {
+  const metadata = (order as any)?.metadata ?? {}
+  const metaLocale =
+    (typeof metadata?.locale === "string" && metadata.locale) ||
+    (typeof metadata?.language === "string" && metadata.language) ||
+    (typeof metadata?.lang === "string" && metadata.lang)
+  const normalizedMeta =
+    typeof metaLocale === "string" ? metaLocale.toLowerCase() : undefined
+
+  if (normalizedMeta?.startsWith("sk")) {
+    return "sk"
+  }
+  if (normalizedMeta?.startsWith("hu")) {
+    return "hu"
+  }
+
+  const country = (() => {
+    const code =
+      order.shipping_address?.country_code ??
+      order.billing_address?.country_code
+    return typeof code === "string" ? code.toLowerCase() : undefined
+  })()
+
+  if (country === "sk") {
+    return "sk"
+  }
+  if (country === "hu") {
+    return "hu"
+  }
+
+  const currency =
+    typeof order.currency_code === "string"
+      ? order.currency_code.toLowerCase()
+      : undefined
+  if (currency === "huf") {
+    return "hu"
+  }
+
+  return "hu"
+}
+
 type LanguageBlock = {
   code: LanguageCode
   locale: string
@@ -366,17 +409,12 @@ export const OrderPlacedEmailComponent = ({
     total: typeof order.total === "number" ? order.total : null,
   }
   const emailDisplay = order.email?.trim() || "—"
-  const orderTotalCombined = `${formatAmount(totals.total, currency, "hu-HU")} · ${formatAmount(
-    totals.total,
-    currency,
-    "sk-SK"
-  )}`
 
-  const languageBlocks: LanguageBlock[] = [
-    {
+  const languageBlocks: Record<LanguageCode, LanguageBlock> = {
+    hu: {
       code: "hu",
       locale: "hu-HU",
-      languageLabel: "Magyar / Hungarian",
+      languageLabel: "Magyar",
       heading: `Köszönjük, ${customerName}!`,
       intro: (
         <>
@@ -411,10 +449,10 @@ export const OrderPlacedEmailComponent = ({
       closingLines: ["Üdvözlettel,", "A Tehergumi.net csapata"],
       theme: LANGUAGE_THEMES.hu,
     },
-    {
+    sk: {
       code: "sk",
       locale: "sk-SK",
-      languageLabel: "Slovenčina / Slovak",
+      languageLabel: "Slovenčina",
       heading: `Ďakujeme, ${customerName}!`,
       intro: (
         <>
@@ -448,13 +486,19 @@ export const OrderPlacedEmailComponent = ({
       closingLines: ["S pozdravom,", "Tím Tehergumi.net"],
       theme: LANGUAGE_THEMES.sk,
     },
-  ]
+  }
+
+  const languageCode = resolveLanguageFromOrder(order)
+  const lang = languageBlocks[languageCode] ?? languageBlocks.hu
+  const orderTotalDisplay = formatAmount(totals.total, currency, lang.locale)
 
   return (
     <Html>
       <Head />
       <Preview>
-        Rendelés visszaigazolása / Potvrdenie objednávky: {orderId}
+        {lang.code === "hu"
+          ? `Rendelés visszaigazolása: ${orderId}`
+          : `Potvrdenie objednávky: ${orderId}`}
       </Preview>
       <Body
         style={{
@@ -475,19 +519,17 @@ export const OrderPlacedEmailComponent = ({
           >
             <Text style={brandMarkStyle}>TEHERGUMI.NET</Text>
             <Heading style={heroHeadingStyle}>
-              Rendelés visszaigazolva / Objednávka potvrdená
+              {lang.code === "hu"
+                ? "Rendelés visszaigazolva"
+                : "Objednávka potvrdená"}
             </Heading>
-            <Text style={{ ...textStyle, marginBottom: "18px" }}>
-              Ezt az értesítést magyarul és szlovákul is elküldjük, hogy minden fontos
-              részlet kéznél legyen bármelyik partnerünknek.
-              <br />
-              Toto potvrdenie nájdete v oboch jazykoch, aby ste mali všetky informácie po
-              ruke.
-            </Text>
+            <Text style={{ ...textStyle, marginBottom: "18px" }}>{lang.intro}</Text>
 
             <Section style={metaGridStyle}>
               <Section style={metaCardStyle}>
-                <Text style={metaLabelStyle}>Azonosító / ID</Text>
+                <Text style={metaLabelStyle}>
+                  {lang.code === "hu" ? "Azonosító" : "ID"}
+                </Text>
                 <Text style={metaValueStyle}>{orderId}</Text>
               </Section>
               <Section style={metaCardStyle}>
@@ -495,118 +537,121 @@ export const OrderPlacedEmailComponent = ({
                 <Text style={metaValueStyle}>{emailDisplay}</Text>
               </Section>
               <Section style={metaCardStyle}>
-                <Text style={metaLabelStyle}>Végösszeg / Celková suma</Text>
-                <Text style={metaValueStyle}>{orderTotalCombined}</Text>
+                <Text style={metaLabelStyle}>
+                  {lang.code === "hu" ? "Végösszeg" : "Celková suma"}
+                </Text>
+                <Text style={metaValueStyle}>{orderTotalDisplay}</Text>
               </Section>
             </Section>
           </Section>
 
-          {languageBlocks.map((lang) => {
-            const subtotalDisplay = formatAmount(totals.subtotal, currency, lang.locale)
-            const shippingDisplay = formatAmount(totals.shipping, currency, lang.locale)
-            const totalDisplay = formatAmount(totals.total, currency, lang.locale)
+          <Section
+            style={{
+              ...sectionStyle,
+              marginBottom: "24px",
+              background: lang.theme.cardBackground,
+            }}
+          >
+            <Text style={{ ...languageTagStyle, color: lang.theme.tagColor }}>
+              {lang.languageLabel}
+            </Text>
+            <Heading
+              as="h2"
+              style={{
+                fontFamily: '"Helvetica Neue", Arial, sans-serif',
+                fontWeight: 700,
+                fontSize: "24px",
+                margin: "10px 0 16px",
+                color: TEXT_LIGHT,
+              }}
+            >
+              {lang.heading}
+            </Heading>
+            <Text style={textStyle}>{lang.intro}</Text>
 
-            return (
-              <Section
-                key={lang.code}
+            <Section
+              style={{
+                margin: "24px 0",
+                padding: "22px",
+                borderRadius: "16px",
+                background:
+                  "linear-gradient(135deg, rgba(255,255,255,0.04), rgba(0,0,0,0.35))",
+              }}
+            >
+              <Heading
+                as="h3"
                 style={{
-                  ...sectionStyle,
-                  marginBottom: "24px",
-                  background: lang.theme.cardBackground,
+                  fontFamily: '"Helvetica Neue", Arial, sans-serif',
+                  fontWeight: 600,
+                  fontSize: "16px",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.12em",
+                  color: lang.code === "hu" ? F1_RED : "#4DA3FF",
+                  margin: "0 0 14px",
                 }}
               >
-                <Text style={{ ...languageTagStyle, color: lang.theme.tagColor }}>
-                  {lang.languageLabel}
-                </Text>
-                <Heading
-                  as="h2"
-                  style={{
-                    fontFamily: '"Helvetica Neue", Arial, sans-serif',
-                    fontWeight: 700,
-                    fontSize: "24px",
-                    margin: "10px 0 16px",
-                    color: TEXT_LIGHT,
-                  }}
-                >
-                  {lang.heading}
-                </Heading>
-                <Text style={textStyle}>{lang.intro}</Text>
-
-                <Section
-                  style={{
-                    margin: "24px 0",
-                    padding: "22px",
-                    borderRadius: "16px",
-                    background:
-                      "linear-gradient(135deg, rgba(255,255,255,0.04), rgba(0,0,0,0.35))",
-                  }}
-                >
-                  <Heading
-                    as="h3"
+                {lang.summaryTitle}
+              </Heading>
+              {items.length ? (
+                items.map((item) => (
+                  <Section
+                    key={`${lang.code}-${item.key}`}
                     style={{
-                      fontFamily: '"Helvetica Neue", Arial, sans-serif',
-                      fontWeight: 600,
-                      fontSize: "16px",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.12em",
-                      color: lang.code === "hu" ? F1_RED : "#4DA3FF",
-                      margin: "0 0 14px",
+                      ...itemRowStyle,
+                      background: lang.theme.itemBackground,
                     }}
                   >
-                    {lang.summaryTitle}
-                  </Heading>
-                  {items.length ? (
-                    items.map((item) => (
-                      <Section
-                        key={`${lang.code}-${item.key}`}
-                        style={{
-                          ...itemRowStyle,
-                          background: lang.theme.itemBackground,
-                        }}
-                      >
-                        <Text style={{ ...textStyle, margin: 0 }}>
-                          {item.quantity}× {item.name}
-                        </Text>
-                        <Text style={{ ...strongText, margin: 0 }}>
-                          {formatAmount(item.price, currency, lang.locale)}
-                        </Text>
-                      </Section>
-                    ))
-                  ) : (
-                    <Text style={{ ...textStyle, margin: 0 }}>{lang.noItemsCopy}</Text>
-                  )}
-                  <Hr style={{ borderColor: "rgba(255,255,255,0.08)" }} />
-                  <SummaryRow label={lang.summaryLabels.subtotal} value={subtotalDisplay} />
-                  <SummaryRow label={lang.summaryLabels.shipping} value={shippingDisplay} />
-                  <SummaryRow label={lang.summaryLabels.total} value={totalDisplay} accent />
-                </Section>
+                    <Text style={{ ...textStyle, margin: 0 }}>
+                      {item.quantity}× {item.name}
+                    </Text>
+                    <Text style={{ ...strongText, margin: 0 }}>
+                      {formatAmount(item.price, currency, lang.locale)}
+                    </Text>
+                  </Section>
+                ))
+              ) : (
+                <Text style={{ ...textStyle, margin: 0 }}>{lang.noItemsCopy}</Text>
+              )}
+              <Hr style={{ borderColor: "rgba(255,255,255,0.08)" }} />
+              <SummaryRow
+                label={lang.summaryLabels.subtotal}
+                value={formatAmount(totals.subtotal, currency, lang.locale)}
+              />
+              <SummaryRow
+                label={lang.summaryLabels.shipping}
+                value={formatAmount(totals.shipping, currency, lang.locale)}
+              />
+              <SummaryRow
+                label={lang.summaryLabels.total}
+                value={formatAmount(totals.total, currency, lang.locale)}
+                accent
+              />
+            </Section>
 
-                <Text style={textStyle}>{lang.statusCopy}</Text>
+            <Text style={textStyle}>{lang.statusCopy}</Text>
 
-                <a
-                  href={orderUrl}
-                  style={{
-                    ...ctaButtonBase,
-                    background: lang.theme.ctaBackground,
-                    boxShadow: lang.theme.ctaShadow,
-                  }}
-                >
-                  {lang.ctaLabel}
-                </a>
+            <a
+              href={orderUrl}
+              style={{
+                ...ctaButtonBase,
+                background: lang.theme.ctaBackground,
+                boxShadow: lang.theme.ctaShadow,
+              }}
+            >
+              {lang.ctaLabel}
+            </a>
 
-                <Text style={textStyle}>{lang.contactCopy}</Text>
+            <Text style={textStyle}>{lang.contactCopy}</Text>
 
-                <Text style={{ ...textStyle, color: "rgba(255,255,255,0.7)" }}>
-                  {lang.closingLines.map((line, index) => (
-                    <React.Fragment key={`${lang.code}-closing-${index}`}>
-                      {line}
-                      {index < lang.closingLines.length - 1 && <br />}
-                    </React.Fragment>
-                  ))}
-                </Text>
-              </Section>
-            )
-          })}
+            <Text style={{ ...textStyle, color: "rgba(255,255,255,0.7)" }}>
+              {lang.closingLines.map((line, index) => (
+                <React.Fragment key={`${lang.code}-closing-${index}`}>
+                  {line}
+                  {index < lang.closingLines.length - 1 && <br />}
+                </React.Fragment>
+              ))}
+            </Text>
+          </Section>
 
           <Text
             style={{
@@ -616,9 +661,9 @@ export const OrderPlacedEmailComponent = ({
               fontSize: "12px",
             }}
           >
-            Ez egy automatikusan generált üzenet, kérjük ne válaszolj rá közvetlenül.
-            <br />
-            Toto je automaticky generovaná správa, prosím, neodpovedajte na ňu.
+            {lang.code === "hu"
+              ? "Ez egy automatikusan generált üzenet, kérjük ne válaszolj rá közvetlenül."
+              : "Toto je automaticky generovaná správa, prosím, neodpovedajte na ňu."}
           </Text>
         </Container>
       </Body>
