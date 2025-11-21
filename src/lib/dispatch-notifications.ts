@@ -8,7 +8,7 @@ type NotificationRecord = Awaited<
   ReturnType<INotificationModuleService["createNotifications"]>
 > extends Array<infer T>
   ? T
-  : never
+  : CreateNotificationDTO
 
 type DispatchOptions = {
   concurrency?: number

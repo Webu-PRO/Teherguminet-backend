@@ -219,7 +219,8 @@ class ResendNotificationProviderService extends AbstractNotificationProviderServ
         emailOptions = {
           ...commonOptions,
           ...(html ? { html } : {}),
-          ...(text ? { text } : {}),
+          // Ensure at least one render key is present for Resend typings
+          text: text ?? html ?? "",
         }
       } else {
         this.logger.error(
