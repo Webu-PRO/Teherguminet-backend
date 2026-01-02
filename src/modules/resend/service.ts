@@ -26,6 +26,10 @@ import {
   AbandonedCartEmail,
   type AbandonedCartEmailProps,
 } from "./emails/abandoned-cart"
+import {
+  PasswordResetEmail,
+  type PasswordResetEmailProps,
+} from "./emails/password-reset"
 
 type ResendOptions = {
   api_key: string
@@ -50,6 +54,7 @@ enum Templates {
   PAYMENT_RECEIPT = "payment-receipt",
   USER_INVITED = "user-invited",
   ABANDONED_CART = "abandoned-cart",
+  PASSWORD_RESET = "password-reset",
 }
 
 type TemplateRenderer = (props: unknown) => ReactElement
@@ -63,6 +68,8 @@ const templates: Partial<Record<Templates, TemplateRenderer>> = {
     userInvitedEmail(props as UserInvitedEmailProps),
   [Templates.ABANDONED_CART]: (props) =>
     AbandonedCartEmail(props as AbandonedCartEmailProps),
+  [Templates.PASSWORD_RESET]: (props) =>
+    PasswordResetEmail(props as PasswordResetEmailProps),
 }
 
 const BRAND_NAME = "Tehergumi.net"
@@ -183,6 +190,8 @@ class ResendNotificationProviderService extends AbstractNotificationProviderServ
       }
       case Templates.ABANDONED_CART:
         return `Complete your ${BRAND_NAME} cart`
+      case Templates.PASSWORD_RESET:
+        return `Reset your password – ${BRAND_NAME}`
       default:
         return `New message from ${BRAND_NAME}`
     }
