@@ -116,6 +116,25 @@ module.exports = defineConfig({
     b2b: {
       resolve: "./src/modules/b2b",
     },
+    fulfillment: {
+      resolve: "@medusajs/fulfillment",
+      options: {
+        providers: [
+          {
+            resolve: "@medusajs/fulfillment-manual",
+            id: "manual",
+          },
+          {
+            resolve: "./src/modules/fulfillment-gls",
+            id: "gls",
+          },
+          {
+            resolve: "./src/modules/fulfillment-magyar-posta",
+            id: "magyar_posta",
+          },
+        ],
+      },
+    },
     payment: {
       resolve: "@medusajs/payment",
       options: {
