@@ -29,6 +29,51 @@ class GlsFulfillmentService extends AbstractFulfillmentProviderService {
     this.options_ = options
   }
 
+  private resolveNumber(value: unknown): number | null {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value
+    }
+
+    if (typeof value === "string" && value.trim().length) {
+      const parsed = Number(value)
+      return Number.isFinite(parsed) ? parsed : null
+    }
+
+    return null
+  }
+
+  private resolveCalculatedAmount(
+    optionData: Record<string, unknown>,
+    data: Record<string, unknown>
+  ) {
+    const candidates = [
+      data.calculated_price,
+      data.price,
+      data.amount,
+      optionData.calculated_price,
+      optionData.price,
+      optionData.amount,
+      this.options_["calculated_price"],
+      process.env.GLS_CALCULATED_PRICE,
+    ]
+
+    for (const candidate of candidates) {
+      const resolved = this.resolveNumber(candidate)
+      if (resolved !== null) {
+        return resolved
+      }
+    }
+
+    return 0
+  }
+
+  private resolveTaxInclusive() {
+    const optionValue =
+      this.options_["is_calculated_price_tax_inclusive"] ??
+      process.env.GLS_CALCULATED_PRICE_TAX_INCLUSIVE
+    return optionValue === true || optionValue === "true"
+  }
+
   async getFulfillmentOptions(): Promise<FulfillmentOption[]> {
     return [
       {
@@ -51,15 +96,18 @@ class GlsFulfillmentService extends AbstractFulfillmentProviderService {
   }
 
   async calculatePrice(
-    _optionData: Record<string, unknown>,
-    _data: Record<string, unknown>,
+    optionData: Record<string, unknown>,
+    data: Record<string, unknown>,
     _context: CalculateShippingOptionPriceContext
   ): Promise<CalculatedShippingOptionPrice> {
-    throw new Error("GLS fulfillment does not support price calculation")
+    return {
+      calculated_amount: this.resolveCalculatedAmount(optionData, data),
+      is_calculated_price_tax_inclusive: this.resolveTaxInclusive(),
+    }
   }
 
   async canCalculate(): Promise<boolean> {
-    return false
+    return true
   }
 
   async validateOption(_data: Record<string, unknown>): Promise<boolean> {
