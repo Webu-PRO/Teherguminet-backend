@@ -138,7 +138,11 @@ export default async function seedDemoData({ container }: ExecArgs) {
           name: "Europe",
           currency_code: "eur",
           countries,
-          payment_providers: ["pp_system_default", "pp_stripe_stripe"],
+          payment_providers: [
+            "pp_system_default",
+            "pp_manual_manual",
+            "pp_stripe_stripe",
+          ],
         },
       ],
     },

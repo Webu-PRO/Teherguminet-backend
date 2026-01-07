@@ -121,6 +121,10 @@ module.exports = defineConfig({
       options: {
         providers: [
           {
+            resolve: "./src/modules/payment-manual",
+            id: "manual",
+          },
+          {
             resolve: "@medusajs/payment-stripe",
             id: "stripe",
             options: {
