@@ -1,7 +1,7 @@
 import { ModuleProvider, Modules } from "@medusajs/framework/utils"
 
-import MagyarPostaFulfillmentService from "./service"
+import TomketFulfillmentService from "./service"
 
 export default ModuleProvider(Modules.FULFILLMENT, {
-  services: [MagyarPostaFulfillmentService],
+  services: [TomketFulfillmentService],
 })

@@ -129,8 +129,8 @@ module.exports = defineConfig({
             id: "gls",
           },
           {
-            resolve: "./src/modules/fulfillment-magyar-posta",
-            id: "magyar_posta",
+            resolve: "./src/modules/fulfillment-tomket",
+            id: "tomket",
           },
         ],
       },

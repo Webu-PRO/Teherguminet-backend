@@ -12,17 +12,17 @@ type InjectedDependencies = {
   logger?: Logger
 }
 
-type MagyarPostaOptions = Record<string, unknown>
+type TomketOptions = Record<string, unknown>
 
-class MagyarPostaFulfillmentService extends AbstractFulfillmentProviderService {
-  static identifier = "magyar_posta"
+class TomketFulfillmentService extends AbstractFulfillmentProviderService {
+  static identifier = "tomket"
 
   protected logger_?: Logger
-  protected options_: MagyarPostaOptions
+  protected options_: TomketOptions
 
   constructor(
     { logger }: InjectedDependencies = {},
-    options: MagyarPostaOptions = {}
+    options: TomketOptions = {}
   ) {
     super()
     this.logger_ = logger
@@ -32,8 +32,8 @@ class MagyarPostaFulfillmentService extends AbstractFulfillmentProviderService {
   async getFulfillmentOptions(): Promise<FulfillmentOption[]> {
     return [
       {
-        id: "magyar-posta",
-        name: "Magyar Posta",
+        id: "tomket",
+        name: "Tomket Dropship",
       },
     ]
   }
@@ -52,7 +52,7 @@ class MagyarPostaFulfillmentService extends AbstractFulfillmentProviderService {
     _context: CalculateShippingOptionPriceContext
   ): Promise<CalculatedShippingOptionPrice> {
     throw new Error(
-      "Magyar Posta fulfillment does not support price calculation"
+      "Tomket fulfillment does not support price calculation"
     )
   }
 
@@ -83,4 +83,4 @@ class MagyarPostaFulfillmentService extends AbstractFulfillmentProviderService {
   }
 }
 
-export default MagyarPostaFulfillmentService
+export default TomketFulfillmentService

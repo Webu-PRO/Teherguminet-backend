@@ -7,14 +7,14 @@ import type {
   OrderShippingMethodDTO,
 } from "@medusajs/types"
 
-type MagyarPostaConfig = {
+type TomketConfig = {
   baseUrl: string
   username: string
   password: string
   timeoutMs: number
 }
 
-export type MagyarPostaOrderPayload = {
+export type TomketOrderPayload = {
   tire: string
   quantity: number
   country: string
@@ -29,7 +29,7 @@ export type MagyarPostaOrderPayload = {
   note?: string
 }
 
-export type MagyarPostaOrderResponse = {
+export type TomketOrderResponse = {
   raw: string
   parsed:
     | {
@@ -49,12 +49,12 @@ export type MagyarPostaOrderResponse = {
       }
 }
 
-export type MagyarPostaOrderResult = {
-  request: MagyarPostaOrderPayload
-  response: MagyarPostaOrderResponse
+export type TomketOrderResult = {
+  request: TomketOrderPayload
+  response: TomketOrderResponse
 }
 
-export type MagyarPostaRecipient = {
+export type TomketRecipient = {
   customer: string
   street: string
   city: string
@@ -64,7 +64,7 @@ export type MagyarPostaRecipient = {
   email?: string
 }
 
-export type MagyarPostaOrderItem = {
+export type TomketOrderItem = {
   internalId: string
   quantity: number
   lineItemIds: string[]
@@ -144,25 +144,24 @@ const parseCsvValues = (value?: string) => {
 }
 
 const resolveConfiguredTypeIds = () =>
-  parseCsvValues(process.env.MAGYAR_POSTA_SHIPPING_OPTION_TYPE_IDS)
+  parseCsvValues(process.env.TOMKET_SHIPPING_OPTION_TYPE_IDS)
 
 const resolveConfiguredOptionIds = () =>
-  parseCsvValues(process.env.MAGYAR_POSTA_SHIPPING_OPTION_IDS)
+  parseCsvValues(process.env.TOMKET_SHIPPING_OPTION_IDS)
 
-const hasMagyarPostaToken = (value?: string | null) => {
+const hasTomketToken = (value?: string | null) => {
   if (!value) {
     return false
   }
 
   const normalized = value.toLowerCase()
   return (
-    normalized.includes("magyar") ||
-    normalized.includes("posta") ||
-    normalized.includes("mpl")
+    normalized.includes("tomket") ||
+    normalized.includes("dropship")
   )
 }
 
-export const isMagyarPostaShippingOption = (
+export const isTomketShippingOption = (
   option?: ShippingOptionLike | null
 ) => {
   if (!option) {
@@ -194,7 +193,7 @@ export const isMagyarPostaShippingOption = (
     option.type?.description,
   ].filter((value): value is string => typeof value === "string")
 
-  if (tokens.some((value) => hasMagyarPostaToken(value))) {
+  if (tokens.some((value) => hasTomketToken(value))) {
     return true
   }
 
@@ -203,18 +202,18 @@ export const isMagyarPostaShippingOption = (
     .flatMap((record) => Object.values(record))
 
   return dataValues.some(
-    (value) => typeof value === "string" && hasMagyarPostaToken(value)
+    (value) => typeof value === "string" && hasTomketToken(value)
   )
 }
 
-export const isMagyarPostaShippingMethod = (
+export const isTomketShippingMethod = (
   method?: OrderShippingMethodDTO | null
 ) => {
   if (!method) {
     return false
   }
 
-  return isMagyarPostaShippingOption({
+  return isTomketShippingOption({
     id: method.shipping_option_id,
     name: method.name,
     data: method.data,
@@ -222,21 +221,21 @@ export const isMagyarPostaShippingMethod = (
   })
 }
 
-export const resolveMagyarPostaConfig = (): {
-  config?: MagyarPostaConfig
+export const resolveTomketConfig = (): {
+  config?: TomketConfig
   missing: string[]
 } => {
   const missing: string[] = []
 
-  const username = normalizeString(process.env.MAGYAR_POSTA_USERNAME)
-  const password = normalizeString(process.env.MAGYAR_POSTA_PASSWORD)
+  const username = normalizeString(process.env.TOMKET_USERNAME)
+  const password = normalizeString(process.env.TOMKET_PASSWORD)
 
   if (!username) {
-    missing.push("MAGYAR_POSTA_USERNAME")
+    missing.push("TOMKET_USERNAME")
   }
 
   if (!password) {
-    missing.push("MAGYAR_POSTA_PASSWORD")
+    missing.push("TOMKET_PASSWORD")
   }
 
   if (missing.length) {
@@ -247,13 +246,12 @@ export const resolveMagyarPostaConfig = (): {
     missing,
     config: {
       baseUrl:
-        normalizeString(process.env.MAGYAR_POSTA_API_BASE_URL) ||
+        normalizeString(process.env.TOMKET_API_BASE_URL) ||
         "https://api.tomket.com/dropship/api",
       username,
       password,
       timeoutMs:
-        Number(process.env.MAGYAR_POSTA_API_TIMEOUT_MS) ||
-        DEFAULT_TIMEOUT_MS,
+        Number(process.env.TOMKET_API_TIMEOUT_MS) || DEFAULT_TIMEOUT_MS,
     },
   }
 }
@@ -273,10 +271,10 @@ const resolveDeliveryAddress = (
   )
 }
 
-export const resolveMagyarPostaRecipient = (
+export const resolveTomketRecipient = (
   fulfillment: FulfillmentDTO,
   order: OrderDTO
-): { recipient?: MagyarPostaRecipient; missing: string[] } => {
+): { recipient?: TomketRecipient; missing: string[] } => {
   const address = resolveDeliveryAddress(fulfillment, order)
   const missing: string[] = []
 
@@ -376,13 +374,11 @@ const resolveItemInternalId = (item: ExpandedOrderLineItem) => {
     (item.variant?.metadata as Record<string, unknown> | null) ?? {}
 
   const candidates = [
-    { source: "metadata.tomket_internal_id", value: metadata.tomket_internal_id },
-    { source: "metadata.tomket_id", value: metadata.tomket_id },
     {
-      source: "metadata.magyar_posta_internal_id",
-      value: metadata.magyar_posta_internal_id,
+      source: "metadata.tomket_internal_id",
+      value: metadata.tomket_internal_id,
     },
-    { source: "metadata.magyar_posta_id", value: metadata.magyar_posta_id },
+    { source: "metadata.tomket_id", value: metadata.tomket_id },
     { source: "metadata.tire_id", value: metadata.tire_id },
     { source: "metadata.internal_id", value: metadata.internal_id },
     { source: "metadata.supplier_id", value: metadata.supplier_id },
@@ -397,14 +393,6 @@ const resolveItemInternalId = (item: ExpandedOrderLineItem) => {
       source: "variant.metadata.tomket_id",
       value: variantMetadata.tomket_id,
     },
-    {
-      source: "variant.metadata.magyar_posta_internal_id",
-      value: variantMetadata.magyar_posta_internal_id,
-    },
-    {
-      source: "variant.metadata.magyar_posta_id",
-      value: variantMetadata.magyar_posta_id,
-    },
   ]
 
   for (const candidate of candidates) {
@@ -417,11 +405,11 @@ const resolveItemInternalId = (item: ExpandedOrderLineItem) => {
   return { id: null, source: "" }
 }
 
-export const resolveMagyarPostaItems = (
+export const resolveTomketItems = (
   items: ExpandedOrderLineItem[] | null | undefined
-): { items: MagyarPostaOrderItem[]; missing: string[] } => {
+): { items: TomketOrderItem[]; missing: string[] } => {
   const missing: string[] = []
-  const grouped = new Map<string, MagyarPostaOrderItem>()
+  const grouped = new Map<string, TomketOrderItem>()
 
   for (const item of items ?? []) {
     const { id, source } = resolveItemInternalId(item)
@@ -456,9 +444,9 @@ export const resolveMagyarPostaItems = (
   }
 }
 
-export const buildMagyarPostaOrderId = (
+export const buildTomketOrderId = (
   order: OrderDTO,
-  item: MagyarPostaOrderItem
+  item: TomketOrderItem
 ) => {
   const hash = crypto
     .createHash("sha1")
@@ -468,7 +456,7 @@ export const buildMagyarPostaOrderId = (
   return `mp${hash.slice(0, 13)}`
 }
 
-const parseOrderResponse = (text: string): MagyarPostaOrderResponse => {
+const parseOrderResponse = (text: string): TomketOrderResponse => {
   const trimmed = text.trim()
   const line = trimmed.split(/\r?\n/).find(Boolean) ?? ""
   if (!line) {
@@ -513,14 +501,14 @@ const parseOrderResponse = (text: string): MagyarPostaOrderResponse => {
 
 const normalizeBaseUrl = (baseUrl: string) => baseUrl.replace(/\/$/, "")
 
-export const buildMagyarPostaOrderPayload = (input: {
-  item: MagyarPostaOrderItem
-  recipient: MagyarPostaRecipient
+export const buildTomketOrderPayload = (input: {
+  item: TomketOrderItem
+  recipient: TomketRecipient
   orderId: string
   email?: string
   shipdate?: string
   note?: string
-}): MagyarPostaOrderPayload => {
+}): TomketOrderPayload => {
   const { item, recipient, orderId } = input
   const email = sanitizeField(input.email ?? recipient.email, 100) || undefined
   const note = sanitizeField(input.note, 255) || undefined
@@ -546,10 +534,10 @@ export const buildMagyarPostaOrderPayload = (input: {
   }
 }
 
-export const createMagyarPostaOrder = async (
-  payload: MagyarPostaOrderPayload,
-  config: MagyarPostaConfig
-): Promise<MagyarPostaOrderResult> => {
+export const createTomketOrder = async (
+  payload: TomketOrderPayload,
+  config: TomketConfig
+): Promise<TomketOrderResult> => {
   const endpoint = `${normalizeBaseUrl(config.baseUrl)}/order/new`
   const authHeader = Buffer.from(
     `${config.username}:${config.password}`
@@ -595,14 +583,14 @@ export const createMagyarPostaOrder = async (
     const text = await response.text()
     if (!response.ok) {
       throw new Error(
-        `Magyar Posta API error (${response.status} ${response.statusText})`
+        `Tomket API error (${response.status} ${response.statusText})`
       )
     }
 
     const parsed = parseOrderResponse(text)
     if (parsed.parsed.type === "error") {
       throw new Error(
-        `Magyar Posta API error${parsed.parsed.code ? ` ${parsed.parsed.code}` : ""}: ${parsed.parsed.message}`
+        `Tomket API error${parsed.parsed.code ? ` ${parsed.parsed.code}` : ""}: ${parsed.parsed.message}`
       )
     }
 

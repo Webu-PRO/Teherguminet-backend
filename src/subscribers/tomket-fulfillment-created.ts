@@ -16,22 +16,21 @@ import type {
 } from "@medusajs/types"
 
 import {
-  buildMagyarPostaOrderId,
-  buildMagyarPostaOrderPayload,
-  createMagyarPostaOrder,
-  isMagyarPostaShippingMethod,
-  isMagyarPostaShippingOption,
-  resolveMagyarPostaConfig,
-  resolveMagyarPostaItems,
-  resolveMagyarPostaRecipient,
-} from "../lib/magyar-posta"
+  buildTomketOrderId,
+  buildTomketOrderPayload,
+  createTomketOrder,
+  isTomketShippingMethod,
+  isTomketShippingOption,
+  resolveTomketConfig,
+  resolveTomketItems,
+  resolveTomketRecipient,
+} from "../lib/tomket"
 
 type FulfillmentEventPayload = {
   id: string
 }
 
-const MAGYAR_POSTA_FULFILLMENT_METADATA_KEY =
-  "magyar_posta_orders"
+const TOMKET_FULFILLMENT_METADATA_KEY = "tomket_orders"
 
 const resolveLogger = (container: SubscriberArgs["container"]) => {
   try {
@@ -96,7 +95,7 @@ const normalizeMetadataString = (
   return normalized
 }
 
-export default async function magyarPostaFulfillmentCreated({
+export default async function tomketFulfillmentCreated({
   event: { data },
   container,
 }: SubscriberArgs<FulfillmentEventPayload>) {
@@ -158,58 +157,58 @@ export default async function magyarPostaFulfillmentCreated({
 
   if (!fulfillment || !fulfillment.order) {
     logger?.warn?.(
-      `Magyar Posta: fulfillment ${data.id} missing order relation`
+      `Tomket: fulfillment ${data.id} missing order relation`
     )
     return
   }
 
   const order = fulfillment.order
   const shippingMethod = resolveShippingMethod(order, fulfillment)
-  const matchesMagyarPosta =
-    fulfillment.provider_id === "magyar_posta" ||
-    isMagyarPostaShippingOption(fulfillment.shipping_option) ||
-    isMagyarPostaShippingMethod(shippingMethod)
-  if (!matchesMagyarPosta) {
+  const matchesTomket =
+    fulfillment.provider_id === "tomket" ||
+    isTomketShippingOption(fulfillment.shipping_option) ||
+    isTomketShippingMethod(shippingMethod)
+  if (!matchesTomket) {
     return
   }
 
   const metadata = extractMetadata(fulfillment)
-  if (metadata[MAGYAR_POSTA_FULFILLMENT_METADATA_KEY]) {
+  if (metadata[TOMKET_FULFILLMENT_METADATA_KEY]) {
     return
   }
 
-  const { config, missing } = resolveMagyarPostaConfig()
+  const { config, missing } = resolveTomketConfig()
   if (!config) {
     logger?.warn?.(
-      `Magyar Posta: missing config (${missing.join(", ")})`
+      `Tomket: missing config (${missing.join(", ")})`
     )
     return
   }
 
   const { recipient, missing: missingRecipient } =
-    resolveMagyarPostaRecipient(fulfillment, order)
+    resolveTomketRecipient(fulfillment, order)
   if (!recipient) {
     logger?.warn?.(
-      `Magyar Posta: missing recipient fields (${missingRecipient.join(
+      `Tomket: missing recipient fields (${missingRecipient.join(
         ", "
       )}) for fulfillment ${fulfillment.id}`
     )
     return
   }
 
-  const { items, missing: missingItems } = resolveMagyarPostaItems(
+  const { items, missing: missingItems } = resolveTomketItems(
     order.items
   )
   if (!items.length) {
     logger?.warn?.(
-      `Magyar Posta: no items to fulfill for order ${order.id}`
+      `Tomket: no items to fulfill for order ${order.id}`
     )
     return
   }
 
   if (missingItems.length) {
     logger?.warn?.(
-      `Magyar Posta: missing internal tire id for items (${missingItems.join(
+      `Tomket: missing internal tire id for items (${missingItems.join(
         ", "
       )}) in order ${order.id}`
     )
@@ -217,11 +216,10 @@ export default async function magyarPostaFulfillmentCreated({
   }
 
   const note = normalizeMetadataString(
-    metadata.magyar_posta_note ?? order.metadata?.magyar_posta_note
+    metadata.tomket_note ?? order.metadata?.tomket_note
   )
   const shipdate = normalizeMetadataString(
-    metadata.magyar_posta_shipdate ??
-      order.metadata?.magyar_posta_shipdate,
+    metadata.tomket_shipdate ?? order.metadata?.tomket_shipdate,
     10
   )
 
@@ -229,8 +227,8 @@ export default async function magyarPostaFulfillmentCreated({
   let hadErrors = false
 
   for (const item of items) {
-    const orderId = buildMagyarPostaOrderId(order, item)
-    const payload = buildMagyarPostaOrderPayload({
+    const orderId = buildTomketOrderId(order, item)
+    const payload = buildTomketOrderPayload({
       item,
       recipient,
       orderId,
@@ -239,7 +237,7 @@ export default async function magyarPostaFulfillmentCreated({
     })
 
     try {
-      const result = await createMagyarPostaOrder(payload, config)
+      const result = await createTomketOrder(payload, config)
       orders.push({
         order_id: orderId,
         internal_id: item.internalId,
@@ -262,7 +260,7 @@ export default async function magyarPostaFulfillmentCreated({
           error instanceof Error ? error.message : String(error),
       })
       logger?.error?.(
-        `Magyar Posta: failed to create order ${orderId} for fulfillment ${fulfillment.id}`,
+        `Tomket: failed to create order ${orderId} for fulfillment ${fulfillment.id}`,
         error as Error
       )
     }
@@ -272,7 +270,7 @@ export default async function magyarPostaFulfillmentCreated({
     await fulfillmentModuleService.updateFulfillment(fulfillment.id, {
       metadata: {
         ...metadata,
-        [MAGYAR_POSTA_FULFILLMENT_METADATA_KEY]: {
+        [TOMKET_FULFILLMENT_METADATA_KEY]: {
           created_at: new Date().toISOString(),
           has_errors: hadErrors,
           orders,
