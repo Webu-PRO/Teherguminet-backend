@@ -143,6 +143,14 @@ export default async function fulfillmentDeliveredHandler({
     shippingMethod?.name?.trim() ||
     null
 
+  const trackingNumbers =
+    "tracking_numbers" in fulfillment
+      ? ((fulfillment as { tracking_numbers?: unknown }).tracking_numbers as
+          | Array<string | null | undefined>
+          | null
+          | undefined)
+      : undefined
+
   const payload: CreateNotificationDTO = {
     to: order.email,
     channel: "email",
@@ -152,7 +160,7 @@ export default async function fulfillmentDeliveredHandler({
       fulfillment: {
         delivered_at: fulfillment.delivered_at,
         shipping_option_name: shippingOptionName,
-        tracking_numbers: fulfillment.tracking_numbers ?? [],
+        tracking_numbers: trackingNumbers ?? [],
       },
     },
     trigger_type: event.name,
