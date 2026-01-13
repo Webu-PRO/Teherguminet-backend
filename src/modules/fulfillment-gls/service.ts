@@ -352,6 +352,40 @@ class GlsFulfillmentService extends AbstractFulfillmentProviderService {
     return context.items as ShippingWeightItem[]
   }
 
+  private resolveDataTotalWeightKg(
+    data: Record<string, unknown>,
+    optionData: Record<string, unknown>
+  ): number | null {
+    if (!data || typeof data !== "object") {
+      return null
+    }
+
+    const record = data as Record<string, unknown>
+    const direct = this.resolveNumber(
+      record.total_weight_kg ?? record.totalWeightKg
+    )
+
+    if (direct !== null) {
+      return direct
+    }
+
+    const fallback = this.resolveNumber(
+      record.total_weight ?? record.totalWeight ?? record.weight
+    )
+
+    if (fallback === null) {
+      return null
+    }
+
+    const unitCandidate = record.weight_unit ?? record.weightUnit
+    const unit =
+      typeof unitCandidate === "string"
+        ? unitCandidate.toLowerCase()
+        : this.resolveWeightUnit(optionData)
+
+    return unit === "g" ? fallback / 1000 : fallback
+  }
+
   private resolveItemWeight(item: ShippingWeightItem) {
     const metadata =
       item.metadata && typeof item.metadata === "object"
@@ -528,7 +562,12 @@ class GlsFulfillmentService extends AbstractFulfillmentProviderService {
     data: Record<string, unknown>,
     context: CalculateShippingOptionPriceContext
   ): Promise<CalculatedShippingOptionPrice> {
-    const totalWeightKg = this.resolveTotalWeightKg(context, optionData)
+    const providedWeightKg = this.resolveDataTotalWeightKg(
+      data,
+      optionData
+    )
+    const totalWeightKg =
+      providedWeightKg ?? this.resolveTotalWeightKg(context, optionData)
     const pricePerKg = this.resolvePricePerKg(optionData)
     const calculatedAmount = Math.round(totalWeightKg * pricePerKg)
 
