@@ -180,7 +180,10 @@ class MagyarPostaFulfillmentService extends AbstractFulfillmentProviderService {
         typeof item.quantity === "number" && Number.isFinite(item.quantity)
           ? item.quantity
           : 1;
-      const weightKg = this.resolveItemWeightKg(item.variant?.weight, unit);
+      const weightKg = this.resolveItemWeightKg(
+        item.variant?.weight ?? null,
+        unit
+      );
       const amount = this.resolveTierAmount(weightKg, tiers);
       return total + amount * quantity;
     }, 0);

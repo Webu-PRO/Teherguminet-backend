@@ -39,6 +39,13 @@ type GlsPriceMatrix = {
   prices: GlsPriceRow[]
 }
 
+type ShippingWeightItem = {
+  quantity?: number | null
+  variant?: {
+    weight?: number | null
+  } | null
+}
+
 class GlsFulfillmentService extends AbstractFulfillmentProviderService {
   static identifier = "gls"
 
@@ -65,31 +72,6 @@ class GlsFulfillmentService extends AbstractFulfillmentProviderService {
     }
 
     return null
-  }
-
-  private resolveCalculatedAmount(
-    optionData: Record<string, unknown>,
-    data: Record<string, unknown>
-  ) {
-    const candidates = [
-      data.calculated_price,
-      data.price,
-      data.amount,
-      optionData.calculated_price,
-      optionData.price,
-      optionData.amount,
-      this.options_["calculated_price"],
-      process.env.GLS_CALCULATED_PRICE,
-    ]
-
-    for (const candidate of candidates) {
-      const resolved = this.resolveNumber(candidate)
-      if (resolved !== null) {
-        return resolved
-      }
-    }
-
-    return 0
   }
 
   private resolveJsonRecord(value: unknown): Record<string, unknown> | null {
@@ -238,11 +220,13 @@ class GlsFulfillmentService extends AbstractFulfillmentProviderService {
           return null
         }
 
+        const id =
+          typeof record.id === "string" && record.id.trim().length
+            ? record.id.trim()
+            : undefined
+
         return {
-          id:
-            typeof record.id === "string" && record.id.trim().length
-              ? record.id.trim()
-              : undefined,
+          ...(id ? { id } : {}),
           weight_band_id: weightBandId,
           package_band_id: packageBandId,
           price_huf: price,
@@ -305,14 +289,25 @@ class GlsFulfillmentService extends AbstractFulfillmentProviderService {
     return unit === "kg" ? "kg" : "g"
   }
 
+  private resolveContextItems(
+    context: CalculateShippingOptionPriceContext
+  ): ShippingWeightItem[] {
+    if (!Array.isArray(context?.items)) {
+      return []
+    }
+
+    return context.items as ShippingWeightItem[]
+  }
+
   private resolveTotalWeightKg(
     context: CalculateShippingOptionPriceContext,
     optionData: Record<string, unknown>
-  ) {
+  ): number {
     const unit = this.resolveWeightUnit(optionData)
-    const items = Array.isArray(context?.items) ? context.items : []
+    const items: ShippingWeightItem[] = this.resolveContextItems(context)
+    let totalWeight = 0
 
-    const totalWeight = items.reduce((total, item) => {
+    for (const item of items) {
       const quantity =
         typeof item.quantity === "number" && Number.isFinite(item.quantity)
           ? item.quantity
@@ -321,8 +316,9 @@ class GlsFulfillmentService extends AbstractFulfillmentProviderService {
         typeof item.variant?.weight === "number"
           ? item.variant.weight
           : 0
-      return total + weight * quantity
-    }, 0)
+
+      totalWeight += weight * quantity
+    }
 
     return unit === "kg" ? totalWeight : totalWeight / 1000
   }
@@ -354,16 +350,16 @@ class GlsFulfillmentService extends AbstractFulfillmentProviderService {
       return Math.max(1, Math.ceil(totalWeightKg / maxWeight))
     }
 
-    const quantityTotal = Array.isArray(context?.items)
-      ? context.items.reduce((total, item) => {
-          const quantity =
-            typeof item.quantity === "number" &&
-            Number.isFinite(item.quantity)
-              ? item.quantity
-              : 1
-          return total + quantity
-        }, 0)
-      : 0
+    const items: ShippingWeightItem[] = this.resolveContextItems(context)
+    let quantityTotal = 0
+
+    for (const item of items) {
+      const quantity =
+        typeof item.quantity === "number" && Number.isFinite(item.quantity)
+          ? item.quantity
+          : 1
+      quantityTotal += quantity
+    }
 
     return Math.max(1, quantityTotal)
   }
@@ -458,10 +454,29 @@ class GlsFulfillmentService extends AbstractFulfillmentProviderService {
   async calculatePrice(
     optionData: Record<string, unknown>,
     data: Record<string, unknown>,
-    _context: CalculateShippingOptionPriceContext
+    context: CalculateShippingOptionPriceContext
   ): Promise<CalculatedShippingOptionPrice> {
+    const matrix = this.resolvePriceMatrix(optionData)
+
+    if (!matrix) {
+      throw new Error("GLS pricing matrix is not configured")
+    }
+
+    const totalWeightKg = this.resolveTotalWeightKg(context, optionData)
+    const packagesCount = this.resolvePackagesCount(
+      optionData,
+      data,
+      context,
+      totalWeightKg
+    )
+    const calculatedAmount = this.calculateMatrixPrice(
+      totalWeightKg,
+      packagesCount,
+      matrix
+    )
+
     return {
-      calculated_amount: this.resolveCalculatedAmount(optionData, data),
+      calculated_amount: calculatedAmount,
       is_calculated_price_tax_inclusive: this.resolveTaxInclusive(),
     }
   }
