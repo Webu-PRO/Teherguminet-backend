@@ -30,6 +30,11 @@ import {
   PasswordResetEmail,
   type PasswordResetEmailProps,
 } from "./emails/password-reset"
+import {
+  LanguageCode,
+  resolveLanguageFromHints,
+  resolveLanguageFromOrder,
+} from "./email-language"
 
 type ResendOptions = {
   api_key: string
@@ -104,6 +109,33 @@ const formatFrom = (from: string, brandName: string, customName?: string) => {
   return `${name} <${trimmed}>`
 }
 
+const resolveNotificationLanguage = (
+  notification: ProviderSendNotificationDTO
+): LanguageCode => {
+  const template = notification.template as Templates
+  const data = notification.data as any
+
+  if (template === Templates.ORDER_PLACED) {
+    return resolveLanguageFromOrder(data?.order ?? data)
+  }
+
+  if (template === Templates.PAYMENT_RECEIPT) {
+    return resolveLanguageFromOrder(data?.order)
+  }
+
+  if (template === Templates.ABANDONED_CART) {
+    return resolveLanguageFromHints({
+      locale: data?.locale,
+      language: data?.language,
+      lang: data?.lang,
+      countryCode: data?.countryCode,
+      currencyCode: data?.currencyCode,
+    })
+  }
+
+  return "hu"
+}
+
 class ResendNotificationProviderService extends AbstractNotificationProviderService {
   static identifier = "notification-resend"
 
@@ -164,6 +196,7 @@ class ResendNotificationProviderService extends AbstractNotificationProviderServ
 
   getTemplateSubject(notification: ProviderSendNotificationDTO) {
     const template = notification.template as Templates
+    const language = resolveNotificationLanguage(notification)
 
     if (this.options.html_templates?.[template]?.subject) {
       return this.options.html_templates[template].subject
@@ -172,15 +205,27 @@ class ResendNotificationProviderService extends AbstractNotificationProviderServ
     switch (template) {
       case Templates.PAYMENT_RECEIPT: {
         const orderRef = resolveOrderReference((notification.data as any)?.order)
+        if (language === "sk") {
+          return orderRef
+            ? `Potvrdenie platby k objednávke #${orderRef} – ${BRAND_NAME}`
+            : `Potvrdenie platby – ${BRAND_NAME}`
+        }
+
         return orderRef
-          ? `Payment receipt for order #${orderRef} – ${BRAND_NAME}`
-          : `Payment receipt – ${BRAND_NAME}`
+          ? `Fizetési bizonylat a #${orderRef} rendeléshez – ${BRAND_NAME}`
+          : `Fizetési bizonylat – ${BRAND_NAME}`
       }
       case Templates.ORDER_PLACED: {
         const orderRef = resolveOrderReference(notification.data)
+        if (language === "sk") {
+          return orderRef
+            ? `Objednávka #${orderRef} potvrdená – ${BRAND_NAME}`
+            : `Objednávka potvrdená – ${BRAND_NAME}`
+        }
+
         return orderRef
-          ? `Order #${orderRef} confirmed – ${BRAND_NAME}`
-          : `Order confirmed – ${BRAND_NAME}`
+          ? `Rendelés #${orderRef} visszaigazolva – ${BRAND_NAME}`
+          : `Rendelés visszaigazolva – ${BRAND_NAME}`
       }
       case Templates.USER_INVITED: {
         const email = (notification.data as any)?.email ?? notification.to
@@ -189,7 +234,9 @@ class ResendNotificationProviderService extends AbstractNotificationProviderServ
           : `You're invited to ${BRAND_NAME}`
       }
       case Templates.ABANDONED_CART:
-        return `Complete your ${BRAND_NAME} cart`
+        return language === "sk"
+          ? `Váš košík ešte čaká – ${BRAND_NAME}`
+          : `A kosarad még vár rád – ${BRAND_NAME}`
       case Templates.PASSWORD_RESET:
         return `Reset your password – ${BRAND_NAME}`
       default:

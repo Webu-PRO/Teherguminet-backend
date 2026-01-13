@@ -1,3 +1,4 @@
+import type { ReactNode } from "react"
 import {
   Body,
   Button,
@@ -11,11 +12,17 @@ import {
   Tailwind,
   Text,
 } from "@react-email/components"
+import {
+  LanguageCode,
+  resolveLanguageFromHints,
+} from "../email-language"
 
 export type AbandonedCartEmailProps = {
   customerName?: string | null
   recoverUrl: string
   currencyCode?: string | null
+  language?: string | null
+  countryCode?: string | null
   storefrontUrl?: string | null
   supportEmail?: string | null
   supportPhone?: string | null
@@ -52,22 +59,112 @@ const formatAmount = (
   }
 }
 
+type LanguageBlock = {
+  code: LanguageCode
+  locale: string
+  preview: string
+  heroTitle: string
+  heroLead: (name: string) => ReactNode
+  ctaLabel: string
+  cartDetailsHeading: string
+  itemFallbackTitle: string
+  itemFallbackThumbnail: string
+  quantitySuffix: string
+  emptyCart: string
+  tipsHeading: string
+  tips: string[]
+  supportIntro: string
+  supportOutro: string
+  footer: string
+  nameFallback: string
+  supportAccent: string
+}
+
+const languageBlocks: Record<LanguageCode, LanguageBlock> = {
+  hu: {
+    code: "hu",
+    locale: "hu-HU",
+    preview: "Ne feledd a kosarad – fejezd be a rendelést!",
+    heroTitle: "A kosarad még vár rád",
+    heroLead: (name) => (
+      <>
+        Szia {name}, néhány kattintással befejezheted a rendelést.
+      </>
+    ),
+    ctaLabel: "Vissza a kosárhoz",
+    cartDetailsHeading: "Kosár részletei",
+    itemFallbackTitle: "Termék",
+    itemFallbackThumbnail: "Nincs kép",
+    quantitySuffix: "db",
+    emptyCart:
+      "A kosarad üresnek tűnik, de bármikor visszatérhetsz böngészni.",
+    tipsHeading: "Tippek",
+    tips: [
+      "A termékek elérhetősége folyamatosan változik – ha szükséged van rájuk, érdemes most leadni a rendelést.",
+      "Ha kérdésed van a rendeléshez, szólj nekünk bátran, szívesen segítünk.",
+    ],
+    supportIntro: "Kérdésed van? Írj nekünk a",
+    supportOutro: "címen vagy hívj minket a",
+    footer:
+      "Ez egy automatikusan küldött értesítés, kérjük ne válaszolj rá közvetlenül.",
+    nameFallback: "Partnerünk",
+    supportAccent: "#f75858",
+  },
+  sk: {
+    code: "sk",
+    locale: "sk-SK",
+    preview: "Nezabudnite na svoj košík – dokončite objednávku!",
+    heroTitle: "Váš košík ešte čaká",
+    heroLead: (name) => (
+      <>
+        Ahoj {name}, stačí pár klikov a objednávka je hotová.
+      </>
+    ),
+    ctaLabel: "Späť do košíka",
+    cartDetailsHeading: "Detaily košíka",
+    itemFallbackTitle: "Produkt",
+    itemFallbackThumbnail: "Bez obrázka",
+    quantitySuffix: "ks",
+    emptyCart:
+      "Zdá sa, že košík je prázdny – môžete sa kedykoľvek vrátiť.",
+    tipsHeading: "Tipy",
+    tips: [
+      "Dostupnosť pneumatík sa môže meniť, preto odporúčame dokončiť objednávku čo najskôr.",
+      "Ak máte otázky k objednávke, radi vám pomôžeme.",
+    ],
+    supportIntro: "Potrebujete pomoc? Napíšte nám na",
+    supportOutro: "alebo zavolajte na",
+    footer:
+      "Toto je automaticky odoslané upozornenie, prosíme neodpovedajte naň.",
+    nameFallback: "Partner",
+    supportAccent: "#4da3ff",
+  },
+}
+
 export const AbandonedCartEmail = ({
   customerName,
   recoverUrl,
   currencyCode,
+  language,
+  countryCode,
   storefrontUrl,
   supportEmail = "hello@tehergumi.net",
   supportPhone = "+36 1 234 5678",
   items = [],
 }: AbandonedCartEmailProps) => {
+  const languageCode = resolveLanguageFromHints({
+    language,
+    countryCode,
+    currencyCode,
+  })
+  const lang = languageBlocks[languageCode] ?? languageBlocks.hu
+
   const safeName =
     customerName?.trim() && customerName.trim().length
       ? customerName.trim()
-      : "Partnerünk"
+      : lang.nameFallback
 
-  const previewText =
-    "Ne feledd a kosarad / Nezabudnite na svoj košík – fejezd be a rendelést!"
+  const previewText = lang.preview
 
   return (
     <Html>
@@ -88,18 +185,16 @@ export const AbandonedCartEmail = ({
                 Tehergumi.net
               </Text>
               <Heading className="mt-4 text-[27px] font-semibold leading-snug text-white">
-                A kosarad még vár rád / Váš košík ešte čaká
+                {lang.heroTitle}
               </Heading>
               <Text className="mx-auto mt-4 max-w-[420px] text-[15px] leading-6 text-white/85">
-                Szia {safeName}, néhány kattintással befejezheted a rendelést.
-                <br />
-                Ahoj {safeName}, stačí pár klikov a objednávka je hotová.
+                {lang.heroLead(safeName)}
               </Text>
               <Button
                 href={recoverUrl}
                 className="mt-6 inline-block rounded-full bg-[#e10600] px-8 py-3 text-[14px] font-semibold text-white no-underline shadow-[0_15px_35px_rgba(225,6,0,0.45)]"
               >
-                Vissza a kosárhoz / Späť do košíka
+                {lang.ctaLabel}
               </Button>
               {storefrontUrl ? (
                 <Text className="mt-4 text-[12px] uppercase tracking-[0.2em] text-white/50">
@@ -110,90 +205,81 @@ export const AbandonedCartEmail = ({
 
             <Section className="px-8 py-8">
               <Heading className="text-[16px] font-semibold uppercase tracking-[0.25em] text-white/70">
-                Kosár részletei / Detaily košíka
+                {lang.cartDetailsHeading}
               </Heading>
               <Section className="mt-4 space-y-3">
-            {items.length ? (
-              items.map((item) => (
-                <Section
-                  key={item.id}
-                  className="flex flex-row items-center gap-4 rounded-2xl border border-white/6 bg-[rgba(255,255,255,0.02)] px-4 py-4"
-                >
-                  <div className="flex h-[64px] w-[64px] items-center justify-center rounded-xl border border-white/5 bg-white/5">
-                    {item.thumbnail ? (
-                      <img
-                        src={item.thumbnail}
-                        width="64"
-                        height="64"
-                        alt={item.title ?? "Product"}
-                        style={{
-                          borderRadius: "12px",
-                          objectFit: "cover",
-                          width: "64px",
-                          height: "64px",
-                        }}
-                      />
-                    ) : (
-                      <span className="text-[10px] uppercase tracking-[0.2em] text-white/50">
-                        Nincs kép
-                      </span>
-                    )}
-                  </div>
-                  <div>
-                    <Text className="m-0 text-[15px] font-semibold leading-6 text-white">
-                      {item.title ?? "Termék"}
-                    </Text>
-                    <Text className="m-0 text-[13px] text-white/70">
-                      {formatAmount(item.unit_price, currencyCode)} ·{" "}
-                      {item.quantity ?? 1} db / ks
-                    </Text>
-                  </div>
-                </Section>
-              ))
-            ) : (
+                {items.length ? (
+                  items.map((item) => (
+                    <Section
+                      key={item.id}
+                      className="flex flex-row items-center gap-4 rounded-2xl border border-white/6 bg-[rgba(255,255,255,0.02)] px-4 py-4"
+                    >
+                      <div className="flex h-[64px] w-[64px] items-center justify-center rounded-xl border border-white/5 bg-white/5">
+                        {item.thumbnail ? (
+                          <img
+                            src={item.thumbnail}
+                            width="64"
+                            height="64"
+                            alt={item.title ?? lang.itemFallbackTitle}
+                            style={{
+                              borderRadius: "12px",
+                              objectFit: "cover",
+                              width: "64px",
+                              height: "64px",
+                            }}
+                          />
+                        ) : (
+                          <span className="text-[10px] uppercase tracking-[0.2em] text-white/50">
+                            {lang.itemFallbackThumbnail}
+                          </span>
+                        )}
+                      </div>
+                      <div>
+                        <Text className="m-0 text-[15px] font-semibold leading-6 text-white">
+                          {item.title ?? lang.itemFallbackTitle}
+                        </Text>
+                        <Text className="m-0 text-[13px] text-white/70">
+                          {formatAmount(
+                            item.unit_price,
+                            currencyCode,
+                            lang.locale
+                          )}{" "}
+                          · {item.quantity ?? 1} {lang.quantitySuffix}
+                        </Text>
+                      </div>
+                    </Section>
+                  ))
+                ) : (
                   <Text className="rounded-2xl border border-dashed border-white/20 px-5 py-4 text-[14px] text-white/70">
-                    A kosarad üresnek tűnik, de bármikor visszatérhetsz böngészni.
-                    <br />
-                    Zdá sa, že košík je prázdny – môžete sa kedykoľvek vrátiť.
+                    {lang.emptyCart}
                   </Text>
                 )}
               </Section>
 
               <Section className="mt-6 rounded-2xl border border-white/10 bg-[rgba(255,255,255,0.02)] px-5 py-6">
                 <Heading className="text-[15px] font-semibold uppercase tracking-[0.18em] text-white/70">
-                  Tippek / Tipy
+                  {lang.tipsHeading}
                 </Heading>
                 <ul className="mt-3 list-disc space-y-2 pl-5 text-[13px] text-white/80">
-                  <li>
-                    A termékek elérhetősége folyamatosan változik – ha szükséged van rájuk,
-                    érdemes most leadni a rendelést.
-                  </li>
-                  <li>
-                    Dostupnosť pneumatík sa môže meniť, preto odporúčame dokončiť objednávku
-                    čo najskôr.
-                  </li>
+                  {lang.tips.map((tip, index) => (
+                    <li key={`${lang.code}-tip-${index}`}>{tip}</li>
+                  ))}
                 </ul>
               </Section>
 
               <Section className="mt-8 rounded-2xl border border-white/5 bg-[rgba(255,255,255,0.02)] px-6 py-6 text-center">
                 <Text className="text-[13px] leading-6 text-white/80">
-                  Kérdésed van? Írj nekünk a{" "}
+                  {lang.supportIntro}{" "}
                   <a
                     href={`mailto:${supportEmail}`}
-                    style={{ color: "#f75858", textDecoration: "none" }}
+                    style={{
+                      color: lang.supportAccent,
+                      textDecoration: "none",
+                    }}
                   >
                     {supportEmail}
                   </a>{" "}
-                  címen vagy hívj minket a {supportPhone} számon.
-                  <br />
-                  Potrebujete pomoc? Napíšte nám na{" "}
-                  <a
-                    href={`mailto:${supportEmail}`}
-                    style={{ color: "#4da3ff", textDecoration: "none" }}
-                  >
-                    {supportEmail}
-                  </a>{" "}
-                  alebo zavolajte na {supportPhone}.
+                  {lang.supportOutro} {supportPhone}.
                 </Text>
               </Section>
             </Section>
@@ -202,9 +288,7 @@ export const AbandonedCartEmail = ({
 
             <Section className="px-8 pb-8 pt-6 text-center">
               <Text className="text-[12px] leading-5 text-white/45">
-                Ez egy automatikusan küldött értesítés, kérjük ne válaszolj rá közvetlenül.
-                <br />
-                Toto je automaticky odoslané upozornenie, prosíme neodpovedajte naň.
+                {lang.footer}
               </Text>
             </Section>
           </Container>

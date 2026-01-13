@@ -28,6 +28,7 @@ export const sendPaymentReceiptWorkflow = createWorkflow(
         "payment_collection.order.id",
         "payment_collection.order.display_id",
         "payment_collection.order.email",
+        "payment_collection.order.metadata",
         "payment_collection.order.currency_code",
         "payment_collection.order.total",
         "payment_collection.order.subtotal",

@@ -19,10 +19,24 @@ export type AbandonedCartItem = CartLineItemDTO & {
   } | null
 }
 
-export type AbandonedCart = CartDTO & {
+export type AbandonedCart = Omit<
+  CartDTO,
+  | "customer"
+  | "region"
+  | "items"
+  | "metadata"
+  | "shipping_address"
+  | "billing_address"
+> & {
   customer: CustomerDTO | null
   region?: { currency_code?: string | null } | null
   items?: AbandonedCartItem[]
+  metadata?: Record<string, unknown> | null
+  shipping_address?: {
+    country_code?: string | null
+    first_name?: string | null
+  } | null
+  billing_address?: { country_code?: string | null } | null
 }
 
 type SendAbandonedNotificationsInput = {
@@ -38,7 +52,7 @@ const TEMPLATE_NAME = "abandoned-cart"
 const prepareCartItems = (cart: AbandonedCart) =>
   (cart.items ?? []).map((item, index) => ({
     id: item.id || `${cart.id}-item-${index}`,
-    title: item.title ?? "Termék",
+    title: item.title ?? item.variant?.title ?? null,
     quantity:
       typeof item.quantity === "number" ? item.quantity : 1,
     unit_price: item.unit_price ?? 0,
@@ -66,6 +80,10 @@ export const sendAbandonedNotificationsStep = createStep(
     const notificationsPayload = input.carts
       .filter((cart) => Boolean(cart.email))
       .map((cart) => {
+        const metadata = (cart.metadata ?? {}) as Record<
+          string,
+          unknown
+        >
         const recoverUrl = new URL(
           `/cart/recover/${cart.id}`,
           storefrontUrl
@@ -77,6 +95,20 @@ export const sendAbandonedNotificationsStep = createStep(
         const currencyCode = (
           cart.region?.currency_code ?? "HUF"
         ).toUpperCase()
+        const language =
+          typeof metadata.locale === "string"
+            ? metadata.locale
+            : typeof metadata.language === "string"
+            ? metadata.language
+            : typeof metadata.lang === "string"
+            ? metadata.lang
+            : undefined
+        const countryCode =
+          typeof cart.shipping_address?.country_code === "string"
+            ? cart.shipping_address.country_code
+            : typeof cart.billing_address?.country_code === "string"
+            ? cart.billing_address.country_code
+            : undefined
 
         return {
           to: cart.email!,
@@ -86,6 +118,8 @@ export const sendAbandonedNotificationsStep = createStep(
             customerName: firstName,
             recoverUrl,
             currencyCode,
+            language,
+            countryCode,
             storefrontUrl,
             supportEmail: SUPPORT_EMAIL,
             supportPhone: SUPPORT_PHONE,

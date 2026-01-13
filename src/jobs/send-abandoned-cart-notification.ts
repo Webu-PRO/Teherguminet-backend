@@ -40,6 +40,8 @@ export default async function abandonedCartJob(
         "customer.last_name",
         "shipping_address.first_name",
         "shipping_address.last_name",
+        "shipping_address.country_code",
+        "billing_address.country_code",
         "region.currency_code",
       ],
       filters: {

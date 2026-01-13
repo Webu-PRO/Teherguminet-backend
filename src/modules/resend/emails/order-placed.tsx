@@ -10,10 +10,15 @@ import {
   Section,
   Text,
 } from "@react-email/components"
+import {
+  LanguageCode,
+  resolveLanguageFromOrder,
+} from "../email-language"
 
 type OrderAddress = {
   first_name?: string | null
   last_name?: string | null
+  country_code?: string | null
   [key: string]: unknown
 } | null
 
@@ -199,8 +204,6 @@ const LANGUAGE_THEMES = {
   },
 } as const
 
-type LanguageCode = keyof typeof LANGUAGE_THEMES
-
 type LanguageTheme = (typeof LANGUAGE_THEMES)[LanguageCode]
 
 const normalizeBaseUrl = (raw?: string | null) => {
@@ -227,19 +230,23 @@ const normalizeBaseUrl = (raw?: string | null) => {
   }
 }
 
-const buildOrderUrl = (orderId: string | null | undefined) => {
+const buildOrderUrl = (
+  orderId: string | null | undefined,
+  languageCode: LanguageCode
+) => {
   const base =
     process.env.ORDER_CONFIRMATION_URL_BASE ??
     process.env.STOREFRONT_URL ??
     DEFAULT_STOREFRONT_URL
   const normalizedBase = normalizeBaseUrl(base)
+  const localePrefix = languageCode === "sk" ? "sk" : "hu"
 
   if (!orderId) {
     return normalizedBase
   }
 
   const sanitizedId = encodeURIComponent(orderId.trim())
-  const pathname = `/hu/store/orders/${sanitizedId}`
+  const pathname = `/${localePrefix}/store/orders/${sanitizedId}`
 
   try {
     return new URL(pathname, normalizedBase).toString()
@@ -298,15 +305,17 @@ type PreparedOrderItem = {
 }
 
 const prepareOrderItems = (
-  order: OrderPlacedEmailProps["order"]
+  order: OrderPlacedEmailProps["order"],
+  fallbackLabel: string
 ): PreparedOrderItem[] => {
   const items = Array.isArray(order.items) ? order.items : []
 
   return items.map((item, index) => {
+    const fallback = fallbackLabel.trim() || "Item"
     const name =
       item.product_title?.trim() ||
       item.title?.trim() ||
-      `Termék ${index + 1}`
+      `${fallback} ${index + 1}`
     const quantity =
       typeof item.quantity === "number" && !Number.isNaN(item.quantity)
         ? item.quantity
@@ -327,49 +336,6 @@ const prepareOrderItems = (
   })
 }
 
-const resolveLanguageFromOrder = (
-  order: OrderPlacedEmailProps["order"]
-): LanguageCode => {
-  const metadata = (order as any)?.metadata ?? {}
-  const metaLocale =
-    (typeof metadata?.locale === "string" && metadata.locale) ||
-    (typeof metadata?.language === "string" && metadata.language) ||
-    (typeof metadata?.lang === "string" && metadata.lang)
-  const normalizedMeta =
-    typeof metaLocale === "string" ? metaLocale.toLowerCase() : undefined
-
-  if (normalizedMeta?.startsWith("sk")) {
-    return "sk"
-  }
-  if (normalizedMeta?.startsWith("hu")) {
-    return "hu"
-  }
-
-  const country = (() => {
-    const code =
-      order.shipping_address?.country_code ??
-      order.billing_address?.country_code
-    return typeof code === "string" ? code.toLowerCase() : undefined
-  })()
-
-  if (country === "sk") {
-    return "sk"
-  }
-  if (country === "hu") {
-    return "hu"
-  }
-
-  const currency =
-    typeof order.currency_code === "string"
-      ? order.currency_code.toLowerCase()
-      : undefined
-  if (currency === "huf") {
-    return "hu"
-  }
-
-  return "hu"
-}
-
 type LanguageBlock = {
   code: LanguageCode
   locale: string
@@ -378,6 +344,7 @@ type LanguageBlock = {
   intro: React.ReactNode
   summaryTitle: string
   noItemsCopy: string
+  itemFallbackLabel: string
   summaryLabels: {
     subtotal: string
     shipping: string
@@ -396,8 +363,6 @@ export const OrderPlacedEmailComponent = ({
   const currency = order.currency_code?.toUpperCase?.() || "EUR"
   const orderId = resolveOrderId(order)
   const customerName = resolveCustomerName(order)
-  const orderUrl = buildOrderUrl(orderId)
-  const items = prepareOrderItems(order)
   const totals = {
     subtotal:
       typeof order.subtotal === "number"
@@ -426,6 +391,7 @@ export const OrderPlacedEmailComponent = ({
       ),
       summaryTitle: "Rendelési összefoglaló",
       noItemsCopy: "A rendeléshez nem tartoznak tételadatok.",
+      itemFallbackLabel: "Termék",
       summaryLabels: {
         subtotal: "Részösszeg",
         shipping: "Szállítás",
@@ -463,6 +429,7 @@ export const OrderPlacedEmailComponent = ({
       ),
       summaryTitle: "Zhrnutie objednávky",
       noItemsCopy: "K objednávke momentálne nemáme položky.",
+      itemFallbackLabel: "Položka",
       summaryLabels: {
         subtotal: "Medzisúčet",
         shipping: "Doprava",
@@ -490,6 +457,8 @@ export const OrderPlacedEmailComponent = ({
 
   const languageCode = resolveLanguageFromOrder(order)
   const lang = languageBlocks[languageCode] ?? languageBlocks.hu
+  const items = prepareOrderItems(order, lang.itemFallbackLabel)
+  const orderUrl = buildOrderUrl(orderId, languageCode)
   const orderTotalDisplay = formatAmount(totals.total, currency, lang.locale)
 
   return (

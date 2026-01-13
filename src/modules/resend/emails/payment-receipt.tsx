@@ -10,6 +10,10 @@ import {
   Section,
   Text,
 } from "@react-email/components"
+import {
+  LanguageCode,
+  resolveLanguageFromOrder,
+} from "../email-language"
 
 type PaymentSummary = {
   id?: string | null
@@ -22,6 +26,7 @@ type PaymentSummary = {
 type OrderAddress = {
   first_name?: string | null
   last_name?: string | null
+  country_code?: string | null
   [key: string]: unknown
 } | null
 
@@ -46,6 +51,7 @@ export type PaymentReceiptEmailProps = {
     id: string
     display_id?: number | string | null
     email?: string | null
+    metadata?: Record<string, unknown> | null
     currency_code?: string | null
     total?: number | null
     subtotal?: number | null
@@ -189,9 +195,12 @@ const formatAmount = (
   }
 }
 
-const resolveOrderId = (order?: PaymentReceiptEmailProps["order"]) => {
+const resolveOrderId = (
+  order?: PaymentReceiptEmailProps["order"],
+  fallbackLabel = "Order"
+) => {
   if (!order) {
-    return "Rendelés"
+    return fallbackLabel
   }
 
   const displayId = order.display_id
@@ -204,7 +213,7 @@ const resolveOrderId = (order?: PaymentReceiptEmailProps["order"]) => {
     return displayId.trim()
   }
 
-  return order.id || "Rendelés"
+  return order.id || fallbackLabel
 }
 
 const resolveName = (order?: PaymentReceiptEmailProps["order"]) =>
@@ -212,12 +221,18 @@ const resolveName = (order?: PaymentReceiptEmailProps["order"]) =>
   order?.shipping_address?.first_name?.trim() ||
   "Partner"
 
-const prepareItems = (order?: PaymentReceiptEmailProps["order"]) => {
+const prepareItems = (
+  order?: PaymentReceiptEmailProps["order"],
+  fallbackLabel = "Item"
+) => {
   const items = Array.isArray(order?.items) ? order?.items : []
 
   return items.map((item, index) => {
+    const fallback = fallbackLabel.trim() || "Item"
     const name =
-      item.product_title?.trim() || item.title?.trim() || `Tétel ${index + 1}`
+      item.product_title?.trim() ||
+      item.title?.trim() ||
+      `${fallback} ${index + 1}`
     const qty =
       typeof item.quantity === "number" && !Number.isNaN(item.quantity)
         ? item.quantity
@@ -238,14 +253,107 @@ const prepareItems = (order?: PaymentReceiptEmailProps["order"]) => {
   })
 }
 
+type LanguageBlock = {
+  code: LanguageCode
+  locale: string
+  preview: string
+  heading: string
+  intro: (name: string) => React.ReactNode
+  labels: {
+    order: string
+    amount: string
+    date: string
+    method: string
+  }
+  itemsHeading: string
+  noItemsCopy: string
+  itemFallbackLabel: string
+  summaryLabels: {
+    subtotal: string
+    shipping: string
+    total: string
+  }
+  note: string
+  closingLines: string[]
+  orderFallback: string
+  dateFallback: string
+}
+
+const languageBlocks: Record<LanguageCode, LanguageBlock> = {
+  hu: {
+    code: "hu",
+    locale: "hu-HU",
+    preview: "Fizetési bizonylat",
+    heading: "Fizetési visszaigazolás",
+    intro: (name) => (
+      <>
+        Köszönjük a vásárlást, {name}! Az alábbiakban megtalálod a sikeres fizetés
+        részleteit.
+      </>
+    ),
+    labels: {
+      order: "Rendelés",
+      amount: "Fizetett összeg",
+      date: "Dátum",
+      method: "Fizetési mód",
+    },
+    itemsHeading: "Tételrészletek",
+    noItemsCopy: "A rendeléshez nem tartoznak tételadatok.",
+    itemFallbackLabel: "Tétel",
+    summaryLabels: {
+      subtotal: "Részösszeg",
+      shipping: "Szállítás",
+      total: "Fizetendő",
+    },
+    note:
+      "A bizonylatot e-mailben őrizd meg. Ha ÁFA-s számlára van szükség, jelezd nekünk válasz e-mailben, és elkészítjük.",
+    closingLines: ["Üdvözlettel,", `A ${BRAND} csapata`],
+    orderFallback: "Rendelés",
+    dateFallback: "Frissen feldolgozva",
+  },
+  sk: {
+    code: "sk",
+    locale: "sk-SK",
+    preview: "Potvrdenie platby",
+    heading: "Potvrdenie platby",
+    intro: (name) => (
+      <>
+        Ďakujeme za nákup, {name}! Nižšie nájdete podrobnosti o úspešnej platbe.
+      </>
+    ),
+    labels: {
+      order: "Objednávka",
+      amount: "Zaplatená suma",
+      date: "Dátum",
+      method: "Spôsob platby",
+    },
+    itemsHeading: "Položky objednávky",
+    noItemsCopy: "K objednávke momentálne nemáme položky.",
+    itemFallbackLabel: "Položka",
+    summaryLabels: {
+      subtotal: "Medzisúčet",
+      shipping: "Doprava",
+      total: "Celková suma",
+    },
+    note:
+      "Potvrdenie si, prosím, uchovajte. Ak potrebujete faktúru s DPH, odpovedzte na tento e-mail a pripravíme ju.",
+    closingLines: ["S pozdravom,", `Tím ${BRAND}`],
+    orderFallback: "Objednávka",
+    dateFallback: "Práve spracované",
+  },
+}
+
 export const PaymentReceiptEmail = ({
   payment,
   order,
 }: PaymentReceiptEmailProps) => {
-  const orderId = resolveOrderId(order)
+  const languageCode = resolveLanguageFromOrder(order ?? null)
+  const lang = languageBlocks[languageCode] ?? languageBlocks.hu
+
+  const orderId = resolveOrderId(order, lang.orderFallback)
   const customerName = resolveName(order)
   const currency = order?.currency_code || payment?.currency_code || "EUR"
-  const items = prepareItems(order)
+  const items = prepareItems(order, lang.itemFallbackLabel)
   const paymentAmount =
     payment?.amount !== undefined && payment?.amount !== null
       ? payment.amount
@@ -254,8 +362,8 @@ export const PaymentReceiptEmail = ({
     ? new Date(payment.captured_at)
     : null
   const paymentDate = captured
-    ? captured.toLocaleString("hu-HU")
-    : "Frissen feldolgozva"
+    ? captured.toLocaleString(lang.locale)
+    : lang.dateFallback
 
   const totals = {
     subtotal:
@@ -276,7 +384,7 @@ export const PaymentReceiptEmail = ({
     <Html>
       <Head />
       <Preview>
-        Fizetési bizonylat / Payment receipt · {orderId}
+        {lang.preview} · {orderId}
       </Preview>
       <Body
         style={{
@@ -307,31 +415,27 @@ export const PaymentReceiptEmail = ({
                 color: TEXT_LIGHT,
               }}
             >
-              Fizetési visszaigazolás / Payment receipt
+              {lang.heading}
             </Heading>
-            <Text style={textStyle}>
-              Köszönjük a vásárlást, {customerName}! Az alábbiakban megtalálod a
-              sikeres fizetés részleteit. <br />
-              Thank you for your purchase! Here are the details of your payment.
-            </Text>
+            <Text style={textStyle}>{lang.intro(customerName)}</Text>
 
             <Section style={metaviewStyle}>
               <Section style={metaCardStyle}>
-                <Text style={labelStyle}>Rendelés / Order</Text>
+                <Text style={labelStyle}>{lang.labels.order}</Text>
                 <Text style={valueStyle}>{orderId}</Text>
               </Section>
               <Section style={metaCardStyle}>
-                <Text style={labelStyle}>Fizetett összeg / Amount</Text>
+                <Text style={labelStyle}>{lang.labels.amount}</Text>
                 <Text style={valueStyle}>
-                  {formatAmount(paymentAmount, currency, "hu-HU")}
+                  {formatAmount(paymentAmount, currency, lang.locale)}
                 </Text>
               </Section>
               <Section style={metaCardStyle}>
-                <Text style={labelStyle}>Dátum / Date</Text>
+                <Text style={labelStyle}>{lang.labels.date}</Text>
                 <Text style={valueStyle}>{paymentDate}</Text>
               </Section>
               <Section style={metaCardStyle}>
-                <Text style={labelStyle}>Módszer / Method</Text>
+                <Text style={labelStyle}>{lang.labels.method}</Text>
                 <Text style={valueStyle}>
                   {payment?.provider_id?.toUpperCase?.() || "Stripe"}
                 </Text>
@@ -357,7 +461,7 @@ export const PaymentReceiptEmail = ({
                   margin: "0 0 10px",
                 }}
               >
-                Tételrészletek / Line items
+                {lang.itemsHeading}
               </Heading>
 
               {items.length ? (
@@ -375,41 +479,34 @@ export const PaymentReceiptEmail = ({
                       {item.quantity}× {item.name}
                     </Text>
                     <Text style={{ ...textStyle, margin: 0, fontWeight: 700 }}>
-                      {formatAmount(item.price, currency, "hu-HU")}
+                      {formatAmount(item.price, currency, lang.locale)}
                     </Text>
                   </Section>
                 ))
               ) : (
                 <Text style={{ ...textStyle, margin: 0 }}>
-                  A rendeléshez nem tartoznak tételadatok. / No line items were
-                  found.
+                  {lang.noItemsCopy}
                 </Text>
               )}
 
               <Hr style={{ borderColor: "rgba(255,255,255,0.12)" }} />
               <SummaryRow
-                label="Részösszeg / Subtotal"
-                value={formatAmount(totals.subtotal, currency, "hu-HU")}
+                label={lang.summaryLabels.subtotal}
+                value={formatAmount(totals.subtotal, currency, lang.locale)}
               />
               <SummaryRow
-                label="Szállítás / Shipping"
-                value={formatAmount(totals.shipping, currency, "hu-HU")}
+                label={lang.summaryLabels.shipping}
+                value={formatAmount(totals.shipping, currency, lang.locale)}
               />
               <SummaryRow
                 accent
-                label="Fizetendő / Charged"
-                value={formatAmount(totals.total, currency, "hu-HU")}
+                label={lang.summaryLabels.total}
+                value={formatAmount(totals.total, currency, lang.locale)}
               />
             </Section>
 
             <Section style={{ marginTop: "16px" }}>
-              <Text style={textStyle}>
-                A bizonylatot e-mailben őrizd meg. Ha ÁFA-s számlára van
-                szükség, jelezd nekünk a válasz e-mailben, és elkészítjük.
-                <br />
-                Please keep this receipt for your records. Need an invoice?
-                Reply to this email and we’ll issue it.
-              </Text>
+              <Text style={textStyle}>{lang.note}</Text>
               <Text
                 style={{
                   ...textStyle,
@@ -417,9 +514,12 @@ export const PaymentReceiptEmail = ({
                   marginBottom: 0,
                 }}
               >
-                Üdvözlettel,
-                <br />
-                A {BRAND} csapata
+                {lang.closingLines.map((line, index) => (
+                  <React.Fragment key={`${lang.code}-closing-${index}`}>
+                    {line}
+                    {index < lang.closingLines.length - 1 && <br />}
+                  </React.Fragment>
+                ))}
               </Text>
             </Section>
           </Section>

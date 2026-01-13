@@ -21,6 +21,7 @@ export const sendOrderConfirmationWorkflow = createWorkflow(
         "id",
         "display_id",
         "email",
+        "metadata",
         "currency_code",
         "total",
         "items.*",
