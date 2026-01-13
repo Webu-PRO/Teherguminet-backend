@@ -4,6 +4,7 @@ import {
   Container,
   Head,
   Heading,
+  Hr,
   Html,
   Preview,
   Section,
@@ -22,13 +23,14 @@ import {
   TEXT_LIGHT,
   buildOrderUrl,
   formatAmount,
+  prepareOrderItems,
   resolveCustomerName,
   resolveOrderId,
   type LanguageTheme,
   type OrderEmailProps,
 } from "./order-email-shared"
 
-export type OrderPlacedEmailProps = OrderEmailProps
+export type OrderThanksEmailProps = OrderEmailProps
 
 const sectionStyle: React.CSSProperties = {
   borderRadius: "22px",
@@ -41,7 +43,7 @@ const sectionStyle: React.CSSProperties = {
 
 const containerStyle: React.CSSProperties = {
   width: "100%",
-  maxWidth: "600px",
+  maxWidth: "640px",
   margin: "0 auto",
   padding: "0 24px",
 }
@@ -62,10 +64,15 @@ const textStyle: React.CSSProperties = {
   color: TEXT_LIGHT,
 }
 
+const strongText: React.CSSProperties = {
+  ...textStyle,
+  fontWeight: 600,
+}
+
 const heroHeadingStyle: React.CSSProperties = {
   fontFamily: '"Helvetica Neue", Arial, sans-serif',
   fontWeight: 700,
-  fontSize: "28px",
+  fontSize: "26px",
   margin: "0 0 12px",
   color: TEXT_LIGHT,
 }
@@ -109,12 +116,21 @@ const metaValueStyle: React.CSSProperties = {
   margin: 0,
 }
 
-const statusCardStyle: React.CSSProperties = {
-  marginTop: "20px",
-  padding: "18px",
-  borderRadius: "16px",
-  background: "rgba(255,255,255,0.05)",
-  border: "1px solid rgba(255,255,255,0.08)",
+const itemRowStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: "16px",
+  padding: "12px 16px",
+  borderRadius: "14px",
+}
+
+const summaryRowStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: "16px",
+  padding: "4px 0",
 }
 
 const ctaButtonBase: React.CSSProperties = {
@@ -136,55 +152,70 @@ type LanguageBlock = {
   languageLabel: string
   preview: (orderId: string) => string
   heading: string
-  intro: (name: string, orderId: string) => React.ReactNode
+  intro: React.ReactNode
+  summaryTitle: string
+  noItemsCopy: string
+  itemFallbackLabel: string
   metaLabels: {
     order: string
     email: string
     total: string
   }
-  statusTitle: string
-  statusCopy: string
+  summaryLabels: {
+    subtotal: string
+    shipping: string
+    total: string
+  }
   ctaLabel: string
   contactCopy: React.ReactNode
   closingLines: string[]
   theme: LanguageTheme
 }
 
-export const OrderPlacedEmailComponent = ({
+export const OrderThanksEmailComponent = ({
   order,
-}: OrderPlacedEmailProps) => {
+}: OrderThanksEmailProps) => {
   const currency = order.currency_code?.toUpperCase?.() || "EUR"
   const orderId = resolveOrderId(order)
   const customerName = resolveCustomerName(order)
-  const orderTotal =
-    typeof order.total === "number" && !Number.isNaN(order.total)
-      ? order.total
-      : null
   const emailDisplay = order.email?.trim() || "—"
+  const totals = {
+    subtotal:
+      typeof order.subtotal === "number"
+        ? order.subtotal
+        : typeof order.item_total === "number"
+        ? order.item_total
+        : null,
+    shipping: typeof order.shipping_total === "number" ? order.shipping_total : null,
+    total: typeof order.total === "number" ? order.total : null,
+  }
 
   const languageBlocks: Record<LanguageCode, LanguageBlock> = {
     hu: {
       code: "hu",
       locale: "hu-HU",
       languageLabel: "Magyar",
-      preview: (id) => `Rendelés visszaigazolása: ${id}`,
-      heading: "Rendelés visszaigazolva",
-      intro: (name, id) => (
+      preview: (id) => `Rendelési összefoglaló: ${id}`,
+      heading: `Köszönjük, ${customerName}!`,
+      intro: (
         <>
-          Kedves {name}, megerősítjük, hogy a{" "}
-          <strong style={{ color: TEXT_LIGHT }}>{id}</strong> számú rendelésedet
-          rögzítettük. Amint összekészítettük az abroncsokat a raktárunkban, külön
-          e-mailben értesítünk a kiszállítás részleteiről.
+          Összekészítettük a rendelésed összefoglalóját. Az alábbi tételeket
+          rögzítettük a rendelésedhez:
         </>
       ),
+      summaryTitle: "Rendelési összefoglaló",
+      noItemsCopy: "A rendeléshez nem tartoznak tételadatok.",
+      itemFallbackLabel: "Termék",
       metaLabels: {
         order: "Azonosító",
         email: "Email",
         total: "Végösszeg",
       },
-      statusTitle: "Rendelési állapot",
-      statusCopy:
-        "A rendelés aktuális állapotát bármikor ellenőrizheted az alábbi gombra kattintva:",
+      summaryLabels: {
+        subtotal: "Részösszeg",
+        shipping: "Szállítás",
+        total: "Fizetendő végösszeg",
+      },
       ctaLabel: "Rendelés megtekintése",
       contactCopy: (
         <>
@@ -205,23 +236,27 @@ export const OrderPlacedEmailComponent = ({
       code: "sk",
       locale: "sk-SK",
       languageLabel: "Slovenčina",
-      preview: (id) => `Potvrdenie objednávky: ${id}`,
-      heading: "Objednávka potvrdená",
-      intro: (name, id) => (
+      preview: (id) => `Zhrnutie objednávky: ${id}`,
+      heading: `Ďakujeme, ${customerName}!`,
+      intro: (
         <>
-          Dobrý deň, {name}! Potvrdzujeme prijatie objednávky{" "}
-          <strong style={{ color: TEXT_LIGHT }}>{id}</strong>. Keď pripravíme
-          pneumatiky v sklade, pošleme vám ďalší e-mail s detailmi doručenia.
+          Pripravili sme prehľad vašej objednávky. Nižšie nájdete zhrnutie
+          položiek a súm:
         </>
       ),
+      summaryTitle: "Zhrnutie objednávky",
+      noItemsCopy: "K objednávke momentálne nemáme položky.",
+      itemFallbackLabel: "Položka",
       metaLabels: {
         order: "ID",
         email: "Email",
         total: "Celková suma",
       },
-      statusTitle: "Stav objednávky",
-      statusCopy:
-        "Aktuálny stav objednávky si môžete kedykoľvek pozrieť kliknutím na tlačidlo nižšie:",
+      summaryLabels: {
+        subtotal: "Medzisúčet",
+        shipping: "Doprava",
+        total: "Celková suma",
+      },
       ctaLabel: "Zobraziť objednávku",
       contactCopy: (
         <>
@@ -242,8 +277,10 @@ export const OrderPlacedEmailComponent = ({
 
   const languageCode = resolveLanguageFromOrder(order)
   const lang = languageBlocks[languageCode] ?? languageBlocks.hu
+  const items = prepareOrderItems(order, lang.itemFallbackLabel)
   const orderUrl = buildOrderUrl(orderId, languageCode)
-  const orderTotalDisplay = formatAmount(orderTotal, currency, lang.locale)
+  const orderTotalDisplay = formatAmount(totals.total, currency, lang.locale)
+  const accentColor = lang.code === "hu" ? F1_RED : "#4DA3FF"
 
   return (
     <Html>
@@ -268,7 +305,7 @@ export const OrderPlacedEmailComponent = ({
               {lang.languageLabel}
             </Text>
             <Heading style={heroHeadingStyle}>{lang.heading}</Heading>
-            <Text style={textStyle}>{lang.intro(customerName, orderId)}</Text>
+            <Text style={textStyle}>{lang.intro}</Text>
 
             <Section style={metaGridStyle}>
               <Section style={metaCardStyle}>
@@ -285,22 +322,64 @@ export const OrderPlacedEmailComponent = ({
               </Section>
             </Section>
 
-            <Section style={statusCardStyle}>
+            <Section
+              style={{
+                margin: "24px 0",
+                padding: "22px",
+                borderRadius: "16px",
+                background:
+                  "linear-gradient(135deg, rgba(255,255,255,0.04), rgba(0,0,0,0.35))",
+              }}
+            >
               <Heading
                 as="h3"
                 style={{
                   fontFamily: '"Helvetica Neue", Arial, sans-serif',
                   fontWeight: 600,
-                  fontSize: "14px",
+                  fontSize: "16px",
                   textTransform: "uppercase",
-                  letterSpacing: "0.14em",
-                  color: lang.code === "hu" ? F1_RED : "#4DA3FF",
-                  margin: "0 0 10px",
+                  letterSpacing: "0.12em",
+                  color: accentColor,
+                  margin: "0 0 14px",
                 }}
               >
-                {lang.statusTitle}
+                {lang.summaryTitle}
               </Heading>
-              <Text style={{ ...textStyle, margin: 0 }}>{lang.statusCopy}</Text>
+              {items.length ? (
+                items.map((item) => (
+                  <Section
+                    key={`${lang.code}-${item.key}`}
+                    style={{
+                      ...itemRowStyle,
+                      background: lang.theme.itemBackground,
+                    }}
+                  >
+                    <Text style={{ ...textStyle, margin: 0 }}>
+                      {item.quantity}× {item.name}
+                    </Text>
+                    <Text style={{ ...strongText, margin: 0 }}>
+                      {formatAmount(item.price, currency, lang.locale)}
+                    </Text>
+                  </Section>
+                ))
+              ) : (
+                <Text style={{ ...textStyle, margin: 0 }}>{lang.noItemsCopy}</Text>
+              )}
+              <Hr style={{ borderColor: "rgba(255,255,255,0.08)" }} />
+              <SummaryRow
+                label={lang.summaryLabels.subtotal}
+                value={formatAmount(totals.subtotal, currency, lang.locale)}
+              />
+              <SummaryRow
+                label={lang.summaryLabels.shipping}
+                value={formatAmount(totals.shipping, currency, lang.locale)}
+              />
+              <SummaryRow
+                label={lang.summaryLabels.total}
+                value={formatAmount(totals.total, currency, lang.locale)}
+                accent
+                accentColor={accentColor}
+              />
             </Section>
 
             <a
@@ -344,7 +423,42 @@ export const OrderPlacedEmailComponent = ({
   )
 }
 
-export const mockOrder: OrderPlacedEmailProps = {
+const SummaryRow = ({
+  label,
+  value,
+  accent = false,
+  accentColor = F1_RED,
+}: {
+  label: string
+  value: string
+  accent?: boolean
+  accentColor?: string
+}) => (
+  <Section style={summaryRowStyle}>
+    <Text
+      style={{
+        ...textStyle,
+        margin: 0,
+        color: accent ? TEXT_LIGHT : "rgba(245,245,247,0.88)",
+        fontWeight: accent ? 700 : 500,
+      }}
+    >
+      {label}
+    </Text>
+    <Text
+      style={{
+        ...strongText,
+        margin: 0,
+        fontSize: accent ? "18px" : strongText.fontSize,
+        color: accent ? accentColor : strongText.color,
+      }}
+    >
+      {value}
+    </Text>
+  </Section>
+)
+
+export const mockOrderThanks: OrderThanksEmailProps = {
   order: {
     id: "order_01JSNXDH9BPJWWKVW03B9E9KW8",
     display_id: 1,

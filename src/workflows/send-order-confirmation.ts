@@ -48,8 +48,11 @@ export const sendOrderConfirmationWorkflow = createWorkflow(
     const notification = when({ orders }, (data) => !!data.orders[0]?.email).then(
       () => {
         const order = orders[0]
-        const idempotencyKey = transform({ order }, ({ order }) =>
+        const confirmationKey = transform({ order }, ({ order }) =>
           order?.id ? `order-placed-${order.id}` : undefined
+        )
+        const thanksKey = transform({ order }, ({ order }) =>
+          order?.id ? `order-thanks-${order.id}` : undefined
         )
 
         return sendNotificationStep([
@@ -63,7 +66,19 @@ export const sendOrderConfirmationWorkflow = createWorkflow(
             resource_id: order.id,
             resource_type: "order",
             trigger_type: "order.placed",
-            idempotency_key: idempotencyKey,
+            idempotency_key: confirmationKey,
+          },
+          {
+            to: order.email!,
+            channel: "email",
+            template: "order-thanks",
+            data: {
+              order,
+            },
+            resource_id: order.id,
+            resource_type: "order",
+            trigger_type: "order.placed",
+            idempotency_key: thanksKey,
           },
         ])
       }

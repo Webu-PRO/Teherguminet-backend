@@ -15,6 +15,10 @@ import {
   type OrderPlacedEmailProps,
 } from "./emails/order-placed"
 import {
+  OrderThanksEmailComponent,
+  type OrderThanksEmailProps,
+} from "./emails/order-thanks"
+import {
   PaymentReceiptEmail,
   type PaymentReceiptEmailProps,
 } from "./emails/payment-receipt"
@@ -56,6 +60,7 @@ type InjectedDependencies = {
 
 enum Templates {
   ORDER_PLACED = "order-placed",
+  ORDER_THANKS = "order-thanks",
   PAYMENT_RECEIPT = "payment-receipt",
   USER_INVITED = "user-invited",
   ABANDONED_CART = "abandoned-cart",
@@ -67,6 +72,8 @@ type TemplateRenderer = (props: unknown) => ReactElement
 const templates: Partial<Record<Templates, TemplateRenderer>> = {
   [Templates.ORDER_PLACED]: (props) =>
     OrderPlacedEmailComponent(props as OrderPlacedEmailProps),
+  [Templates.ORDER_THANKS]: (props) =>
+    OrderThanksEmailComponent(props as OrderThanksEmailProps),
   [Templates.PAYMENT_RECEIPT]: (props) =>
     PaymentReceiptEmail(props as PaymentReceiptEmailProps),
   [Templates.USER_INVITED]: (props) =>
@@ -115,7 +122,7 @@ const resolveNotificationLanguage = (
   const template = notification.template as Templates
   const data = notification.data as any
 
-  if (template === Templates.ORDER_PLACED) {
+  if (template === Templates.ORDER_PLACED || template === Templates.ORDER_THANKS) {
     return resolveLanguageFromOrder(data?.order ?? data)
   }
 
@@ -226,6 +233,18 @@ class ResendNotificationProviderService extends AbstractNotificationProviderServ
         return orderRef
           ? `Rendelés #${orderRef} visszaigazolva – ${BRAND_NAME}`
           : `Rendelés visszaigazolva – ${BRAND_NAME}`
+      }
+      case Templates.ORDER_THANKS: {
+        const orderRef = resolveOrderReference((notification.data as any)?.order)
+        if (language === "sk") {
+          return orderRef
+            ? `Ďakujeme za objednávku #${orderRef} – ${BRAND_NAME}`
+            : `Ďakujeme za objednávku – ${BRAND_NAME}`
+        }
+
+        return orderRef
+          ? `Köszönjük a rendelésed #${orderRef} – ${BRAND_NAME}`
+          : `Köszönjük a rendelésed – ${BRAND_NAME}`
       }
       case Templates.USER_INVITED: {
         const email = (notification.data as any)?.email ?? notification.to
