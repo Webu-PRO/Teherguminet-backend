@@ -1,224 +1,349 @@
+import * as React from "react";
 import {
   Body,
   Button,
+  Column,
   Container,
   Head,
   Heading,
+  Hr,
   Html,
   Link,
   Preview,
+  Row,
   Section,
-  Tailwind,
   Text,
-} from "@react-email/components"
+} from "@react-email/components";
 
 export type UserInvitedEmailProps = {
-  invite_url: string
-  email?: string
-}
+  invite_url: string;
+  email?: string;
+};
 
-type LanguageTheme = {
-  background: string
-  borderColor: string
-  tagColor: string
-  accentColor: string
-  buttonBackground: string
-  buttonShadow: string
-}
+const BRAND = "Teherguminet.hu";
+const FONT_STACK =
+  '"SF Pro Text","SF Pro Display",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif';
 
-const heroCardClasses =
-  "rounded-[32px] border border-white/10 bg-gradient-to-br from-[#181b28] via-[#0d0f16] to-[#07070b] px-8 py-10 text-center text-white shadow-[0_30px_60px_rgba(0,0,0,0.55)]"
+type LangSection = {
+  code: "hu" | "sk";
+  languageLabel: string;
+  heading: string;
+  greeting: string;
+  lead: string;
+  bulletPoints: string[];
+  buttonLabel: string;
+  copyIntro: string;
+  note: string;
+  accent: string; // minimal accent, still white bg + black content
+};
 
-const metaCardClasses =
-  "rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-left"
+const resolveGreeting = (prefix: string, email?: string) =>
+  email ? `${prefix} ${email}!` : `${prefix}!`;
 
-const metaLabelClasses =
-  "text-[11px] font-semibold uppercase tracking-[0.3em] text-white/60"
-
-const metaValueClasses = "mt-2 text-lg font-semibold text-white"
-
-const baseTextClass = "text-[14px] leading-6 text-white/90"
-
-const languageCardBase =
-  "my-8 rounded-[26px] border px-6 py-7 text-left text-white shadow-[0_20px_45px_rgba(0,0,0,0.45)]"
-
-const languageTagBase = "text-[12px] font-semibold uppercase tracking-[0.28em]"
+const styles = {
+  body: {
+    backgroundColor: "#ffffff",
+    margin: 0,
+    padding: "36px 0",
+    fontFamily: FONT_STACK,
+    color: "#111111",
+  } as React.CSSProperties,
+  container: {
+    width: "100%",
+    maxWidth: "640px",
+    margin: "0 auto",
+    padding: "0 20px",
+  } as React.CSSProperties,
+  card: {
+    borderRadius: "24px",
+    backgroundColor: "#ffffff",
+    border: "1px solid #E5E7EB",
+    boxShadow: "0 16px 40px rgba(17,17,17,0.08)",
+    overflow: "hidden",
+  } as React.CSSProperties,
+  header: {
+    padding: "28px 28px 16px",
+  } as React.CSSProperties,
+  brand: {
+    fontSize: "12px",
+    fontWeight: 700,
+    letterSpacing: "0.22em",
+    textTransform: "uppercase",
+    margin: 0,
+    color: "#111111",
+    fontFamily: FONT_STACK,
+  } as React.CSSProperties,
+  title: {
+    margin: "12px 0 0",
+    fontSize: "26px",
+    lineHeight: "1.15",
+    fontWeight: 700,
+    color: "#111111",
+    fontFamily: FONT_STACK,
+  } as React.CSSProperties,
+  subtitle: {
+    margin: "10px 0 0",
+    fontSize: "14px",
+    lineHeight: "20px",
+    color: "#6B7280",
+    fontFamily: FONT_STACK,
+  } as React.CSSProperties,
+  divider: {
+    borderTop: "1px solid #E5E7EB",
+    margin: 0,
+  } as React.CSSProperties,
+  content: {
+    padding: "18px 28px 28px",
+  } as React.CSSProperties,
+  metaCard: {
+    borderRadius: "16px",
+    padding: "14px",
+    backgroundColor: "#F9FAFB",
+    border: "1px solid #E5E7EB",
+  } as React.CSSProperties,
+  metaLabel: {
+    fontSize: "11px",
+    textTransform: "uppercase",
+    letterSpacing: "0.16em",
+    color: "#6B7280",
+    margin: "0 0 6px",
+    fontFamily: FONT_STACK,
+  } as React.CSSProperties,
+  metaValue: {
+    fontSize: "14px",
+    fontWeight: 800,
+    color: "#111111",
+    margin: 0,
+    fontFamily: FONT_STACK,
+    wordBreak: "break-word",
+  } as React.CSSProperties,
+  sectionCard: {
+    marginTop: "18px",
+    borderRadius: "16px",
+    border: "1px solid #E5E7EB",
+    backgroundColor: "#ffffff",
+    padding: "18px",
+  } as React.CSSProperties,
+  sectionTag: {
+    fontSize: "11px",
+    textTransform: "uppercase",
+    letterSpacing: "0.18em",
+    fontWeight: 800,
+    margin: 0,
+    fontFamily: FONT_STACK,
+  } as React.CSSProperties,
+  h2: {
+    margin: "10px 0 0",
+    fontSize: "18px",
+    lineHeight: "24px",
+    fontWeight: 800,
+    color: "#111111",
+    fontFamily: FONT_STACK,
+  } as React.CSSProperties,
+  p: {
+    margin: "10px 0 0",
+    fontSize: "14px",
+    lineHeight: "20px",
+    color: "#111111",
+    fontFamily: FONT_STACK,
+  } as React.CSSProperties,
+  bullet: {
+    margin: "8px 0 0",
+    fontSize: "14px",
+    lineHeight: "20px",
+    color: "#111111",
+    fontFamily: FONT_STACK,
+  } as React.CSSProperties,
+  cta: {
+    backgroundColor: "#111111",
+    borderRadius: "999px",
+    padding: "12px 18px",
+    fontSize: "14px",
+    fontWeight: 800,
+    color: "#ffffff",
+    textDecoration: "none",
+    display: "inline-block",
+    fontFamily: FONT_STACK,
+  } as React.CSSProperties,
+  helper: {
+    margin: "12px 0 0",
+    fontSize: "12px",
+    lineHeight: "18px",
+    color: "#6B7280",
+    fontFamily: FONT_STACK,
+  } as React.CSSProperties,
+  link: {
+    color: "#111111",
+    textDecoration: "underline",
+    fontFamily: FONT_STACK,
+    wordBreak: "break-word",
+  } as React.CSSProperties,
+  noteBox: {
+    marginTop: "12px",
+    borderRadius: "14px",
+    border: "1px solid #E5E7EB",
+    backgroundColor: "#F9FAFB",
+    padding: "12px 14px",
+  } as React.CSSProperties,
+  footer: {
+    textAlign: "center",
+    fontSize: "12px",
+    lineHeight: "18px",
+    color: "#6B7280",
+    margin: "16px 0 0",
+    fontFamily: FONT_STACK,
+  } as React.CSSProperties,
+};
 
 export function UserInvitedEmailComponent({
   invite_url,
   email,
 }: UserInvitedEmailProps) {
-  const greet = (prefix: string) => (email ? `${prefix} ${email}!` : `${prefix}!`)
+  const previewText = "Meghívó a platformunkra / Pozvánka na našu platformu";
 
-  const languageSections = [
+  const languageSections: LangSection[] = [
     {
       code: "hu",
       languageLabel: "Magyar / Hungarian",
-      heading: "Meghívót kaptál a Tehergumi.net platformra",
-      greeting: greet("Szia"),
-      lead:
-        "Az alábbi gombbal aktiválhatod hozzáférésedet a flottakezelő és rendeléskövető felülethez.",
+      heading: "Meghívót kaptál a Teherguminet.hu platformra",
+      greeting: resolveGreeting("Szia", email),
+      lead: "Az alábbi gombbal aktiválhatod hozzáférésedet a flottakezelő és rendeléskövető felülethez.",
       bulletPoints: [
         "A meghívás 72 óráig érvényes, utána új linket kell kérned.",
         "Ugyanazzal az e-mail címmel jelentkezz be, amelyre a meghívót küldtük.",
       ],
       buttonLabel: "Meghívás elfogadása",
       copyIntro: "Ha nem működik a gomb, másold az alábbi URL-t a böngésződbe:",
-      note:
-        "Ha nem számítottál erre a meghívóra, egyszerűen hagyd figyelmen kívül ezt az üzenetet.",
-      theme: {
-        background:
-          "linear-gradient(135deg, rgba(247,88,88,0.16) 0%, rgba(9,9,12,0.95) 80%)",
-        borderColor: "rgba(247,88,88,0.45)",
-        tagColor: "rgba(255,212,212,0.85)",
-        accentColor: "#f75858",
-        buttonBackground: "#f75858",
-        buttonShadow: "0 14px 30px rgba(247,88,88,0.45)",
-      } satisfies LanguageTheme,
+      note: "Ha nem számítottál erre a meghívóra, egyszerűen hagyd figyelmen kívül ezt az üzenetet.",
+      accent: "#E10600",
     },
     {
       code: "sk",
       languageLabel: "Slovenčina / Slovak",
-      heading: "Pozvánka na platformu Tehergumi.net",
-      greeting: greet("Ahoj"),
-      lead:
-        "Pomocou tlačidla nižšie aktivujete prístup do správy flotily a sledovania objednávok.",
+      heading: "Pozvánka na platformu Teherguminet.hu",
+      greeting: resolveGreeting("Ahoj", email),
+      lead: "Pomocou tlačidla nižšie aktivujete prístup do správy flotily a sledovania objednávok.",
       bulletPoints: [
         "Pozvánka je platná 72 hodín, potom je potrebné vyžiadať si novú.",
         "Prihláste sa s rovnakou e-mailovou adresou, na ktorú sme poslali pozvánku.",
       ],
       buttonLabel: "Prijať pozvánku",
-      copyIntro: "Ak tlačidlo nefunguje, skopírujte túto adresu URL do prehliadača:",
-      note:
-        "Ak ste túto pozvánku neočakávali, môžete tento e-mail bezpečne ignorovať.",
-      theme: {
-        background:
-          "linear-gradient(135deg, rgba(30,140,255,0.16) 0%, rgba(7,7,11,0.95) 80%)",
-        borderColor: "rgba(74,163,255,0.45)",
-        tagColor: "rgba(210,232,255,0.88)",
-        accentColor: "#3f8dff",
-        buttonBackground: "#3f8dff",
-        buttonShadow: "0 14px 30px rgba(63,141,255,0.45)",
-      } satisfies LanguageTheme,
+      copyIntro:
+        "Ak tlačidlo nefunguje, skopírujte túto adresu URL do prehliadača:",
+      note: "Ak ste túto pozvánku neočakávali, môžete tento e-mail bezpečne ignorovať.",
+      accent: "#3F8DFF",
     },
-  ]
+  ];
 
   const metaTiles = [
-    {
-      label: "E-mail / Email",
-      value: email ?? "—",
-    },
-    {
-      label: "Állapot / Stav",
-      value: "Aktív meghívó / Aktívne pozvanie",
-    },
-  ]
+    { label: "E-mail / Email", value: email ?? "—" },
+    { label: "Állapot / Stav", value: "Aktív meghívó / Aktívne pozvanie" },
+  ];
 
   return (
     <Html>
       <Head />
-      <Preview>Meghívó a platformunkra / Pozvánka na našu platformu</Preview>
-      <Tailwind>
-        <Body className="mx-auto my-auto bg-[#040405] px-4 font-sans text-white">
-          <Container className="my-10 w-full max-w-[520px]">
-            <Section className={heroCardClasses}>
-              <Text className="text-[11px] font-semibold uppercase tracking-[0.4em] text-white/60">
-                Tehergumi.net
-              </Text>
-              <Heading className="mt-4 text-[26px] font-semibold leading-snug text-white">
+      <Preview>{previewText}</Preview>
+
+      <Body style={styles.body}>
+        <Container style={styles.container}>
+          <Section style={styles.card}>
+            {/* Header */}
+            <Section style={styles.header}>
+              <Text style={styles.brand}>{BRAND}</Text>
+              <Heading style={styles.title}>
                 B2B meghívó / Pozvánka pre partnerov
               </Heading>
-              <Text className="mx-auto mt-4 max-w-[420px] text-[15px] leading-6 text-white/80">
-                Meghívunk, hogy csatlakozz a teherabroncs partnereinknek fenntartott
-                felülethez. / Pozývame vás do partnerského rozhrania pre nákup a správu
-                objednávok.
+              <Text style={styles.subtitle}>
+                Meghívunk, hogy csatlakozz a partnereinknek fenntartott
+                felülethez. / Pozývame vás do partnerského rozhrania pre nákup a
+                správu objednávok.
               </Text>
-
-              <Section className="mt-6 grid grid-cols-1 gap-3 text-left sm:grid-cols-2">
-                {metaTiles.map((tile) => (
-                  <Section key={tile.label} className={metaCardClasses}>
-                    <Text className={metaLabelClasses}>{tile.label}</Text>
-                    <Text className={metaValueClasses}>{tile.value}</Text>
-                  </Section>
-                ))}
-              </Section>
             </Section>
 
-            {languageSections.map((section, index) => (
-              <Section
-                key={section.code}
-                className={`${languageCardBase} ${index > 0 ? "mt-10" : ""}`}
-                style={{
-                  background: section.theme.background,
-                  borderColor: section.theme.borderColor,
-                }}
-              >
-                <Text
-                  className={languageTagBase}
-                  style={{ color: section.theme.tagColor }}
-                >
-                  {section.languageLabel}
-                </Text>
-                <Heading className="mt-3 text-[24px] font-semibold leading-tight text-white">
-                  {section.heading}
-                </Heading>
+            <Hr style={styles.divider} />
 
-                <Section className="my-5 space-y-3">
-                  <Text className={baseTextClass}>{section.greeting}</Text>
-                  <Text className={baseTextClass}>{section.lead}</Text>
-                  <Section className="space-y-2">
+            {/* Content */}
+            <Section style={styles.content}>
+              {/* Meta */}
+              <Row>
+                <Column style={{ paddingRight: "8px", paddingBottom: "8px" }}>
+                  <Section style={styles.metaCard}>
+                    <Text style={styles.metaLabel}>{metaTiles[0].label}</Text>
+                    <Text style={styles.metaValue}>{metaTiles[0].value}</Text>
+                  </Section>
+                </Column>
+                <Column style={{ paddingLeft: "8px", paddingBottom: "8px" }}>
+                  <Section style={styles.metaCard}>
+                    <Text style={styles.metaLabel}>{metaTiles[1].label}</Text>
+                    <Text style={styles.metaValue}>{metaTiles[1].value}</Text>
+                  </Section>
+                </Column>
+              </Row>
+
+              {/* Language blocks */}
+              {languageSections.map((section) => (
+                <Section key={section.code} style={styles.sectionCard}>
+                  <Text style={{ ...styles.sectionTag, color: section.accent }}>
+                    {section.languageLabel}
+                  </Text>
+                  <Heading as="h2" style={styles.h2}>
+                    {section.heading}
+                  </Heading>
+
+                  <Text style={styles.p}>{section.greeting}</Text>
+                  <Text style={styles.p}>{section.lead}</Text>
+
+                  <Section style={{ marginTop: "10px" }}>
                     {section.bulletPoints.map((item, idx) => (
-                      <Text key={`${section.code}-bullet-${idx}`} className={baseTextClass}>
+                      <Text
+                        key={`${section.code}-bp-${idx}`}
+                        style={styles.bullet}
+                      >
                         • {item}
                       </Text>
                     ))}
                   </Section>
-                </Section>
 
-                <Section className="my-6 text-center">
-                  <Button
-                    href={invite_url}
-                    className="rounded-full px-6 py-3 text-center text-[13px] font-semibold text-white no-underline"
-                    style={{
-                      background: section.theme.buttonBackground,
-                      boxShadow: section.theme.buttonShadow,
-                    }}
-                  >
-                    {section.buttonLabel}
-                  </Button>
-                </Section>
+                  <Section style={{ marginTop: "14px" }}>
+                    <Button href={invite_url} style={styles.cta}>
+                      {section.buttonLabel}
+                    </Button>
+                  </Section>
 
-                <Section className="my-5 space-y-3">
-                  <Text className={baseTextClass}>{section.copyIntro}</Text>
+                  <Text style={styles.helper}>{section.copyIntro}</Text>
                   <Link
                     href={invite_url}
-                    className="break-all text-[14px] leading-6 no-underline"
-                    style={{ color: section.theme.accentColor }}
+                    style={{ ...styles.link, color: section.accent }}
                   >
                     {invite_url}
                   </Link>
-                </Section>
 
-                <Section className="mt-5 rounded-2xl border border-white/10 bg-black/20 p-4">
-                  <Text className="text-[13px] leading-6 text-white/70">{section.note}</Text>
+                  <Section style={styles.noteBox}>
+                    <Text style={{ ...styles.muted, margin: 0 }}>
+                      {section.note}
+                    </Text>
+                  </Section>
                 </Section>
-              </Section>
-            ))}
-          </Container>
-        </Body>
-      </Tailwind>
+              ))}
+            </Section>
+          </Section>
+
+          <Text style={styles.footer}>{previewText}</Text>
+        </Container>
+      </Body>
     </Html>
-  )
+  );
 }
 
 export const userInvitedEmail = (props: UserInvitedEmailProps) => (
   <UserInvitedEmailComponent {...props} />
-)
+);
 
 const mockInvite: UserInvitedEmailProps = {
   invite_url: "https://your-app.com/app/invite/sample-token-123",
   email: "user@example.com",
-}
+};
 
 // @ts-ignore - consumed by React Email dev server
-export default () => <UserInvitedEmailComponent {...mockInvite} />
+export default () => <UserInvitedEmailComponent {...mockInvite} />;

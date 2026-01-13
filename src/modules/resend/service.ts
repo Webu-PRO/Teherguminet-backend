@@ -1,62 +1,62 @@
-import type { ReactElement } from "react"
-import { Resend } from "resend"
-import type { CreateEmailOptions } from "resend"
+import type { ReactElement } from "react";
+import { Resend } from "resend";
+import type { CreateEmailOptions } from "resend";
 import {
   AbstractNotificationProviderService,
   MedusaError,
-} from "@medusajs/framework/utils"
+} from "@medusajs/framework/utils";
 import type {
   Logger,
   ProviderSendNotificationDTO,
   ProviderSendNotificationResultsDTO,
-} from "@medusajs/framework/types"
+} from "@medusajs/framework/types";
 import {
   OrderPlacedEmailComponent,
   type OrderPlacedEmailProps,
-} from "./emails/order-placed"
+} from "./emails/order-placed";
 import {
   OrderThanksEmailComponent,
   type OrderThanksEmailProps,
-} from "./emails/order-thanks"
+} from "./emails/order-thanks";
 import {
   PaymentReceiptEmail,
   type PaymentReceiptEmailProps,
-} from "./emails/payment-receipt"
+} from "./emails/payment-receipt";
 import {
   userInvitedEmail,
   type UserInvitedEmailProps,
-} from "./emails/user-invited"
+} from "./emails/user-invited";
 import {
   AbandonedCartEmail,
   type AbandonedCartEmailProps,
-} from "./emails/abandoned-cart"
+} from "./emails/abandoned-cart";
 import {
   PasswordResetEmail,
   type PasswordResetEmailProps,
-} from "./emails/password-reset"
+} from "./emails/password-reset";
 import {
   LanguageCode,
   resolveLanguageFromHints,
   resolveLanguageFromOrder,
-} from "./email-language"
+} from "./email-language";
 
 type ResendOptions = {
-  api_key: string
-  from: string
-  from_name?: string
-  reply_to?: string
+  api_key: string;
+  from: string;
+  from_name?: string;
+  reply_to?: string;
   html_templates?: Record<
     string,
     {
-      subject?: string
-      content: string
+      subject?: string;
+      content: string;
     }
-  >
-}
+  >;
+};
 
 type InjectedDependencies = {
-  logger: Logger
-}
+  logger: Logger;
+};
 
 enum Templates {
   ORDER_PLACED = "order-placed",
@@ -67,7 +67,7 @@ enum Templates {
   PASSWORD_RESET = "password-reset",
 }
 
-type TemplateRenderer = (props: unknown) => ReactElement
+type TemplateRenderer = (props: unknown) => ReactElement;
 
 const templates: Partial<Record<Templates, TemplateRenderer>> = {
   [Templates.ORDER_PLACED]: (props) =>
@@ -82,52 +82,55 @@ const templates: Partial<Record<Templates, TemplateRenderer>> = {
     AbandonedCartEmail(props as AbandonedCartEmailProps),
   [Templates.PASSWORD_RESET]: (props) =>
     PasswordResetEmail(props as PasswordResetEmailProps),
-}
+};
 
-const BRAND_NAME = "Tehergumi.net"
+const BRAND_NAME = "Teherguminet.hu";
 
 const resolveOrderReference = (data: unknown): string | null => {
-  const order = (data as any)?.order ?? data
+  const order = (data as any)?.order ?? data;
 
   if (!order) {
-    return null
+    return null;
   }
 
-  const rawId = order.display_id ?? order.id
+  const rawId = order.display_id ?? order.id;
   if (typeof rawId === "number") {
-    return rawId.toString()
+    return rawId.toString();
   }
 
   if (typeof rawId === "string" && rawId.trim().length) {
-    return rawId.trim()
+    return rawId.trim();
   }
 
-  return null
-}
+  return null;
+};
 
 const formatFrom = (from: string, brandName: string, customName?: string) => {
-  const trimmed = from.trim()
+  const trimmed = from.trim();
 
   if (trimmed.includes("<") && trimmed.includes(">")) {
-    return trimmed
+    return trimmed;
   }
 
-  const name = customName?.trim() || brandName
-  return `${name} <${trimmed}>`
-}
+  const name = customName?.trim() || brandName;
+  return `${name} <${trimmed}>`;
+};
 
 const resolveNotificationLanguage = (
   notification: ProviderSendNotificationDTO
 ): LanguageCode => {
-  const template = notification.template as Templates
-  const data = notification.data as any
+  const template = notification.template as Templates;
+  const data = notification.data as any;
 
-  if (template === Templates.ORDER_PLACED || template === Templates.ORDER_THANKS) {
-    return resolveLanguageFromOrder(data?.order ?? data)
+  if (
+    template === Templates.ORDER_PLACED ||
+    template === Templates.ORDER_THANKS
+  ) {
+    return resolveLanguageFromOrder(data?.order ?? data);
   }
 
   if (template === Templates.PAYMENT_RECEIPT) {
-    return resolveLanguageFromOrder(data?.order)
+    return resolveLanguageFromOrder(data?.order);
   }
 
   if (template === Templates.ABANDONED_CART) {
@@ -137,30 +140,27 @@ const resolveNotificationLanguage = (
       lang: data?.lang,
       countryCode: data?.countryCode,
       currencyCode: data?.currencyCode,
-    })
+    });
   }
 
-  return "hu"
-}
+  return "hu";
+};
 
 class ResendNotificationProviderService extends AbstractNotificationProviderService {
-  static identifier = "notification-resend"
+  static identifier = "notification-resend";
 
-  private readonly resendClient: Resend
-  private readonly options: ResendOptions
-  private readonly logger: Logger
+  private readonly resendClient: Resend;
+  private readonly options: ResendOptions;
+  private readonly logger: Logger;
 
-  constructor(
-    { logger }: InjectedDependencies,
-    options: ResendOptions
-  ) {
-    super()
+  constructor({ logger }: InjectedDependencies, options: ResendOptions) {
+    super();
 
-    ResendNotificationProviderService.validateOptions(options)
+    ResendNotificationProviderService.validateOptions(options);
 
-    this.resendClient = new Resend(options.api_key)
-    this.options = options
-    this.logger = logger
+    this.resendClient = new Resend(options.api_key);
+    this.options = options;
+    this.logger = logger;
   }
 
   static validateOptions(options: Record<string, unknown>) {
@@ -168,98 +168,102 @@ class ResendNotificationProviderService extends AbstractNotificationProviderServ
       throw new MedusaError(
         MedusaError.Types.INVALID_DATA,
         "Option `api_key` is required in the provider's options."
-      )
+      );
     }
 
     if (!options.from) {
       throw new MedusaError(
         MedusaError.Types.INVALID_DATA,
         "Option `from` is required in the provider's options."
-      )
+      );
     }
   }
 
   getIdentifier(): string {
-    return ResendNotificationProviderService.identifier
+    return ResendNotificationProviderService.identifier;
   }
 
   getSupportedChannels(): string[] {
-    return ["email"]
+    return ["email"];
   }
 
   getTemplate(template: Templates) {
     if (this.options.html_templates?.[template]) {
-      return this.options.html_templates[template].content
+      return this.options.html_templates[template].content;
     }
 
-    const allowedTemplates = Object.keys(templates)
+    const allowedTemplates = Object.keys(templates);
 
     if (!allowedTemplates.includes(template)) {
-      return null
+      return null;
     }
 
-    return templates[template]
+    return templates[template];
   }
 
   getTemplateSubject(notification: ProviderSendNotificationDTO) {
-    const template = notification.template as Templates
-    const language = resolveNotificationLanguage(notification)
+    const template = notification.template as Templates;
+    const language = resolveNotificationLanguage(notification);
 
     if (this.options.html_templates?.[template]?.subject) {
-      return this.options.html_templates[template].subject
+      return this.options.html_templates[template].subject;
     }
 
     switch (template) {
       case Templates.PAYMENT_RECEIPT: {
-        const orderRef = resolveOrderReference((notification.data as any)?.order)
+        const orderRef = resolveOrderReference(
+          (notification.data as any)?.order
+        );
         if (language === "sk") {
           return orderRef
             ? `Potvrdenie platby k objednávke #${orderRef} – ${BRAND_NAME}`
-            : `Potvrdenie platby – ${BRAND_NAME}`
+            : `Potvrdenie platby – ${BRAND_NAME}`;
         }
 
         return orderRef
           ? `Fizetési bizonylat a #${orderRef} rendeléshez – ${BRAND_NAME}`
-          : `Fizetési bizonylat – ${BRAND_NAME}`
+          : `Fizetési bizonylat – ${BRAND_NAME}`;
       }
       case Templates.ORDER_PLACED: {
-        const orderRef = resolveOrderReference(notification.data)
+        const orderRef = resolveOrderReference(notification.data);
         if (language === "sk") {
           return orderRef
             ? `Objednávka #${orderRef} potvrdená – ${BRAND_NAME}`
-            : `Objednávka potvrdená – ${BRAND_NAME}`
+            : `Objednávka potvrdená – ${BRAND_NAME}`;
         }
 
         return orderRef
           ? `Rendelés #${orderRef} visszaigazolva – ${BRAND_NAME}`
-          : `Rendelés visszaigazolva – ${BRAND_NAME}`
+          : `Rendelés visszaigazolva – ${BRAND_NAME}`;
       }
       case Templates.ORDER_THANKS: {
-        const orderRef = resolveOrderReference((notification.data as any)?.order)
+        const orderRef = resolveOrderReference(
+          (notification.data as any)?.order
+        );
         if (language === "sk") {
           return orderRef
             ? `Ďakujeme za objednávku #${orderRef} – ${BRAND_NAME}`
-            : `Ďakujeme za objednávku – ${BRAND_NAME}`
+            : `Ďakujeme za objednávku – ${BRAND_NAME}`;
         }
 
         return orderRef
           ? `Köszönjük a rendelésed #${orderRef} – ${BRAND_NAME}`
-          : `Köszönjük a rendelésed – ${BRAND_NAME}`
+          : `Köszönjük a rendelésed – ${BRAND_NAME}`;
       }
       case Templates.USER_INVITED: {
-        const email = (notification.data as any)?.email ?? notification.to
+        const email = (notification.data as any)?.email ?? notification.to;
         return email
           ? `You're invited to ${BRAND_NAME} – ${email}`
-          : `You're invited to ${BRAND_NAME}`
+          : `You're invited to ${BRAND_NAME}`;
       }
       case Templates.ABANDONED_CART:
         return language === "sk"
           ? `Váš košík ešte čaká – ${BRAND_NAME}`
-          : `A kosarad még vár rád – ${BRAND_NAME}`
+          : `A kosarad még vár rád – ${BRAND_NAME}`;
       case Templates.PASSWORD_RESET:
-        return `Reset your password – ${BRAND_NAME}`
+        return `Reset your password – ${BRAND_NAME}`;
       default:
-        return `New message from ${BRAND_NAME}`
+        return `New message from ${BRAND_NAME}`;
     }
   }
 
@@ -267,28 +271,21 @@ class ResendNotificationProviderService extends AbstractNotificationProviderServ
     notification: ProviderSendNotificationDTO
   ): Promise<ProviderSendNotificationResultsDTO> {
     const subject =
-      notification.content?.subject ??
-      this.getTemplateSubject(notification)
-    const template = this.getTemplate(notification.template as Templates)
+      notification.content?.subject ?? this.getTemplateSubject(notification);
+    const template = this.getTemplate(notification.template as Templates);
     const commonOptions = {
-      from: formatFrom(
-        this.options.from,
-        BRAND_NAME,
-        this.options.from_name
-      ),
+      from: formatFrom(this.options.from, BRAND_NAME, this.options.from_name),
       to: [notification.to],
       subject,
-      ...(this.options.reply_to
-        ? { reply_to: this.options.reply_to }
-        : {}),
-    }
+      ...(this.options.reply_to ? { reply_to: this.options.reply_to } : {}),
+    };
 
-    let emailOptions: CreateEmailOptions
+    let emailOptions: CreateEmailOptions;
 
     if (!template) {
-      const html = notification.content?.html
-      const text = notification.content?.text
-      const hasRawContent = Boolean(html) || Boolean(text)
+      const html = notification.content?.html;
+      const text = notification.content?.text;
+      const hasRawContent = Boolean(html) || Boolean(text);
 
       if (hasRawContent) {
         emailOptions = {
@@ -296,41 +293,41 @@ class ResendNotificationProviderService extends AbstractNotificationProviderServ
           ...(html ? { html } : {}),
           // Ensure at least one render key is present for Resend typings
           text: text ?? html ?? "",
-        }
+        };
       } else {
         this.logger.error(
           `Couldn't find an email template for ${notification.template}. The valid options are ${Object.values(
             Templates
           )}`
-        )
-        return {}
+        );
+        return {};
       }
     } else if (typeof template === "string") {
       emailOptions = {
         ...commonOptions,
         html: template,
-      }
+      };
     } else {
       emailOptions = {
         ...commonOptions,
         react: template(notification.data),
-      }
+      };
     }
 
-    const { data, error } = await this.resendClient.emails.send(emailOptions)
+    const { data, error } = await this.resendClient.emails.send(emailOptions);
 
     if (error || !data) {
       if (error) {
-        this.logger.error("Failed to send email", error as Error)
+        this.logger.error("Failed to send email", error as Error);
       } else {
-        this.logger.error("Failed to send email: unknown error")
+        this.logger.error("Failed to send email: unknown error");
       }
 
-      return {}
+      return {};
     }
 
-    return { id: data.id }
+    return { id: data.id };
   }
 }
 
-export default ResendNotificationProviderService
+export default ResendNotificationProviderService;

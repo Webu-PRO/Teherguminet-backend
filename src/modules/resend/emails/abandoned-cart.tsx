@@ -7,6 +7,7 @@ import {
   Heading,
   Hr,
   Html,
+  Link,
   Preview,
   Section,
   Tailwind,
@@ -32,17 +33,12 @@ export type AbandonedCartEmailProps = {
   }>;
 };
 
-const PANEL_BG =
-  "radial-gradient(circle at top, rgba(225,6,0,0.35), rgba(8,8,13,1) 60%)";
-
 const formatAmount = (
   value?: number | null,
   currencyCode?: string | null,
   locale: string = "hu-HU"
 ) => {
-  if (typeof value !== "number") {
-    return "—";
-  }
+  if (typeof value !== "number") return "—";
 
   try {
     return new Intl.NumberFormat(locale, {
@@ -74,7 +70,6 @@ type LanguageBlock = {
   supportOutro: string;
   footer: string;
   nameFallback: string;
-  supportAccent: string;
 };
 
 const languageBlocks: Record<LanguageCode, LanguageBlock> = {
@@ -102,7 +97,6 @@ const languageBlocks: Record<LanguageCode, LanguageBlock> = {
     footer:
       "Ez egy automatikusan küldött értesítés, kérjük ne válaszolj rá közvetlenül.",
     nameFallback: "Partnerünk",
-    supportAccent: "#f75858",
   },
   sk: {
     code: "sk",
@@ -128,7 +122,6 @@ const languageBlocks: Record<LanguageCode, LanguageBlock> = {
     footer:
       "Toto je automaticky odoslané upozornenie, prosíme neodpovedajte naň.",
     nameFallback: "Partner",
-    supportAccent: "#4da3ff",
   },
 };
 
@@ -139,7 +132,7 @@ export const AbandonedCartEmail = ({
   language,
   countryCode,
   storefrontUrl,
-  supportEmail = "hello@tehergumi.net",
+  supportEmail = "hello@teherguminet.hu",
   supportPhone = "+36 1 234 5678",
   items = [],
 }: AbandonedCartEmailProps) => {
@@ -155,130 +148,184 @@ export const AbandonedCartEmail = ({
       ? customerName.trim()
       : lang.nameFallback;
 
-  const previewText = lang.preview;
-
   return (
     <Html>
       <Head />
-      <Preview>{previewText}</Preview>
+      <Preview>{lang.preview}</Preview>
+
       <Tailwind>
-        <Body className="mx-auto my-auto bg-[#050507] px-4 py-8 font-sans text-white">
-          <Container className="mx-auto my-0 w-full max-w-[620px] rounded-[32px] border border-white/10 bg-[#0b0d13] p-0 shadow-[0_25px_60px_rgba(0,0,0,0.65)]">
-            <Section
-              style={{
-                background: PANEL_BG,
-                borderTopLeftRadius: "32px",
-                borderTopRightRadius: "32px",
-              }}
-              className="px-9 py-10 text-center"
-            >
-              <Text className="text-[11px] font-semibold uppercase tracking-[0.4em] text-white/60">
-                Tehergumi.net
+        <Body className="m-0 bg-white px-4 py-10 font-sans text-[#111111]">
+          <Container className="mx-auto w-full max-w-[620px] rounded-[24px] border border-[#E5E7EB] bg-white p-0">
+            {/* Header */}
+            <Section className="px-10 pt-10">
+              <Text className="m-0 text-[12px] font-semibold uppercase tracking-[0.22em] text-[#111111]">
+                Teherguminet.hu
               </Text>
-              <Heading className="mt-4 text-[27px] font-semibold leading-snug text-white">
+
+              {storefrontUrl ? (
+                <Text className="mt-2 text-[12px] text-[#6B7280]">
+                  <Link
+                    href={storefrontUrl}
+                    className="text-[#111111] no-underline"
+                  >
+                    {storefrontUrl.replace(/^https?:\/\//, "")}
+                  </Link>
+                </Text>
+              ) : (
+                <Text className="mt-2 text-[12px] text-[#6B7280]">
+                  {lang.preview}
+                </Text>
+              )}
+            </Section>
+
+            {/* Hero */}
+            <Section className="px-10 pt-6">
+              <Heading className="m-0 text-[28px] font-semibold leading-[1.15] text-[#111111]">
                 {lang.heroTitle}
               </Heading>
-              <Text className="mx-auto mt-4 max-w-[420px] text-[15px] leading-6 text-white/85">
+              <Text className="mt-4 text-[15px] leading-6 text-[#111111]">
                 {lang.heroLead(safeName)}
               </Text>
+
               <Button
                 href={recoverUrl}
-                className="mt-6 inline-block rounded-full bg-[#e10600] px-8 py-3 text-[14px] font-semibold text-white no-underline shadow-[0_15px_35px_rgba(225,6,0,0.45)]"
+                className="mt-6 inline-block rounded-full bg-[#111111] px-8 py-3 text-[14px] font-semibold text-white no-underline"
               >
                 {lang.ctaLabel}
               </Button>
-              {storefrontUrl ? (
-                <Text className="mt-4 text-[12px] uppercase tracking-[0.2em] text-white/50">
-                  {storefrontUrl.replace(/^https?:\/\//, "")}
-                </Text>
-              ) : null}
+
+              <Text className="mt-3 text-[12px] leading-5 text-[#6B7280]">
+                Ha a gomb nem működik, nyisd meg ezt:{" "}
+                <Link href={recoverUrl} className="text-[#111111] underline">
+                  {recoverUrl}
+                </Link>
+              </Text>
             </Section>
 
-            <Section className="px-8 py-8">
-              <Heading className="text-[16px] font-semibold uppercase tracking-[0.25em] text-white/70">
+            <Hr className="my-8 border-t border-[#E5E7EB]" />
+
+            {/* Cart */}
+            <Section className="px-10">
+              <Text className="m-0 text-[12px] font-semibold uppercase tracking-[0.18em] text-[#6B7280]">
                 {lang.cartDetailsHeading}
-              </Heading>
-              <Section className="mt-4 space-y-3">
+              </Text>
+
+              <Section className="mt-4">
                 {items.length ? (
-                  items.map((item) => (
-                    <Section
-                      key={item.id}
-                      className="flex flex-row items-center gap-4 rounded-2xl border border-white/6 bg-[rgba(255,255,255,0.02)] px-4 py-4"
-                    >
-                      <div className="flex h-[64px] w-[64px] items-center justify-center rounded-xl border border-white/5 bg-white/5">
-                        {item.thumbnail ? (
-                          <img
-                            src={item.thumbnail}
-                            width="64"
-                            height="64"
-                            alt={item.title ?? lang.itemFallbackTitle}
-                            style={{
-                              borderRadius: "12px",
-                              objectFit: "cover",
-                              width: "64px",
-                              height: "64px",
-                            }}
-                          />
-                        ) : (
-                          <span className="text-[10px] uppercase tracking-[0.2em] text-white/50">
-                            {lang.itemFallbackThumbnail}
-                          </span>
-                        )}
-                      </div>
-                      <div>
-                        <Text className="m-0 text-[15px] font-semibold leading-6 text-white">
-                          {item.title ?? lang.itemFallbackTitle}
-                        </Text>
-                        <Text className="m-0 text-[13px] text-white/70">
-                          {formatAmount(
-                            item.unit_price,
-                            currencyCode,
-                            lang.locale
-                          )}{" "}
-                          · {item.quantity ?? 1} {lang.quantitySuffix}
-                        </Text>
-                      </div>
-                    </Section>
-                  ))
+                  <>
+                    {items.map((item) => (
+                      <Section
+                        key={item.id}
+                        className="rounded-[16px] border border-[#E5E7EB] bg-white px-4 py-4"
+                      >
+                        <table
+                          role="presentation"
+                          width="100%"
+                          cellPadding="0"
+                          cellSpacing="0"
+                          style={{ width: "100%", borderCollapse: "collapse" }}
+                        >
+                          <tbody>
+                            <tr>
+                              <td
+                                style={{
+                                  width: "72px",
+                                  paddingRight: "12px",
+                                  verticalAlign: "top",
+                                }}
+                              >
+                                {item.thumbnail ? (
+                                  <img
+                                    src={item.thumbnail}
+                                    width="64"
+                                    height="64"
+                                    alt={item.title ?? lang.itemFallbackTitle}
+                                    style={{
+                                      borderRadius: "12px",
+                                      objectFit: "cover",
+                                      width: "64px",
+                                      height: "64px",
+                                      display: "block",
+                                    }}
+                                  />
+                                ) : (
+                                  <div
+                                    style={{
+                                      width: "64px",
+                                      height: "64px",
+                                      borderRadius: "12px",
+                                      border: "1px solid #E5E7EB",
+                                    }}
+                                  />
+                                )}
+                              </td>
+                              <td style={{ verticalAlign: "top" }}>
+                                <Text className="m-0 text-[15px] font-semibold leading-6 text-[#111111]">
+                                  {item.title ?? lang.itemFallbackTitle}
+                                </Text>
+                                <Text className="m-0 text-[13px] text-[#6B7280]">
+                                  {formatAmount(
+                                    item.unit_price,
+                                    currencyCode,
+                                    lang.locale
+                                  )}{" "}
+                                  · {item.quantity ?? 1} {lang.quantitySuffix}
+                                </Text>
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </Section>
+                    ))}
+                  </>
                 ) : (
-                  <Text className="rounded-2xl border border-dashed border-white/20 px-5 py-4 text-[14px] text-white/70">
-                    {lang.emptyCart}
-                  </Text>
+                  <Section className="rounded-[16px] border border-dashed border-[#D1D5DB] px-5 py-4">
+                    <Text className="m-0 text-[14px] leading-6 text-[#6B7280]">
+                      {lang.emptyCart}
+                    </Text>
+                  </Section>
                 )}
               </Section>
 
-              <Section className="mt-6 rounded-2xl border border-white/10 bg-[rgba(255,255,255,0.02)] px-5 py-6">
-                <Heading className="text-[15px] font-semibold uppercase tracking-[0.18em] text-white/70">
+              {/* Tips */}
+              <Section className="mt-6 rounded-[16px] border border-[#E5E7EB] px-6 py-5">
+                <Text className="m-0 text-[12px] font-semibold uppercase tracking-[0.18em] text-[#6B7280]">
                   {lang.tipsHeading}
-                </Heading>
-                <ul className="mt-3 list-disc space-y-2 pl-5 text-[13px] text-white/80">
-                  {lang.tips.map((tip, index) => (
-                    <li key={`${lang.code}-tip-${index}`}>{tip}</li>
+                </Text>
+                <ul className="mt-3 list-disc space-y-2 pl-5 text-[14px] leading-6 text-[#111111]">
+                  {lang.tips.map((tip, idx) => (
+                    <li key={`${lang.code}-tip-${idx}`}>{tip}</li>
                   ))}
                 </ul>
               </Section>
 
-              <Section className="mt-8 rounded-2xl border border-white/5 bg-[rgba(255,255,255,0.02)] px-6 py-6 text-center">
-                <Text className="text-[13px] leading-6 text-white/80">
+              {/* Support */}
+              <Section className="mt-8 rounded-[16px] border border-[#E5E7EB] px-6 py-5 text-center">
+                <Text className="m-0 text-[13px] leading-6 text-[#111111]">
                   {lang.supportIntro}{" "}
-                  <a
+                  <Link
                     href={`mailto:${supportEmail}`}
-                    style={{
-                      color: lang.supportAccent,
-                      textDecoration: "none",
-                    }}
+                    className="text-[#111111] underline"
                   >
                     {supportEmail}
-                  </a>{" "}
-                  {lang.supportOutro} {supportPhone}.
+                  </Link>{" "}
+                  {lang.supportOutro}{" "}
+                  <Link
+                    href={`tel:${supportPhone}`}
+                    className="text-[#111111] underline"
+                  >
+                    {supportPhone}
+                  </Link>
+                  .
                 </Text>
               </Section>
             </Section>
 
-            <Hr className="border-t border-white/10" />
+            <Hr className="my-8 border-t border-[#E5E7EB]" />
 
-            <Section className="px-8 pb-8 pt-6 text-center">
-              <Text className="text-[12px] leading-5 text-white/45">
+            {/* Footer */}
+            <Section className="px-10 pb-10 text-center">
+              <Text className="m-0 text-[12px] leading-5 text-[#6B7280]">
                 {lang.footer}
               </Text>
             </Section>
@@ -293,22 +340,22 @@ export const abandonedCartEmail = (props: AbandonedCartEmailProps) => (
   <AbandonedCartEmail {...props} />
 );
 
-const mockProps: AbandonedCartEmailProps = {
-  customerName: "Partner",
-  recoverUrl: "https://therguminet.hu/cart/recover/cart_123",
-  currencyCode: "HUF",
-  storefrontUrl: "https://therguminet.hu",
-  items: [
-    {
-      id: "item_1",
-      title: "Michelin X Multi Z 315/80 R22.5",
-      quantity: 4,
-      unit_price: 187000,
-      thumbnail:
-        "https://cdn11.bigcommerce.com/s-ykpvhku8bx/images/stencil/original/products/114/498/retread-tires.1__59244.1562264741.png",
-    },
-  ],
-};
-
 // @ts-ignore - consumed by React Email dev server
-export default () => <AbandonedCartEmail {...mockProps} />;
+export default () => (
+  <AbandonedCartEmail
+    customerName="Partner"
+    recoverUrl="https://teherguminet.hu/cart/recover/cart_123"
+    currencyCode="HUF"
+    storefrontUrl="https://teherguminet.hu"
+    items={[
+      {
+        id: "item_1",
+        title: "Michelin X Multi Z 315/80 R22.5",
+        quantity: 4,
+        unit_price: 187000,
+        thumbnail:
+          "https://cdn11.bigcommerce.com/s-ykpvhku8bx/images/stencil/original/products/114/498/retread-tires.1__59244.1562264741.png",
+      },
+    ]}
+  />
+);

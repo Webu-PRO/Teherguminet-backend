@@ -4,13 +4,14 @@ import {
   Container,
   Head,
   Heading,
+  Hr,
   Html,
   Link,
   Preview,
   Section,
-  Tailwind,
   Text,
 } from "@react-email/components";
+import { CONTACT_EMAIL, CONTACT_PHONE } from "./order-email-shared";
 
 export type PasswordResetEmailProps = {
   reset_url: string;
@@ -19,36 +20,180 @@ export type PasswordResetEmailProps = {
   expires_in_minutes?: number | null;
 };
 
-const BRAND_NAME = "Tehergumi.net";
+const BRAND_NAME = "Teherguminet.hu";
 const DEFAULT_EXPIRY_MINUTES = 15;
 
-const heroCardClasses =
-  "rounded-[30px] border border-white/10 bg-gradient-to-br from-[#1b1f2e] via-[#0c0e14] to-[#050509] px-8 py-10 text-center text-white shadow-[0_26px_60px_rgba(0,0,0,0.55)]";
-
-const metaCardClasses =
-  "rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-left";
-
-const metaLabelClasses =
-  "text-[11px] font-semibold uppercase tracking-[0.3em] text-white/60";
-
-const metaValueClasses = "mt-2 text-base font-semibold text-white";
-
-const baseTextClass = "text-[14px] leading-6 text-white/90";
-
-const languageCardBase =
-  "my-8 rounded-[26px] border px-6 py-7 text-left text-white shadow-[0_20px_45px_rgba(0,0,0,0.45)]";
-
-const languageTagBase = "text-[12px] font-semibold uppercase tracking-[0.28em]";
+const FONT_STACK =
+  '"SF Pro Text","SF Pro Display",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif';
 
 const resolveAccountLabel = (actorType?: string | null) => {
   const normalized = (actorType ?? "").toLowerCase();
-  if (normalized === "user" || normalized === "admin") {
-    return "Admin";
-  }
-  if (normalized) {
-    return normalized;
-  }
+  if (normalized === "user" || normalized === "admin") return "Admin";
+  if (normalized) return normalized;
   return "Customer";
+};
+
+type LangSection = {
+  code: "hu" | "sk";
+  languageLabel: string;
+  heading: string;
+  greeting: string;
+  lead: string;
+  bulletPoints: string[];
+  buttonLabel: string;
+  copyIntro: string;
+  accent: string; // only color accent (still white/black design)
+};
+
+const styles = {
+  body: {
+    backgroundColor: "#ffffff",
+    margin: 0,
+    padding: "36px 0",
+    fontFamily: FONT_STACK,
+    color: "#111111",
+  } as React.CSSProperties,
+  container: {
+    width: "100%",
+    maxWidth: "640px",
+    margin: "0 auto",
+    padding: "0 20px",
+  } as React.CSSProperties,
+  card: {
+    borderRadius: "24px",
+    backgroundColor: "#ffffff",
+    border: "1px solid #E5E7EB",
+    boxShadow: "0 16px 40px rgba(17,17,17,0.08)",
+    overflow: "hidden",
+  } as React.CSSProperties,
+  header: {
+    padding: "28px 28px 16px",
+  } as React.CSSProperties,
+  brand: {
+    fontSize: "12px",
+    fontWeight: 700,
+    letterSpacing: "0.22em",
+    textTransform: "uppercase",
+    margin: 0,
+    color: "#111111",
+    fontFamily: FONT_STACK,
+  } as React.CSSProperties,
+  title: {
+    margin: "12px 0 0",
+    fontSize: "26px",
+    lineHeight: "1.15",
+    fontWeight: 700,
+    color: "#111111",
+    fontFamily: FONT_STACK,
+  } as React.CSSProperties,
+  subtitle: {
+    margin: "10px 0 0",
+    fontSize: "14px",
+    lineHeight: "20px",
+    color: "#6B7280",
+    fontFamily: FONT_STACK,
+  } as React.CSSProperties,
+  divider: {
+    borderTop: "1px solid #E5E7EB",
+    margin: 0,
+  } as React.CSSProperties,
+  content: {
+    padding: "18px 28px 28px",
+  } as React.CSSProperties,
+  metaCard: {
+    borderRadius: "16px",
+    padding: "14px",
+    backgroundColor: "#F9FAFB",
+    border: "1px solid #E5E7EB",
+  } as React.CSSProperties,
+  metaLabel: {
+    fontSize: "11px",
+    textTransform: "uppercase",
+    letterSpacing: "0.16em",
+    color: "#6B7280",
+    margin: "0 0 6px",
+    fontFamily: FONT_STACK,
+  } as React.CSSProperties,
+  metaValue: {
+    fontSize: "14px",
+    fontWeight: 700,
+    color: "#111111",
+    margin: 0,
+    fontFamily: FONT_STACK,
+    wordBreak: "break-word",
+  } as React.CSSProperties,
+  sectionCard: {
+    marginTop: "18px",
+    borderRadius: "16px",
+    border: "1px solid #E5E7EB",
+    backgroundColor: "#ffffff",
+    padding: "18px",
+  } as React.CSSProperties,
+  sectionTag: {
+    fontSize: "11px",
+    textTransform: "uppercase",
+    letterSpacing: "0.18em",
+    fontWeight: 700,
+    margin: 0,
+    fontFamily: FONT_STACK,
+  } as React.CSSProperties,
+  h2: {
+    margin: "10px 0 0",
+    fontSize: "18px",
+    lineHeight: "24px",
+    fontWeight: 700,
+    color: "#111111",
+    fontFamily: FONT_STACK,
+  } as React.CSSProperties,
+  p: {
+    margin: "10px 0 0",
+    fontSize: "14px",
+    lineHeight: "20px",
+    color: "#111111",
+    fontFamily: FONT_STACK,
+  } as React.CSSProperties,
+  bullet: {
+    margin: "8px 0 0",
+    fontSize: "14px",
+    lineHeight: "20px",
+    color: "#111111",
+    fontFamily: FONT_STACK,
+  } as React.CSSProperties,
+  ctaWrap: {
+    marginTop: "14px",
+  } as React.CSSProperties,
+  cta: {
+    backgroundColor: "#111111",
+    borderRadius: "999px",
+    padding: "12px 18px",
+    fontSize: "14px",
+    fontWeight: 700,
+    color: "#ffffff",
+    textDecoration: "none",
+    display: "inline-block",
+    fontFamily: FONT_STACK,
+  } as React.CSSProperties,
+  helper: {
+    margin: "12px 0 0",
+    fontSize: "12px",
+    lineHeight: "18px",
+    color: "#6B7280",
+    fontFamily: FONT_STACK,
+  } as React.CSSProperties,
+  link: {
+    color: "#111111",
+    textDecoration: "underline",
+    fontFamily: FONT_STACK,
+    wordBreak: "break-word",
+  } as React.CSSProperties,
+  footer: {
+    textAlign: "center",
+    fontSize: "12px",
+    lineHeight: "18px",
+    color: "#6B7280",
+    margin: "16px 0 0",
+    fontFamily: FONT_STACK,
+  } as React.CSSProperties,
 };
 
 export const PasswordResetEmail = ({
@@ -64,156 +209,160 @@ export const PasswordResetEmail = ({
       : DEFAULT_EXPIRY_MINUTES;
 
   const previewText =
-    "Jelszo visszaallitasa / Obnovenie hesla – kattints a linkre a folytatashoz";
+    "Jelszó visszaállítása / Obnovenie hesla – kattints a linkre a folytatáshoz";
 
-  const languageSections = [
+  const languageSections: LangSection[] = [
     {
       code: "hu",
       languageLabel: "Magyar / Hungarian",
-      heading: "Jelszo visszaallitasa",
+      heading: "Jelszó visszaállítása",
       greeting: "Szia!",
-      lead: "Az alabbi gombbal visszaallithatod a jelszavadat. A link csak rovid ideig ervenyes.",
+      lead: "Az alábbi gombbal visszaállíthatod a jelszavadat. A link csak rövid ideig érvényes.",
       bulletPoints: [
-        `A link ${expiryMinutes} percig ervenyes.`,
-        "Ha nem te kertel jelszo-visszaallitast, nyugodtan hagyd figyelmen kivul ezt az uzenetet.",
+        `A link ${expiryMinutes} percig érvényes.`,
+        "Ha nem te kérted a jelszó-visszaállítást, nyugodtan hagyd figyelmen kívül ezt az üzenetet.",
       ],
-      buttonLabel: "Uj jelszo beallitasa",
-      copyIntro: "Ha nem mukodik a gomb, masold be ezt a linket a bongeszodbe:",
-      theme: {
-        background:
-          "linear-gradient(135deg, rgba(225,6,0,0.2) 0%, rgba(8,8,12,0.95) 80%)",
-        borderColor: "rgba(225,6,0,0.5)",
-        tagColor: "rgba(255,214,214,0.88)",
-        accentColor: "#e10600",
-        buttonBackground: "#e10600",
-        buttonShadow: "0 14px 30px rgba(225,6,0,0.45)",
-      },
+      buttonLabel: "Új jelszó beállítása",
+      copyIntro: "Ha nem működik a gomb, másold be ezt a linket a böngészőbe:",
+      accent: "#E10600",
     },
     {
       code: "sk",
-      languageLabel: "Slovencina / Slovak",
+      languageLabel: "Slovenčina / Slovak",
       heading: "Obnovenie hesla",
       greeting: "Ahoj!",
-      lead: "Klikni na tlacidlo nizsie a nastav si nove heslo. Odkaz je platny len kratku dobu.",
+      lead: "Klikni na tlačidlo nižšie a nastav si nové heslo. Odkaz je platný len krátku dobu.",
       bulletPoints: [
-        `Odkaz je platny ${expiryMinutes} minut.`,
-        "Ak si o obnovu neziadal, tento e-mail mozes bezpecne ignorovat.",
+        `Odkaz je platný ${expiryMinutes} minút.`,
+        "Ak si o obnovu nežiadal, tento e-mail môžeš bezpečne ignorovať.",
       ],
-      buttonLabel: "Nastavit nove heslo",
-      copyIntro: "Ak tlacidlo nefunguje, skopiruj tento odkaz do prehliadaca:",
-      theme: {
-        background:
-          "linear-gradient(135deg, rgba(63,141,255,0.18) 0%, rgba(7,7,11,0.95) 80%)",
-        borderColor: "rgba(74,163,255,0.45)",
-        tagColor: "rgba(210,232,255,0.88)",
-        accentColor: "#3f8dff",
-        buttonBackground: "#3f8dff",
-        buttonShadow: "0 14px 30px rgba(63,141,255,0.45)",
-      },
+      buttonLabel: "Nastaviť nové heslo",
+      copyIntro: "Ak tlačidlo nefunguje, skopíruj tento odkaz do prehliadača:",
+      accent: "#3F8DFF",
     },
   ];
 
   const metaTiles = [
-    {
-      label: "E-mail / Email",
-      value: email ?? "—",
-    },
-    {
-      label: "Fiok / Konto",
-      value: resolveAccountLabel(actor_type),
-    },
+    { label: "E-mail / Email", value: email ?? "—" },
+    { label: "Fiók / Konto", value: resolveAccountLabel(actor_type) },
   ];
 
   return (
     <Html>
       <Head />
       <Preview>{previewText}</Preview>
-      <Tailwind>
-        <Body className="mx-auto my-auto bg-[#050507] px-4 font-sans text-white">
-          <Container className="my-10 w-full max-w-[520px]">
-            <Section className={heroCardClasses}>
-              <Text className="text-[11px] font-semibold uppercase tracking-[0.4em] text-white/60">
-                {BRAND_NAME}
-              </Text>
-              <Heading className="mt-4 text-[26px] font-semibold leading-snug text-white">
-                Jelszo visszaallitasa / Obnovenie hesla
-              </Heading>
-              <Text className="mx-auto mt-4 max-w-[420px] text-[15px] leading-6 text-white/80">
-                Biztonsagos jelszo-visszaallitas a Tehergumi.net fiokhoz.
-              </Text>
 
-              <Section className="mt-6 grid grid-cols-1 gap-3 text-left sm:grid-cols-2">
-                {metaTiles.map((tile) => (
-                  <Section key={tile.label} className={metaCardClasses}>
-                    <Text className={metaLabelClasses}>{tile.label}</Text>
-                    <Text className={metaValueClasses}>{tile.value}</Text>
-                  </Section>
-                ))}
-              </Section>
+      <Body style={styles.body}>
+        <Container style={styles.container}>
+          <Section style={styles.card}>
+            {/* Header */}
+            <Section style={styles.header}>
+              <Text style={styles.brand}>{BRAND_NAME}</Text>
+              <Heading style={styles.title}>
+                Jelszó visszaállítása / Obnovenie hesla
+              </Heading>
+              <Text style={styles.subtitle}>
+                Biztonságos jelszó-visszaállítás a Teherguminet.hu fiókhoz.
+              </Text>
             </Section>
 
-            {languageSections.map((section, index) => (
-              <Section
-                key={section.code}
-                className={`${languageCardBase} ${index > 0 ? "mt-10" : ""}`}
-                style={{
-                  background: section.theme.background,
-                  borderColor: section.theme.borderColor,
-                }}
-              >
-                <Text
-                  className={languageTagBase}
-                  style={{ color: section.theme.tagColor }}
-                >
-                  {section.languageLabel}
-                </Text>
-                <Heading className="mt-3 text-[24px] font-semibold leading-tight text-white">
-                  {section.heading}
-                </Heading>
+            <Hr style={styles.divider} />
 
-                <Section className="my-5 space-y-3">
-                  <Text className={baseTextClass}>{section.greeting}</Text>
-                  <Text className={baseTextClass}>{section.lead}</Text>
-                  <Section className="space-y-2">
+            {/* Meta */}
+            <Section style={styles.content}>
+              <table
+                role="presentation"
+                width="100%"
+                cellPadding="0"
+                cellSpacing="0"
+                style={{ width: "100%", borderCollapse: "collapse" }}
+              >
+                <tbody>
+                  <tr>
+                    <td style={{ paddingRight: "8px", paddingBottom: "8px" }}>
+                      <Section style={styles.metaCard}>
+                        <Text style={styles.metaLabel}>
+                          {metaTiles[0].label}
+                        </Text>
+                        <Text style={styles.metaValue}>
+                          {metaTiles[0].value}
+                        </Text>
+                      </Section>
+                    </td>
+                    <td style={{ paddingLeft: "8px", paddingBottom: "8px" }}>
+                      <Section style={styles.metaCard}>
+                        <Text style={styles.metaLabel}>
+                          {metaTiles[1].label}
+                        </Text>
+                        <Text style={styles.metaValue}>
+                          {metaTiles[1].value}
+                        </Text>
+                      </Section>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+
+              {/* Language blocks */}
+              {languageSections.map((section) => (
+                <Section key={section.code} style={styles.sectionCard}>
+                  <Text style={{ ...styles.sectionTag, color: section.accent }}>
+                    {section.languageLabel}
+                  </Text>
+                  <Heading as="h2" style={styles.h2}>
+                    {section.heading}
+                  </Heading>
+
+                  <Text style={styles.p}>{section.greeting}</Text>
+                  <Text style={styles.p}>{section.lead}</Text>
+
+                  <Section style={{ marginTop: "10px" }}>
                     {section.bulletPoints.map((item, idx) => (
                       <Text
-                        key={`${section.code}-bullet-${idx}`}
-                        className={baseTextClass}
+                        key={`${section.code}-bp-${idx}`}
+                        style={styles.bullet}
                       >
                         • {item}
                       </Text>
                     ))}
                   </Section>
-                </Section>
 
-                <Section className="my-6 text-center">
-                  <Button
-                    href={reset_url}
-                    className="rounded-full px-6 py-3 text-center text-[13px] font-semibold text-white no-underline"
-                    style={{
-                      background: section.theme.buttonBackground,
-                      boxShadow: section.theme.buttonShadow,
-                    }}
-                  >
-                    {section.buttonLabel}
-                  </Button>
-                </Section>
+                  <Section style={styles.ctaWrap}>
+                    <Button href={reset_url} style={styles.cta}>
+                      {section.buttonLabel}
+                    </Button>
+                  </Section>
 
-                <Section className="my-5 space-y-3">
-                  <Text className={baseTextClass}>{section.copyIntro}</Text>
+                  <Text style={styles.helper}>{section.copyIntro}</Text>
                   <Link
                     href={reset_url}
-                    className="break-all text-[14px] leading-6 no-underline"
-                    style={{ color: section.theme.accentColor }}
+                    style={{ ...styles.link, color: section.accent }}
                   >
                     {reset_url}
                   </Link>
                 </Section>
-              </Section>
-            ))}
-          </Container>
-        </Body>
-      </Tailwind>
+              ))}
+            </Section>
+          </Section>
+
+          <Text style={styles.footer}>
+            {languageSections[0].code === "hu"
+              ? "Ez egy automatikusan generált üzenet, kérjük ne válaszolj rá közvetlenül."
+              : "Toto je automaticky generovaná správa, prosím, neodpovedajte na ňu."}
+            <br />
+            <span>
+              Kapcsolat / Kontakt:{" "}
+              <Link href={`mailto:${CONTACT_EMAIL}`} style={styles.link}>
+                {CONTACT_EMAIL}
+              </Link>{" "}
+              ·{" "}
+              <Link href={`tel:${CONTACT_PHONE}`} style={styles.link}>
+                {CONTACT_PHONE}
+              </Link>
+            </span>
+          </Text>
+        </Container>
+      </Body>
     </Html>
   );
 };
