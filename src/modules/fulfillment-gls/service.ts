@@ -284,9 +284,12 @@ class GlsFulfillmentService extends AbstractFulfillmentProviderService {
     const unit =
       optionData.weight_unit ??
       this.options_["weight_unit"] ??
-      process.env.GLS_WEIGHT_UNIT
+      process.env.GLS_WEIGHT_UNIT ??
+      "kg"
 
-    return unit === "kg" ? "kg" : "g"
+    const normalized =
+      typeof unit === "string" ? unit.toLowerCase() : unit
+    return normalized === "g" ? "g" : "kg"
   }
 
   private resolveContextItems(
