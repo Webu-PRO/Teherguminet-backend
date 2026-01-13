@@ -2,7 +2,6 @@ import * as React from "react";
 import {
   Body,
   Button,
-  Column,
   Container,
   Head,
   Heading,
@@ -10,7 +9,6 @@ import {
   Html,
   Link,
   Preview,
-  Row,
   Section,
   Text,
 } from "@react-email/components";
@@ -147,6 +145,13 @@ const styles = {
     color: "#111111",
     fontFamily: FONT_STACK,
   } as React.CSSProperties,
+  muted: {
+    margin: 0,
+    fontSize: "12px",
+    lineHeight: "18px",
+    color: "#6B7280",
+    fontFamily: FONT_STACK,
+  } as React.CSSProperties,
   bullet: {
     margin: "8px 0 0",
     fontSize: "14px",
@@ -266,20 +271,30 @@ export function UserInvitedEmailComponent({
             {/* Content */}
             <Section style={styles.content}>
               {/* Meta */}
-              <Row>
-                <Column style={{ paddingRight: "8px", paddingBottom: "8px" }}>
-                  <Section style={styles.metaCard}>
-                    <Text style={styles.metaLabel}>{metaTiles[0].label}</Text>
-                    <Text style={styles.metaValue}>{metaTiles[0].value}</Text>
-                  </Section>
-                </Column>
-                <Column style={{ paddingLeft: "8px", paddingBottom: "8px" }}>
-                  <Section style={styles.metaCard}>
-                    <Text style={styles.metaLabel}>{metaTiles[1].label}</Text>
-                    <Text style={styles.metaValue}>{metaTiles[1].value}</Text>
-                  </Section>
-                </Column>
-              </Row>
+              <table
+                role="presentation"
+                width="100%"
+                cellPadding="0"
+                cellSpacing="0"
+                style={{ width: "100%", borderCollapse: "collapse" }}
+              >
+                <tbody>
+                  <tr>
+                    <td style={{ paddingRight: "8px", paddingBottom: "8px" }}>
+                      <Section style={styles.metaCard}>
+                        <Text style={styles.metaLabel}>{metaTiles[0].label}</Text>
+                        <Text style={styles.metaValue}>{metaTiles[0].value}</Text>
+                      </Section>
+                    </td>
+                    <td style={{ paddingLeft: "8px", paddingBottom: "8px" }}>
+                      <Section style={styles.metaCard}>
+                        <Text style={styles.metaLabel}>{metaTiles[1].label}</Text>
+                        <Text style={styles.metaValue}>{metaTiles[1].value}</Text>
+                      </Section>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
 
               {/* Language blocks */}
               {languageSections.map((section) => (

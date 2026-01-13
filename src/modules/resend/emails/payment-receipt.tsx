@@ -197,6 +197,14 @@ const styles = {
     color: "#111111",
     fontFamily: FONT_STACK,
   } as React.CSSProperties,
+  footer: {
+    textAlign: "center",
+    fontSize: "12px",
+    lineHeight: "18px",
+    color: "#6B7280",
+    margin: "16px 0 0",
+    fontFamily: FONT_STACK,
+  } as React.CSSProperties,
 };
 
 const formatAmount = (
@@ -474,7 +482,7 @@ export const PaymentReceiptEmail = ({
             <Hr style={styles.divider} />
 
             <Section style={styles.content}>
-              {/* Meta (email-safe Row/Column) */}
+              {/* Meta (table layout for email clients) */}
               <table
                 role="presentation"
                 width="100%"
