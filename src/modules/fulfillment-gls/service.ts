@@ -280,6 +280,16 @@ class GlsFulfillmentService extends AbstractFulfillmentProviderService {
     return null
   }
 
+  private resolvePricePerKg(optionData: Record<string, unknown>) {
+    const candidate =
+      optionData.price_per_kg ??
+      optionData.pricePerKg ??
+      this.options_["price_per_kg"] ??
+      process.env.GLS_PRICE_PER_KG
+    const resolved = this.resolveNumber(candidate)
+    return resolved ?? 150
+  }
+
   private resolveWeightUnit(optionData: Record<string, unknown>) {
     const unit =
       optionData.weight_unit ??
@@ -459,24 +469,9 @@ class GlsFulfillmentService extends AbstractFulfillmentProviderService {
     data: Record<string, unknown>,
     context: CalculateShippingOptionPriceContext
   ): Promise<CalculatedShippingOptionPrice> {
-    const matrix = this.resolvePriceMatrix(optionData)
-
-    if (!matrix) {
-      throw new Error("GLS pricing matrix is not configured")
-    }
-
     const totalWeightKg = this.resolveTotalWeightKg(context, optionData)
-    const packagesCount = this.resolvePackagesCount(
-      optionData,
-      data,
-      context,
-      totalWeightKg
-    )
-    const calculatedAmount = this.calculateMatrixPrice(
-      totalWeightKg,
-      packagesCount,
-      matrix
-    )
+    const pricePerKg = this.resolvePricePerKg(optionData)
+    const calculatedAmount = Math.round(totalWeightKg * pricePerKg)
 
     return {
       calculated_amount: calculatedAmount,
