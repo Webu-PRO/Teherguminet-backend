@@ -147,6 +147,7 @@ export const AbandonedCartEmail = ({
     customerName?.trim() && customerName.trim().length
       ? customerName.trim()
       : lang.nameFallback;
+  const brandUrl = storefrontUrl ?? "https://teherguminet.hu";
 
   return (
     <Html>
@@ -158,9 +159,12 @@ export const AbandonedCartEmail = ({
           <Container className="mx-auto w-full max-w-[620px] rounded-[24px] border border-[#E5E7EB] bg-white p-0">
             {/* Header */}
             <Section className="px-10 pt-10">
-              <Text className="m-0 text-[12px] font-semibold uppercase tracking-[0.22em] text-[#111111]">
-                Teherguminet.hu
-              </Text>
+              <Link
+                href={brandUrl}
+                className="inline-block text-[16px] font-semibold uppercase tracking-[0.22em] text-[#111111] no-underline"
+              >
+                TEHERGUMINET.HU
+              </Link>
 
               {storefrontUrl ? (
                 <Text className="mt-2 text-[12px] text-[#6B7280]">

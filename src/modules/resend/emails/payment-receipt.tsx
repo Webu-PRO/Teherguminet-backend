@@ -6,6 +6,7 @@ import {
   Heading,
   Hr,
   Html,
+  Link,
   Preview,
   Section,
   Text,
@@ -93,12 +94,14 @@ const styles = {
     padding: "28px 28px 16px",
   } as React.CSSProperties,
   brand: {
-    fontSize: "12px",
+    fontSize: "16px",
     fontWeight: 700,
     letterSpacing: "0.22em",
     textTransform: "uppercase",
     margin: 0,
     color: "#111111",
+    textDecoration: "none",
+    display: "inline-block",
     fontFamily: FONT_STACK,
   } as React.CSSProperties,
   title: {
@@ -474,7 +477,9 @@ export const PaymentReceiptEmail = ({
           <Section style={styles.card}>
             {/* Header */}
             <Section style={styles.header}>
-              <Text style={styles.brand}>{BRAND}</Text>
+              <Link href="https://teherguminet.hu" style={styles.brand}>
+                {BRAND.toUpperCase()}
+              </Link>
               <Heading style={styles.title}>{lang.heading}</Heading>
               <Text style={styles.subtitle}>{lang.intro(customerName)}</Text>
             </Section>

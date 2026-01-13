@@ -83,20 +83,14 @@ const styles = {
     padding: "28px 28px 10px",
   } as React.CSSProperties,
   brand: {
-    fontSize: "12px",
+    fontSize: "16px",
     fontWeight: 700,
     letterSpacing: "0.22em",
     textTransform: "uppercase",
     margin: 0,
     color: "#111111",
-    fontFamily: FONT_STACK,
-  } as React.CSSProperties,
-  langTag: {
-    fontSize: "11px",
-    letterSpacing: "0.18em",
-    textTransform: "uppercase",
-    margin: "10px 0 0",
-    color: "#6B7280",
+    textDecoration: "none",
+    display: "inline-block",
     fontFamily: FONT_STACK,
   } as React.CSSProperties,
   content: {
@@ -396,8 +390,9 @@ export const OrderThanksEmailComponent = ({ order }: OrderThanksEmailProps) => {
           <Section style={styles.card}>
             {/* Header */}
             <Section style={styles.header}>
-              <Text style={styles.brand}>TEHERGUMINET.HU</Text>
-              <Text style={styles.langTag}>{lang.languageLabel}</Text>
+              <Link href="https://teherguminet.hu" style={styles.brand}>
+                TEHERGUMINET.HU
+              </Link>
             </Section>
 
             <Hr style={styles.divider} />

@@ -76,19 +76,14 @@ const baseStyles = {
     padding: "28px 28px 10px",
   } as React.CSSProperties,
   brand: {
-    fontSize: "12px",
+    fontSize: "16px",
     fontWeight: 700,
     letterSpacing: "0.22em",
     textTransform: "uppercase",
     margin: 0,
     color: "#111111",
-  } as React.CSSProperties,
-  langTag: {
-    fontSize: "11px",
-    letterSpacing: "0.18em",
-    textTransform: "uppercase",
-    margin: "10px 0 0",
-    color: "#6B7280",
+    textDecoration: "none",
+    display: "inline-block",
   } as React.CSSProperties,
   content: {
     padding: "10px 28px 28px",
@@ -327,8 +322,9 @@ export const OrderPlacedEmailComponent = ({ order }: OrderPlacedEmailProps) => {
           <Section style={baseStyles.card}>
             {/* Header */}
             <Section style={baseStyles.header}>
-              <Text style={baseStyles.brand}>TEHERGUMINET.HU</Text>
-              <Text style={baseStyles.langTag}>{lang.languageLabel}</Text>
+              <Link href="https://teherguminet.hu" style={baseStyles.brand}>
+                TEHERGUMINET.HU
+              </Link>
             </Section>
 
             <Hr style={baseStyles.divider} />

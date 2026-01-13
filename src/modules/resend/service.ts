@@ -19,6 +19,10 @@ import {
   type OrderThanksEmailProps,
 } from "./emails/order-thanks";
 import {
+  OrderDeliveredEmail,
+  type OrderDeliveredEmailProps,
+} from "./emails/order-delivered";
+import {
   PaymentReceiptEmail,
   type PaymentReceiptEmailProps,
 } from "./emails/payment-receipt";
@@ -61,6 +65,7 @@ type InjectedDependencies = {
 enum Templates {
   ORDER_PLACED = "order-placed",
   ORDER_THANKS = "order-thanks",
+  ORDER_DELIVERED = "order-delivered",
   PAYMENT_RECEIPT = "payment-receipt",
   USER_INVITED = "user-invited",
   ABANDONED_CART = "abandoned-cart",
@@ -74,6 +79,8 @@ const templates: Partial<Record<Templates, TemplateRenderer>> = {
     OrderPlacedEmailComponent(props as OrderPlacedEmailProps),
   [Templates.ORDER_THANKS]: (props) =>
     OrderThanksEmailComponent(props as OrderThanksEmailProps),
+  [Templates.ORDER_DELIVERED]: (props) =>
+    OrderDeliveredEmail(props as OrderDeliveredEmailProps),
   [Templates.PAYMENT_RECEIPT]: (props) =>
     PaymentReceiptEmail(props as PaymentReceiptEmailProps),
   [Templates.USER_INVITED]: (props) =>
@@ -124,7 +131,8 @@ const resolveNotificationLanguage = (
 
   if (
     template === Templates.ORDER_PLACED ||
-    template === Templates.ORDER_THANKS
+    template === Templates.ORDER_THANKS ||
+    template === Templates.ORDER_DELIVERED
   ) {
     return resolveLanguageFromOrder(data?.order ?? data);
   }
@@ -249,6 +257,20 @@ class ResendNotificationProviderService extends AbstractNotificationProviderServ
         return orderRef
           ? `Köszönjük a rendelésed #${orderRef} – ${BRAND_NAME}`
           : `Köszönjük a rendelésed – ${BRAND_NAME}`;
+      }
+      case Templates.ORDER_DELIVERED: {
+        const orderRef = resolveOrderReference(
+          (notification.data as any)?.order
+        );
+        if (language === "sk") {
+          return orderRef
+            ? `Objednávka #${orderRef} doručená – ${BRAND_NAME}`
+            : `Objednávka doručená – ${BRAND_NAME}`;
+        }
+
+        return orderRef
+          ? `Rendelés #${orderRef} kiszállítva – ${BRAND_NAME}`
+          : `Rendelés kiszállítva – ${BRAND_NAME}`;
       }
       case Templates.USER_INVITED: {
         const email = (notification.data as any)?.email ?? notification.to;
