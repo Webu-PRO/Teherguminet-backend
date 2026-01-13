@@ -44,11 +44,11 @@ Visit the [Docs](https://docs.medusajs.com/learn/installation#get-started) to le
 
 ## Deployment Configuration
 
-If you deploy the backend on `https://admin.teherguminet.hu` (for example through Coolify) while serving the storefront from `https://therguminet.hu`, configure the following environment variables before starting the server:
+If you deploy the backend on `https://admin.teherguminet.hu` (for example through Coolify) while serving the storefront from `https://teherguminet.hu`, configure the following environment variables before starting the server:
 
-- `STORE_CORS=http://localhost:8000,https://therguminet.hu,https://www.therguminet.hu`
+- `STORE_CORS=http://localhost:8000,https://teherguminet.hu,https://www.teherguminet.hu`
 - `ADMIN_CORS=http://localhost:5173,http://localhost:9000,https://admin.teherguminet.hu`
-- `AUTH_CORS=http://localhost:5173,http://localhost:9000,https://admin.teherguminet.hu,https://therguminet.hu,https://www.therguminet.hu`
+- `AUTH_CORS=http://localhost:5173,http://localhost:9000,https://admin.teherguminet.hu,https://teherguminet.hu,https://www.teherguminet.hu`
 
 Coolify exposes a “Environment Variables” panel per service—add or update the variables there so the values propagate to the container. The project now falls back to these domains automatically when the variables are omitted, so you can keep local origins for development and append production URLs separated by commas as needed.
 

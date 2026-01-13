@@ -61,7 +61,7 @@ export const sendAbandonedNotificationsStep = createStep(
     }
 
     const storefrontUrl =
-      process.env.STOREFRONT_URL?.trim() || "https://therguminet.hu";
+      process.env.STOREFRONT_URL?.trim() || "https://teherguminet.hu";
 
     const notificationModuleService = container.resolve(Modules.NOTIFICATION);
 

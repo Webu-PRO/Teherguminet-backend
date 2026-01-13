@@ -2,8 +2,8 @@ import { loadEnv, defineConfig } from "@medusajs/utils";
 
 const DEFAULT_STORE_CORS = [
   "http://localhost:8000",
-  "https://therguminet.hu",
-  "https://www.therguminet.hu",
+  "https://teherguminet.hu",
+  "https://www.teherguminet.hu",
 ];
 
 const DEFAULT_ADMIN_CORS = [
@@ -14,8 +14,8 @@ const DEFAULT_ADMIN_CORS = [
 
 const DEFAULT_AUTH_CORS = [
   ...DEFAULT_ADMIN_CORS,
-  "https://therguminet.hu",
-  "https://www.therguminet.hu",
+  "https://teherguminet.hu",
+  "https://www.teherguminet.hu",
   "http://localhost:8000",
 ];
 
