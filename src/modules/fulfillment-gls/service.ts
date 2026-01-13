@@ -40,10 +40,12 @@ type GlsPriceMatrix = {
 }
 
 type ShippingWeightItem = {
-  quantity?: number | null
+  quantity?: number | string | { value?: unknown; numeric?: unknown } | null
+  weight?: number | string | null
   variant?: {
-    weight?: number | null
+    weight?: number | string | null
   } | null
+  metadata?: Record<string, unknown> | null
 }
 
 class GlsFulfillmentService extends AbstractFulfillmentProviderService {
@@ -69,6 +71,44 @@ class GlsFulfillmentService extends AbstractFulfillmentProviderService {
     if (typeof value === "string" && value.trim().length) {
       const parsed = Number(value)
       return Number.isFinite(parsed) ? parsed : null
+    }
+
+    if (value && typeof value === "object") {
+      const record = value as Record<string, unknown>
+      const numeric = record.numeric
+      if (typeof numeric === "number" && Number.isFinite(numeric)) {
+        return numeric
+      }
+
+      const raw = record.value
+      if (raw !== undefined) {
+        const parsed = this.resolveNumber(raw)
+        if (parsed !== null) {
+          return parsed
+        }
+      }
+
+      const valueOf = (value as { valueOf?: () => unknown }).valueOf
+      if (typeof valueOf === "function") {
+        const parsed = valueOf.call(value)
+        if (parsed !== value) {
+          const resolved = this.resolveNumber(parsed)
+          if (resolved !== null) {
+            return resolved
+          }
+        }
+      }
+
+      const toJson = (value as { toJSON?: () => unknown }).toJSON
+      if (typeof toJson === "function") {
+        const parsed = toJson.call(value)
+        if (parsed !== value) {
+          const resolved = this.resolveNumber(parsed)
+          if (resolved !== null) {
+            return resolved
+          }
+        }
+      }
     }
 
     return null
@@ -312,6 +352,24 @@ class GlsFulfillmentService extends AbstractFulfillmentProviderService {
     return context.items as ShippingWeightItem[]
   }
 
+  private resolveItemWeight(item: ShippingWeightItem) {
+    const metadata =
+      item.metadata && typeof item.metadata === "object"
+        ? (item.metadata as Record<string, unknown>)
+        : null
+
+    const weightCandidate =
+      item.variant?.weight ??
+      item.weight ??
+      metadata?.weight ??
+      metadata?.weight_kg ??
+      metadata?.weightKg ??
+      metadata?.weight_g ??
+      metadata?.weightG
+
+    return this.resolveNumber(weightCandidate) ?? 0
+  }
+
   private resolveTotalWeightKg(
     context: CalculateShippingOptionPriceContext,
     optionData: Record<string, unknown>
@@ -321,19 +379,20 @@ class GlsFulfillmentService extends AbstractFulfillmentProviderService {
     let totalWeight: number = 0
 
     for (const item of items) {
-      const quantity =
-        typeof item.quantity === "number" && Number.isFinite(item.quantity)
-          ? item.quantity
-          : 1
-      const weight =
-        typeof item.variant?.weight === "number"
-          ? item.variant.weight
-          : 0
-
+      const quantity = this.resolveNumber(item.quantity) ?? 1
+      const weight = this.resolveItemWeight(item)
       totalWeight += weight * quantity
     }
 
-    return unit === "kg" ? totalWeight : totalWeight / 1000
+    const weightKg = unit === "kg" ? totalWeight : totalWeight / 1000
+
+    if (items.length && weightKg === 0) {
+      this.logger_?.warn(
+        "GLS pricing: computed cart weight is 0; check variant weight or item metadata weight fields."
+      )
+    }
+
+    return weightKg
   }
 
   private resolvePackagesCount(
