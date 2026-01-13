@@ -305,7 +305,7 @@ class GlsFulfillmentService extends AbstractFulfillmentProviderService {
   ): number {
     const unit = this.resolveWeightUnit(optionData)
     const items: ShippingWeightItem[] = this.resolveContextItems(context)
-    let totalWeight = 0
+    let totalWeight: number = 0
 
     for (const item of items) {
       const quantity =
@@ -351,7 +351,7 @@ class GlsFulfillmentService extends AbstractFulfillmentProviderService {
     }
 
     const items: ShippingWeightItem[] = this.resolveContextItems(context)
-    let quantityTotal = 0
+    let quantityTotal: number = 0
 
     for (const item of items) {
       const quantity =
