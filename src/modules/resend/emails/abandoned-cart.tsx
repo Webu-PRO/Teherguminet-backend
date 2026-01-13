@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import type { ReactNode } from "react";
 import {
   Body,
   Button,
@@ -11,32 +11,29 @@ import {
   Section,
   Tailwind,
   Text,
-} from "@react-email/components"
-import {
-  LanguageCode,
-  resolveLanguageFromHints,
-} from "../email-language"
+} from "@react-email/components";
+import { LanguageCode, resolveLanguageFromHints } from "../email-language";
 
 export type AbandonedCartEmailProps = {
-  customerName?: string | null
-  recoverUrl: string
-  currencyCode?: string | null
-  language?: string | null
-  countryCode?: string | null
-  storefrontUrl?: string | null
-  supportEmail?: string | null
-  supportPhone?: string | null
+  customerName?: string | null;
+  recoverUrl: string;
+  currencyCode?: string | null;
+  language?: string | null;
+  countryCode?: string | null;
+  storefrontUrl?: string | null;
+  supportEmail?: string | null;
+  supportPhone?: string | null;
   items?: Array<{
-    id: string
-    title?: string | null
-    quantity?: number | null
-    unit_price?: number | null
-    thumbnail?: string | null
-  }>
-}
+    id: string;
+    title?: string | null;
+    quantity?: number | null;
+    unit_price?: number | null;
+    thumbnail?: string | null;
+  }>;
+};
 
 const PANEL_BG =
-  "radial-gradient(circle at top, rgba(225,6,0,0.35), rgba(8,8,13,1) 60%)"
+  "radial-gradient(circle at top, rgba(225,6,0,0.35), rgba(8,8,13,1) 60%)";
 
 const formatAmount = (
   value?: number | null,
@@ -44,7 +41,7 @@ const formatAmount = (
   locale: string = "hu-HU"
 ) => {
   if (typeof value !== "number") {
-    return "—"
+    return "—";
   }
 
   try {
@@ -53,32 +50,32 @@ const formatAmount = (
       currency: (currencyCode || "EUR").toUpperCase(),
       minimumFractionDigits: 0,
       maximumFractionDigits: 2,
-    }).format(value / 100)
+    }).format(value / 100);
   } catch {
-    return `${(value / 100).toFixed(2)} ${(currencyCode || "EUR").toUpperCase()}`
+    return `${(value / 100).toFixed(2)} ${(currencyCode || "EUR").toUpperCase()}`;
   }
-}
+};
 
 type LanguageBlock = {
-  code: LanguageCode
-  locale: string
-  preview: string
-  heroTitle: string
-  heroLead: (name: string) => ReactNode
-  ctaLabel: string
-  cartDetailsHeading: string
-  itemFallbackTitle: string
-  itemFallbackThumbnail: string
-  quantitySuffix: string
-  emptyCart: string
-  tipsHeading: string
-  tips: string[]
-  supportIntro: string
-  supportOutro: string
-  footer: string
-  nameFallback: string
-  supportAccent: string
-}
+  code: LanguageCode;
+  locale: string;
+  preview: string;
+  heroTitle: string;
+  heroLead: (name: string) => ReactNode;
+  ctaLabel: string;
+  cartDetailsHeading: string;
+  itemFallbackTitle: string;
+  itemFallbackThumbnail: string;
+  quantitySuffix: string;
+  emptyCart: string;
+  tipsHeading: string;
+  tips: string[];
+  supportIntro: string;
+  supportOutro: string;
+  footer: string;
+  nameFallback: string;
+  supportAccent: string;
+};
 
 const languageBlocks: Record<LanguageCode, LanguageBlock> = {
   hu: {
@@ -87,17 +84,14 @@ const languageBlocks: Record<LanguageCode, LanguageBlock> = {
     preview: "Ne feledd a kosarad – fejezd be a rendelést!",
     heroTitle: "A kosarad még vár rád",
     heroLead: (name) => (
-      <>
-        Szia {name}, néhány kattintással befejezheted a rendelést.
-      </>
+      <>Szia {name}, néhány kattintással befejezheted a rendelést.</>
     ),
     ctaLabel: "Vissza a kosárhoz",
     cartDetailsHeading: "Kosár részletei",
     itemFallbackTitle: "Termék",
     itemFallbackThumbnail: "Nincs kép",
     quantitySuffix: "db",
-    emptyCart:
-      "A kosarad üresnek tűnik, de bármikor visszatérhetsz böngészni.",
+    emptyCart: "A kosarad üresnek tűnik, de bármikor visszatérhetsz böngészni.",
     tipsHeading: "Tippek",
     tips: [
       "A termékek elérhetősége folyamatosan változik – ha szükséged van rájuk, érdemes most leadni a rendelést.",
@@ -116,17 +110,14 @@ const languageBlocks: Record<LanguageCode, LanguageBlock> = {
     preview: "Nezabudnite na svoj košík – dokončite objednávku!",
     heroTitle: "Váš košík ešte čaká",
     heroLead: (name) => (
-      <>
-        Ahoj {name}, stačí pár klikov a objednávka je hotová.
-      </>
+      <>Ahoj {name}, stačí pár klikov a objednávka je hotová.</>
     ),
     ctaLabel: "Späť do košíka",
     cartDetailsHeading: "Detaily košíka",
     itemFallbackTitle: "Produkt",
     itemFallbackThumbnail: "Bez obrázka",
     quantitySuffix: "ks",
-    emptyCart:
-      "Zdá sa, že košík je prázdny – môžete sa kedykoľvek vrátiť.",
+    emptyCart: "Zdá sa, že košík je prázdny – môžete sa kedykoľvek vrátiť.",
     tipsHeading: "Tipy",
     tips: [
       "Dostupnosť pneumatík sa môže meniť, preto odporúčame dokončiť objednávku čo najskôr.",
@@ -139,7 +130,7 @@ const languageBlocks: Record<LanguageCode, LanguageBlock> = {
     nameFallback: "Partner",
     supportAccent: "#4da3ff",
   },
-}
+};
 
 export const AbandonedCartEmail = ({
   customerName,
@@ -156,15 +147,15 @@ export const AbandonedCartEmail = ({
     language,
     countryCode,
     currencyCode,
-  })
-  const lang = languageBlocks[languageCode] ?? languageBlocks.hu
+  });
+  const lang = languageBlocks[languageCode] ?? languageBlocks.hu;
 
   const safeName =
     customerName?.trim() && customerName.trim().length
       ? customerName.trim()
-      : lang.nameFallback
+      : lang.nameFallback;
 
-  const previewText = lang.preview
+  const previewText = lang.preview;
 
   return (
     <Html>
@@ -295,12 +286,12 @@ export const AbandonedCartEmail = ({
         </Body>
       </Tailwind>
     </Html>
-  )
-}
+  );
+};
 
 export const abandonedCartEmail = (props: AbandonedCartEmailProps) => (
   <AbandonedCartEmail {...props} />
-)
+);
 
 const mockProps: AbandonedCartEmailProps = {
   customerName: "Partner",
@@ -317,7 +308,7 @@ const mockProps: AbandonedCartEmailProps = {
         "https://cdn11.bigcommerce.com/s-ykpvhku8bx/images/stencil/original/products/114/498/retread-tires.1__59244.1562264741.png",
     },
   ],
-}
+};
 
 // @ts-ignore - consumed by React Email dev server
-export default () => <AbandonedCartEmail {...mockProps} />
+export default () => <AbandonedCartEmail {...mockProps} />;

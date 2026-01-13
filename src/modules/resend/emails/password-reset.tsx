@@ -10,46 +10,46 @@ import {
   Section,
   Tailwind,
   Text,
-} from "@react-email/components"
+} from "@react-email/components";
 
 export type PasswordResetEmailProps = {
-  reset_url: string
-  email?: string | null
-  actor_type?: string | null
-  expires_in_minutes?: number | null
-}
+  reset_url: string;
+  email?: string | null;
+  actor_type?: string | null;
+  expires_in_minutes?: number | null;
+};
 
-const BRAND_NAME = "Tehergumi.net"
-const DEFAULT_EXPIRY_MINUTES = 15
+const BRAND_NAME = "Tehergumi.net";
+const DEFAULT_EXPIRY_MINUTES = 15;
 
 const heroCardClasses =
-  "rounded-[30px] border border-white/10 bg-gradient-to-br from-[#1b1f2e] via-[#0c0e14] to-[#050509] px-8 py-10 text-center text-white shadow-[0_26px_60px_rgba(0,0,0,0.55)]"
+  "rounded-[30px] border border-white/10 bg-gradient-to-br from-[#1b1f2e] via-[#0c0e14] to-[#050509] px-8 py-10 text-center text-white shadow-[0_26px_60px_rgba(0,0,0,0.55)]";
 
 const metaCardClasses =
-  "rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-left"
+  "rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-left";
 
 const metaLabelClasses =
-  "text-[11px] font-semibold uppercase tracking-[0.3em] text-white/60"
+  "text-[11px] font-semibold uppercase tracking-[0.3em] text-white/60";
 
-const metaValueClasses = "mt-2 text-base font-semibold text-white"
+const metaValueClasses = "mt-2 text-base font-semibold text-white";
 
-const baseTextClass = "text-[14px] leading-6 text-white/90"
+const baseTextClass = "text-[14px] leading-6 text-white/90";
 
 const languageCardBase =
-  "my-8 rounded-[26px] border px-6 py-7 text-left text-white shadow-[0_20px_45px_rgba(0,0,0,0.45)]"
+  "my-8 rounded-[26px] border px-6 py-7 text-left text-white shadow-[0_20px_45px_rgba(0,0,0,0.45)]";
 
-const languageTagBase = "text-[12px] font-semibold uppercase tracking-[0.28em]"
+const languageTagBase = "text-[12px] font-semibold uppercase tracking-[0.28em]";
 
 const resolveAccountLabel = (actorType?: string | null) => {
-  const normalized = (actorType ?? "").toLowerCase()
+  const normalized = (actorType ?? "").toLowerCase();
   if (normalized === "user" || normalized === "admin") {
-    return "Admin"
+    return "Admin";
   }
   if (normalized) {
-    return normalized
+    return normalized;
   }
-  return "Customer"
-}
+  return "Customer";
+};
 
 export const PasswordResetEmail = ({
   reset_url,
@@ -58,12 +58,13 @@ export const PasswordResetEmail = ({
   expires_in_minutes,
 }: PasswordResetEmailProps) => {
   const expiryMinutes =
-    typeof expires_in_minutes === "number" && Number.isFinite(expires_in_minutes)
+    typeof expires_in_minutes === "number" &&
+    Number.isFinite(expires_in_minutes)
       ? Math.max(1, Math.round(expires_in_minutes))
-      : DEFAULT_EXPIRY_MINUTES
+      : DEFAULT_EXPIRY_MINUTES;
 
   const previewText =
-    "Jelszo visszaallitasa / Obnovenie hesla – kattints a linkre a folytatashoz"
+    "Jelszo visszaallitasa / Obnovenie hesla – kattints a linkre a folytatashoz";
 
   const languageSections = [
     {
@@ -71,8 +72,7 @@ export const PasswordResetEmail = ({
       languageLabel: "Magyar / Hungarian",
       heading: "Jelszo visszaallitasa",
       greeting: "Szia!",
-      lead:
-        "Az alabbi gombbal visszaallithatod a jelszavadat. A link csak rovid ideig ervenyes.",
+      lead: "Az alabbi gombbal visszaallithatod a jelszavadat. A link csak rovid ideig ervenyes.",
       bulletPoints: [
         `A link ${expiryMinutes} percig ervenyes.`,
         "Ha nem te kertel jelszo-visszaallitast, nyugodtan hagyd figyelmen kivul ezt az uzenetet.",
@@ -94,8 +94,7 @@ export const PasswordResetEmail = ({
       languageLabel: "Slovencina / Slovak",
       heading: "Obnovenie hesla",
       greeting: "Ahoj!",
-      lead:
-        "Klikni na tlacidlo nizsie a nastav si nove heslo. Odkaz je platny len kratku dobu.",
+      lead: "Klikni na tlacidlo nizsie a nastav si nove heslo. Odkaz je platny len kratku dobu.",
       bulletPoints: [
         `Odkaz je platny ${expiryMinutes} minut.`,
         "Ak si o obnovu neziadal, tento e-mail mozes bezpecne ignorovat.",
@@ -112,7 +111,7 @@ export const PasswordResetEmail = ({
         buttonShadow: "0 14px 30px rgba(63,141,255,0.45)",
       },
     },
-  ]
+  ];
 
   const metaTiles = [
     {
@@ -123,7 +122,7 @@ export const PasswordResetEmail = ({
       label: "Fiok / Konto",
       value: resolveAccountLabel(actor_type),
     },
-  ]
+  ];
 
   return (
     <Html>
@@ -177,7 +176,10 @@ export const PasswordResetEmail = ({
                   <Text className={baseTextClass}>{section.lead}</Text>
                   <Section className="space-y-2">
                     {section.bulletPoints.map((item, idx) => (
-                      <Text key={`${section.code}-bullet-${idx}`} className={baseTextClass}>
+                      <Text
+                        key={`${section.code}-bullet-${idx}`}
+                        className={baseTextClass}
+                      >
                         • {item}
                       </Text>
                     ))}
@@ -213,15 +215,15 @@ export const PasswordResetEmail = ({
         </Body>
       </Tailwind>
     </Html>
-  )
-}
+  );
+};
 
 const mockProps: PasswordResetEmailProps = {
   reset_url: "https://admin.teherguminet.hu/app/reset-password?token=demo",
   email: "user@example.com",
   actor_type: "user",
   expires_in_minutes: 15,
-}
+};
 
 // @ts-ignore - consumed by React Email dev server
-export default () => <PasswordResetEmail {...mockProps} />
+export default () => <PasswordResetEmail {...mockProps} />;

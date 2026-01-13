@@ -53,7 +53,7 @@ const formatExpiry = (value?: Date): string | null => {
 }
 
 const resolveStoreName = (): string =>
-  process.env.INVITE_EMAIL_STORE_NAME ?? "Teherguminet"
+  process.env.INVITE_EMAIL_STORE_NAME ?? "Tehergumi.net"
 
 const resolveInviteLink = (token: string): string => {
   const encodedToken = encodeURIComponent(token)
@@ -72,7 +72,7 @@ const resolveInviteLink = (token: string): string => {
     process.env.ADMIN_DASHBOARD_URL ??
     process.env.MEDUSA_ADMIN_URL ??
     process.env.ADMIN_URL ??
-    "https://admin.teherguminet.hu"
+    "https://admin.tehergumi.net"
 
   const normalizedBase = baseUrl.replace(/\/$/, "")
   const path = (process.env.ADMIN_INVITE_PATH ?? "/app/invite").trim()
