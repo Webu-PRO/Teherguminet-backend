@@ -599,7 +599,7 @@ const OrderGlsShipmentWidget = () => {
         >
           Recreate GLS label
         </Button>
-        {parcelNumbers.length ? (
+        {!isCancelled && parcelNumbers.length ? (
           <Text size="xsmall" className="text-ui-fg-subtle">
             Parcel: {parcelNumbers.join(", ")}
           </Text>
