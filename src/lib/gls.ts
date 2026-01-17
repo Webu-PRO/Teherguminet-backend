@@ -80,6 +80,7 @@ type GlsConfig = {
   pickupAddress: GlsAddress
   labelOptions?: GlsLabelOptions
   webshopEngine: string
+  dimensionUnit: "cm" | "mm"
   parcelDefaults: {
     weightKg?: number
     lengthCm?: number
@@ -177,6 +178,18 @@ const normalizeNumericValue = (value: unknown) => {
 const parsePositiveNumber = (value: unknown) => {
   const parsed = normalizeNumericValue(value)
   return parsed && parsed > 0 ? parsed : undefined
+}
+
+const normalizeDimensionUnit = (value?: string | null) => {
+  return value?.toLowerCase() === "mm" ? "mm" : "cm"
+}
+
+const normalizeDimensionValue = (
+  value: number,
+  unit: "cm" | "mm"
+) => {
+  const normalized = unit === "mm" ? value / 10 : value
+  return Number(normalized.toFixed(2))
 }
 
 const parseBoolean = (value?: string | null) => {
@@ -288,6 +301,9 @@ export const resolveGlsConfig = (): {
   const pickupCountry = normalizeString(process.env.GLS_PICKUP_COUNTRY_CODE)
   const webshopEngine =
     normalizeString(process.env.GLS_WEBSHOP_ENGINE) || "Medusa"
+  const dimensionUnit = normalizeDimensionUnit(
+    process.env.GLS_DIMENSION_UNIT
+  )
 
   if (!serviceName) {
     missing.push("GLS_API_SERVICE")
@@ -363,6 +379,7 @@ export const resolveGlsConfig = (): {
       password,
       clientNumbers,
       webshopEngine,
+      dimensionUnit,
       parcelDefaults: {
         weightKg: parsePositiveNumber(
           process.env.GLS_PARCEL_WEIGHT_KG
@@ -786,7 +803,8 @@ const computeMaxDimension = (
 
 export const deriveGlsParcelMetadata = (
   order: OrderDTO,
-  defaults: GlsConfig["parcelDefaults"]
+  defaults: GlsConfig["parcelDefaults"],
+  dimensionUnit: GlsConfig["dimensionUnit"]
 ) => {
   const metadata =
     (order.metadata as Record<string, unknown> | null) ?? {}
@@ -819,10 +837,16 @@ export const deriveGlsParcelMetadata = (
   }
 
   const existingLength = parsePositiveNumber(metadata.gls_length_cm)
-  const length =
+  const rawLength =
     defaults.lengthCm ??
-    existingLength ??
+    (existingLength === undefined ? undefined : existingLength) ??
     computeMaxDimension(order, "length")
+  const length =
+    existingLength !== undefined && !defaults.lengthCm
+      ? existingLength
+      : rawLength
+        ? normalizeDimensionValue(rawLength, dimensionUnit)
+        : undefined
   if (
     length &&
     (existingLength === undefined || existingLength !== length)
@@ -831,20 +855,38 @@ export const deriveGlsParcelMetadata = (
   }
 
   const existingWidth = parsePositiveNumber(metadata.gls_width_cm)
+  const rawWidth =
+    defaults.widthCm ??
+    (existingWidth === undefined ? undefined : existingWidth) ??
+    computeMaxDimension(order, "width")
   const width =
-    existingWidth ??
-    computeMaxDimension(order, "width") ??
-    defaults.widthCm
-  if (!existingWidth && width) {
+    existingWidth !== undefined && !defaults.widthCm
+      ? existingWidth
+      : rawWidth
+        ? normalizeDimensionValue(rawWidth, dimensionUnit)
+        : undefined
+  if (
+    width &&
+    (existingWidth === undefined || existingWidth !== width)
+  ) {
     updates.gls_width_cm = width
   }
 
   const existingHeight = parsePositiveNumber(metadata.gls_height_cm)
+  const rawHeight =
+    defaults.heightCm ??
+    (existingHeight === undefined ? undefined : existingHeight) ??
+    computeMaxDimension(order, "height")
   const height =
-    existingHeight ??
-    computeMaxDimension(order, "height") ??
-    defaults.heightCm
-  if (!existingHeight && height) {
+    existingHeight !== undefined && !defaults.heightCm
+      ? existingHeight
+      : rawHeight
+        ? normalizeDimensionValue(rawHeight, dimensionUnit)
+        : undefined
+  if (
+    height &&
+    (existingHeight === undefined || existingHeight !== height)
+  ) {
     updates.gls_height_cm = height
   }
 
@@ -903,23 +945,47 @@ const resolveParcelWeightInfo = (
 
 const resolveParcelDimensions = (
   input: GlsShipmentInput,
-  defaults: GlsConfig["parcelDefaults"]
+  defaults: GlsConfig["parcelDefaults"],
+  dimensionUnit: GlsConfig["dimensionUnit"]
 ) => {
   const metadata =
     (input.order.metadata as Record<string, unknown> | null) ?? null
 
-  const length =
+  const metadataLength = parsePositiveNumber(metadata?.gls_length_cm)
+  const metadataWidth = parsePositiveNumber(metadata?.gls_width_cm)
+  const metadataHeight = parsePositiveNumber(metadata?.gls_height_cm)
+
+  const rawLength =
     defaults.lengthCm ??
-    parsePositiveNumber(metadata?.gls_length_cm) ??
+    metadataLength ??
     computeMaxDimension(input.order, "length")
+  const rawWidth =
+    defaults.widthCm ??
+    metadataWidth ??
+    computeMaxDimension(input.order, "width")
+  const rawHeight =
+    defaults.heightCm ??
+    metadataHeight ??
+    computeMaxDimension(input.order, "height")
+
+  const length =
+    metadataLength !== undefined && !defaults.lengthCm
+      ? metadataLength
+      : rawLength
+        ? normalizeDimensionValue(rawLength, dimensionUnit)
+        : undefined
   const width =
-    parsePositiveNumber(metadata?.gls_width_cm) ??
-    computeMaxDimension(input.order, "width") ??
-    defaults.widthCm
+    metadataWidth !== undefined && !defaults.widthCm
+      ? metadataWidth
+      : rawWidth
+        ? normalizeDimensionValue(rawWidth, dimensionUnit)
+        : undefined
   const height =
-    parsePositiveNumber(metadata?.gls_height_cm) ??
-    computeMaxDimension(input.order, "height") ??
-    defaults.heightCm
+    metadataHeight !== undefined && !defaults.heightCm
+      ? metadataHeight
+      : rawHeight
+        ? normalizeDimensionValue(rawHeight, dimensionUnit)
+        : undefined
   const packageType =
     parsePositiveNumber(metadata?.gls_package_type) ??
     defaults.packageType
@@ -943,7 +1009,11 @@ const buildParcelPropertyList = (
     config.parcelDefaults
   )
   const { length, width, height, packageType } =
-    resolveParcelDimensions(input, config.parcelDefaults)
+    resolveParcelDimensions(
+      input,
+      config.parcelDefaults,
+      config.dimensionUnit
+    )
 
   if (
     !weightInfo ||
