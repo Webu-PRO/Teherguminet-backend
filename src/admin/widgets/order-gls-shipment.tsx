@@ -230,8 +230,18 @@ const OrderGlsShipmentWidget = () => {
   const isCancelled = Boolean(cancelledAt)
   const isLocked = hasShipment && hasParcelNumbers && !isCancelled
   const hasLabel = Boolean(labelBase64) && !isCancelled
-  const canCancel = parcelIds.length > 0 && !isCancelled
+  const canCancel =
+    (parcelIds.length > 0 || parcelNumbers.length > 0) &&
+    !isCancelled
   const canRecreate = hasShipment && !recreating
+
+  const statusLabel = isCancelled
+    ? "Cancelled"
+    : hasShipment
+      ? hasParcelNumbers
+        ? "Shipment created"
+        : "Pending label"
+      : "Not created"
 
   const handleCreate = useCallback(async () => {
     if (!fulfillment) {
@@ -533,52 +543,67 @@ const OrderGlsShipmentWidget = () => {
   }
 
   return (
-    <div className="flex flex-col gap-y-2">
-      <Text size="small" weight="plus">
-        GLS
-      </Text>
-      <Button
-        size="small"
-        variant="secondary"
-        onClick={handleCreate}
-        isLoading={submitting}
-        disabled={isLocked}
-      >
-        {isLocked ? "GLS shipment created" : "Create GLS shipment"}
-      </Button>
-      <Button
-        size="small"
-        variant="secondary"
-        onClick={handleDownload}
-        isLoading={downloading}
-        disabled={!hasLabel || downloading}
-      >
-        Download GLS label
-      </Button>
-      <Button
-        size="small"
-        variant="secondary"
-        onClick={handleCancel}
-        isLoading={canceling}
-        disabled={!canCancel}
-      >
-        Cancel GLS label
-      </Button>
-      <Button
-        size="small"
-        variant="secondary"
-        onClick={handleRecreate}
-        isLoading={recreating}
-        disabled={!canRecreate}
-      >
-        Recreate GLS label
-      </Button>
-      {isCancelled ? (
-        <Text size="xsmall">GLS label cancelled</Text>
-      ) : null}
-      {parcelNumbers.length ? (
-        <Text size="xsmall">Parcel: {parcelNumbers.join(", ")}</Text>
-      ) : null}
+    <div className="rounded-lg border border-ui-border-base bg-ui-bg-base p-4 shadow-card-rest">
+      <div className="flex items-center justify-between">
+        <Text size="small" weight="plus">
+          GLS
+        </Text>
+        <Text size="xsmall" className="text-ui-fg-subtle">
+          {statusLabel}
+        </Text>
+      </div>
+      <div className="mt-3 flex flex-col gap-y-2">
+        <Button
+          size="small"
+          variant="secondary"
+          className="w-full"
+          onClick={handleCreate}
+          isLoading={submitting}
+          disabled={isLocked}
+        >
+          {isLocked ? "GLS shipment created" : "Create GLS shipment"}
+        </Button>
+        <Button
+          size="small"
+          variant="secondary"
+          className="w-full"
+          onClick={handleDownload}
+          isLoading={downloading}
+          disabled={!hasLabel || downloading}
+        >
+          Download GLS label
+        </Button>
+        <Button
+          size="small"
+          variant="secondary"
+          className="w-full"
+          onClick={handleCancel}
+          isLoading={canceling}
+          disabled={!canCancel}
+        >
+          Cancel GLS label
+        </Button>
+        <Button
+          size="small"
+          variant="secondary"
+          className="w-full"
+          onClick={handleRecreate}
+          isLoading={recreating}
+          disabled={!canRecreate}
+        >
+          Recreate GLS label
+        </Button>
+        {isCancelled ? (
+          <Text size="xsmall" className="text-ui-fg-subtle">
+            GLS label cancelled
+          </Text>
+        ) : null}
+        {parcelNumbers.length ? (
+          <Text size="xsmall" className="text-ui-fg-subtle">
+            Parcel: {parcelNumbers.join(", ")}
+          </Text>
+        ) : null}
+      </div>
     </div>
   )
 }

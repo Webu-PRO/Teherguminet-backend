@@ -1159,6 +1159,19 @@ const normalizeParcelId = (value: unknown) => {
   return Math.round(parsed)
 }
 
+const normalizeParcelNumberValue = (value: unknown) => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(value)
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim()
+    return trimmed ? trimmed : null
+  }
+
+  return null
+}
+
 export const extractParcelIds = (payload: unknown) => {
   const ids = new Set<number>()
 
@@ -1194,6 +1207,64 @@ export const extractParcelIds = (payload: unknown) => {
 
     if (candidate) {
       ids.add(candidate)
+    }
+
+    for (const value of Object.values(record)) {
+      stack.push(value)
+    }
+  }
+
+  return Array.from(ids)
+}
+
+export const findParcelIdsByNumbers = (
+  payload: unknown,
+  parcelNumbers: string[]
+) => {
+  const ids = new Set<number>()
+  const wanted = new Set(
+    parcelNumbers
+      .map((value) => normalizeParcelNumberValue(value))
+      .filter((value): value is string => Boolean(value))
+  )
+
+  if (!wanted.size || !payload || typeof payload !== "object") {
+    return []
+  }
+
+  const seen = new Set<object>()
+  const stack: unknown[] = [payload]
+
+  while (stack.length) {
+    const current = stack.pop()
+    if (!current || typeof current !== "object") {
+      continue
+    }
+
+    if (seen.has(current as object)) {
+      continue
+    }
+    seen.add(current as object)
+
+    if (Array.isArray(current)) {
+      for (const item of current) {
+        stack.push(item)
+      }
+      continue
+    }
+
+    const record = current as Record<string, unknown>
+    const numberCandidate =
+      normalizeParcelNumberValue(record.ParcelNumberWithCheckdigit) ??
+      normalizeParcelNumberValue(record.ParcelNumber)
+    const idCandidate = normalizeParcelId(record.ParcelId)
+
+    if (
+      numberCandidate &&
+      idCandidate &&
+      wanted.has(numberCandidate)
+    ) {
+      ids.add(idCandidate)
     }
 
     for (const value of Object.values(record)) {
@@ -1310,6 +1381,77 @@ export const createGlsShipment = async (
       response: sanitizeResponse(data),
       labelBase64,
       parcelIds: parcelIds.length ? parcelIds : undefined,
+    }
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+export const getGlsParcelList = async (
+  config: GlsConfig,
+  params: {
+    pickupDateFrom?: Date
+    pickupDateTo?: Date
+    printDateFrom?: Date
+    printDateTo?: Date
+  }
+) => {
+  const methodName =
+    normalizeString(process.env.GLS_PARCEL_LIST_METHOD) ||
+    "GetParcelList"
+  const endpoint = buildEndpoint(config, methodName)
+
+  const request: Record<string, unknown> = {
+    ...buildGlsAuthPayload(config),
+  }
+
+  if (params.pickupDateFrom) {
+    request.PickupDateFrom = formatGlsDate(params.pickupDateFrom)
+  }
+  if (params.pickupDateTo) {
+    request.PickupDateTo = formatGlsDate(params.pickupDateTo)
+  }
+  if (params.printDateFrom) {
+    request.PrintDateFrom = formatGlsDate(params.printDateFrom)
+  }
+  if (params.printDateTo) {
+    request.PrintDateTo = formatGlsDate(params.printDateTo)
+  }
+
+  const controller = new AbortController()
+  const timeout = setTimeout(
+    () => controller.abort(),
+    config.timeoutMs
+  )
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(request),
+      signal: controller.signal,
+    })
+
+    const text = await response.text()
+    let data: unknown = text
+
+    try {
+      data = text ? JSON.parse(text) : null
+    } catch {
+      data = text
+    }
+
+    if (!response.ok) {
+      throw new Error(
+        `GLS API error (${response.status} ${response.statusText})`
+      )
+    }
+
+    return {
+      request: sanitizeRequest(request),
+      response: sanitizeResponse(data),
     }
   } finally {
     clearTimeout(timeout)
