@@ -523,21 +523,7 @@ export async function DELETE(req: MedusaRequest, res: MedusaResponse) {
     const existingLabels = Array.isArray(fulfillment.labels)
       ? fulfillment.labels
       : []
-    const numbersToRemove = new Set(
-      parcelNumbers.map((value) => value.trim())
-    )
-    const labelsToKeep = numbersToRemove.size
-      ? existingLabels.filter((label) => {
-          const number = label?.tracking_number
-          if (!number) {
-            return true
-          }
-          return !numbersToRemove.has(number.trim())
-        })
-      : []
-    const labelPayload = existingLabels.length
-      ? labelsToKeep.map((label) => ({ id: label.id }))
-      : undefined
+    const labelPayload = existingLabels.length ? [] : undefined
 
     await fulfillmentModuleService.updateFulfillment(fulfillment.id, {
       metadata: {
