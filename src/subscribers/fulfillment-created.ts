@@ -262,6 +262,17 @@ const notifyGlsIssue = async (
   )
 }
 
+const shouldSkipExistingShipment = (
+  metadata: Record<string, unknown>
+) => {
+  const existing = metadata[GLS_FULFILLMENT_METADATA_KEY]
+  if (!existing) {
+    return false
+  }
+
+  return extractParcelNumbers(existing).length > 0
+}
+
 export default async function fulfillmentCreatedHandler({
   event: { data },
   container,
@@ -365,7 +376,7 @@ export default async function fulfillmentCreatedHandler({
   }
 
   const metadata = extractMetadata(fulfillment)
-  if (metadata[GLS_FULFILLMENT_METADATA_KEY]) {
+  if (shouldSkipExistingShipment(metadata)) {
     return
   }
 

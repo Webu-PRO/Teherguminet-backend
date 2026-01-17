@@ -206,6 +206,17 @@ const buildTrackingUrl = (order: OrderDTO, parcelNumber: string) => {
   )}`
 }
 
+const shouldSkipExistingShipment = (
+  metadata: Record<string, unknown>
+) => {
+  const existing = metadata[GLS_FULFILLMENT_METADATA_KEY]
+  if (!existing) {
+    return false
+  }
+
+  return extractParcelNumbers(existing).length > 0
+}
+
 export async function POST(req: MedusaRequest, res: MedusaResponse) {
   const { fulfillment_id: fulfillmentId } = req.params
 
@@ -291,7 +302,7 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
   }
 
   const metadata = extractMetadata(fulfillment)
-  if (metadata[GLS_FULFILLMENT_METADATA_KEY]) {
+  if (shouldSkipExistingShipment(metadata)) {
     res.status(409).json({
       message: "GLS shipment already created for this fulfillment.",
     })
