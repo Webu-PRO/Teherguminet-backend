@@ -281,5 +281,5 @@ export default async function tomketFulfillmentCreated({
 }
 
 export const config: SubscriberConfig = {
-  event: "fulfillment.created",
+  event: "order.fulfillment_created",
 }
