@@ -433,14 +433,14 @@ export async function DELETE(req: MedusaRequest, res: MedusaResponse) {
     return
   }
 
+  const parcelNumbers = readGlsParcelNumbers(
+    metadata,
+    fulfillment.labels
+  )
   const parcelIds = readGlsParcelIds(metadata)
   let resolvedParcelIds = parcelIds
 
   if (!resolvedParcelIds.length) {
-    const parcelNumbers = readGlsParcelNumbers(
-      metadata,
-      fulfillment.labels
-    )
     if (!parcelNumbers.length) {
       res.status(400).json({
         message:
@@ -520,6 +520,25 @@ export async function DELETE(req: MedusaRequest, res: MedusaResponse) {
     const result = await deleteGlsLabels(resolvedParcelIds, config)
     const glsErrors = extractGlsErrorDescriptions(result.response)
 
+    const existingLabels = Array.isArray(fulfillment.labels)
+      ? fulfillment.labels
+      : []
+    const numbersToRemove = new Set(
+      parcelNumbers.map((value) => value.trim())
+    )
+    const labelsToKeep = numbersToRemove.size
+      ? existingLabels.filter((label) => {
+          const number = label?.tracking_number
+          if (!number) {
+            return true
+          }
+          return !numbersToRemove.has(number.trim())
+        })
+      : []
+    const labelPayload = existingLabels.length
+      ? labelsToKeep.map((label) => ({ id: label.id }))
+      : undefined
+
     await fulfillmentModuleService.updateFulfillment(fulfillment.id, {
       metadata: {
         ...metadata,
@@ -534,6 +553,7 @@ export async function DELETE(req: MedusaRequest, res: MedusaResponse) {
           delete_response: result.response,
         },
       },
+      ...(labelPayload ? { labels: labelPayload } : {}),
     })
 
     res.status(200).json({

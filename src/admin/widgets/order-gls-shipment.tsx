@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { defineWidgetConfig } from "@medusajs/admin-sdk"
-import { Button, Text, toast } from "@medusajs/ui"
+import { Button, StatusBadge, Text, toast } from "@medusajs/ui"
 
 type FulfillmentSummary = {
   id: string
@@ -242,6 +242,14 @@ const OrderGlsShipmentWidget = () => {
         ? "Shipment created"
         : "Pending label"
       : "Not created"
+  const statusColor: "red" | "green" | "orange" | "grey" =
+    isCancelled
+      ? "red"
+      : hasParcelNumbers
+        ? "green"
+        : hasShipment
+          ? "orange"
+          : "grey"
 
   const handleCreate = useCallback(async () => {
     if (!fulfillment) {
@@ -548,9 +556,7 @@ const OrderGlsShipmentWidget = () => {
         <Text size="small" weight="plus">
           GLS
         </Text>
-        <Text size="xsmall" className="text-ui-fg-subtle">
-          {statusLabel}
-        </Text>
+        <StatusBadge color={statusColor}>{statusLabel}</StatusBadge>
       </div>
       <div className="mt-3 flex flex-col gap-y-2">
         <Button
@@ -593,11 +599,6 @@ const OrderGlsShipmentWidget = () => {
         >
           Recreate GLS label
         </Button>
-        {isCancelled ? (
-          <Text size="xsmall" className="text-ui-fg-subtle">
-            GLS label cancelled
-          </Text>
-        ) : null}
         {parcelNumbers.length ? (
           <Text size="xsmall" className="text-ui-fg-subtle">
             Parcel: {parcelNumbers.join(", ")}
