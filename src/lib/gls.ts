@@ -38,6 +38,15 @@ type GlsService = {
   }
 }
 
+type GlsParcelProperty = {
+  Content: string
+  PackageType: number
+  Height: number
+  Length: number
+  Width: number
+  Weight: number
+}
+
 type GlsParcel = {
   ClientNumber: number
   ClientReference: string
@@ -49,6 +58,7 @@ type GlsParcel = {
   PickupAddress: GlsAddress
   DeliveryAddress: GlsAddress
   ServiceList?: GlsService[]
+  ParcelPropertyList?: GlsParcelProperty[]
 }
 
 type GlsLabelOptions = {
@@ -70,6 +80,13 @@ type GlsConfig = {
   pickupAddress: GlsAddress
   labelOptions?: GlsLabelOptions
   webshopEngine: string
+  parcelDefaults: {
+    weightKg?: number
+    lengthCm?: number
+    widthCm?: number
+    heightCm?: number
+    packageType?: number
+  }
 }
 
 export type GlsShipmentInput = {
@@ -142,6 +159,24 @@ const parseNumber = (value?: string | null) => {
 
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : undefined
+}
+
+const normalizeNumericValue = (value: unknown) => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : undefined
+  }
+
+  return undefined
+}
+
+const parsePositiveNumber = (value: unknown) => {
+  const parsed = normalizeNumericValue(value)
+  return parsed && parsed > 0 ? parsed : undefined
 }
 
 const parseBoolean = (value?: string | null) => {
@@ -328,6 +363,23 @@ export const resolveGlsConfig = (): {
       password,
       clientNumbers,
       webshopEngine,
+      parcelDefaults: {
+        weightKg: parsePositiveNumber(
+          process.env.GLS_PARCEL_WEIGHT_KG
+        ),
+        lengthCm: parsePositiveNumber(
+          process.env.GLS_PARCEL_LENGTH_CM
+        ),
+        widthCm: parsePositiveNumber(
+          process.env.GLS_PARCEL_WIDTH_CM
+        ),
+        heightCm: parsePositiveNumber(
+          process.env.GLS_PARCEL_HEIGHT_CM
+        ),
+        packageType: parsePositiveNumber(
+          process.env.GLS_PARCEL_PACKAGE_TYPE
+        ),
+      },
       passwordEncoding: resolvePasswordEncoding(
         process.env.GLS_PASSWORD_ENCODING,
         format
@@ -598,6 +650,89 @@ const buildParcelContent = (order: OrderDTO, reference: string) => {
   return base.length > 64 ? `${base.slice(0, 61)}...` : base
 }
 
+const resolveParcelWeight = (
+  input: GlsShipmentInput,
+  defaults: GlsConfig["parcelDefaults"]
+) => {
+  const metadata =
+    (input.order.metadata as Record<string, unknown> | null) ?? null
+
+  const candidates = [
+    input.fulfillment?.data
+      ? (input.fulfillment.data as Record<string, unknown>)
+          .total_weight_kg
+      : undefined,
+    input.fulfillment?.data
+      ? (input.fulfillment.data as Record<string, unknown>)
+          .total_weight
+      : undefined,
+    input.order.shipping_methods?.[0]?.data?.total_weight_kg,
+    input.order.shipping_methods?.[0]?.data?.total_weight,
+    metadata?.gls_weight_kg,
+    defaults.weightKg,
+  ]
+
+  for (const candidate of candidates) {
+    const parsed = parsePositiveNumber(candidate)
+    if (parsed) {
+      return parsed
+    }
+  }
+
+  return undefined
+}
+
+const resolveParcelDimensions = (
+  input: GlsShipmentInput,
+  defaults: GlsConfig["parcelDefaults"]
+) => {
+  const metadata =
+    (input.order.metadata as Record<string, unknown> | null) ?? null
+
+  const length =
+    parsePositiveNumber(metadata?.gls_length_cm) ??
+    defaults.lengthCm
+  const width =
+    parsePositiveNumber(metadata?.gls_width_cm) ?? defaults.widthCm
+  const height =
+    parsePositiveNumber(metadata?.gls_height_cm) ?? defaults.heightCm
+  const packageType =
+    parsePositiveNumber(metadata?.gls_package_type) ??
+    defaults.packageType
+
+  return {
+    length,
+    width,
+    height,
+    packageType,
+  }
+}
+
+const buildParcelPropertyList = (
+  input: GlsShipmentInput,
+  config: GlsConfig,
+  reference: string
+) => {
+  const weight = resolveParcelWeight(input, config.parcelDefaults)
+  const { length, width, height, packageType } =
+    resolveParcelDimensions(input, config.parcelDefaults)
+
+  if (!weight || !length || !width || !height || !packageType) {
+    return undefined
+  }
+
+  return [
+    {
+      Content: buildParcelContent(input.order, reference),
+      PackageType: packageType,
+      Height: height,
+      Length: length,
+      Width: width,
+      Weight: weight,
+    },
+  ]
+}
+
 const buildServiceList = (
   pickup?: GlsPickupPoint | null
 ): GlsService[] | undefined => {
@@ -633,6 +768,14 @@ export const buildGlsShipmentRequest = (
   }
 
   const reference = resolveOrderReference(input.order)
+  const parcelProperties = buildParcelPropertyList(
+    input,
+    config,
+    reference
+  )
+  const parcelCount = parcelProperties?.length
+    ? parcelProperties.length
+    : resolveParcelCount(input.order)
 
   return {
     ...buildGlsAuthPayload(config),
@@ -640,12 +783,15 @@ export const buildGlsShipmentRequest = (
       {
         ClientNumber: clientNumber,
         ClientReference: reference,
-        Count: resolveParcelCount(input.order),
+        Count: parcelCount,
         Content: buildParcelContent(input.order, reference),
         PickupDate: formatGlsDate(new Date()),
         PickupAddress: config.pickupAddress,
         DeliveryAddress: deliveryAddress,
         ServiceList: buildServiceList(input.pickup),
+        ...(parcelProperties
+          ? { ParcelPropertyList: parcelProperties }
+          : {}),
       },
     ],
     ...(config.labelOptions?.typeOfPrinter
