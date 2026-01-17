@@ -327,7 +327,11 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
 
   try {
     const { metadata: updatedOrderMetadata, updates } =
-      deriveGlsParcelMetadata(order, config.parcelDefaults)
+      deriveGlsParcelMetadata(
+        order,
+        config.parcelDefaults,
+        config.dimensionUnit
+      )
     if (Object.keys(updates).length) {
       order.metadata = updatedOrderMetadata
       await orderModuleService.updateOrders(order.id, {
