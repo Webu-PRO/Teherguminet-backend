@@ -69,6 +69,7 @@ type GlsConfig = {
   timeoutMs: number
   pickupAddress: GlsAddress
   labelOptions?: GlsLabelOptions
+  webshopEngine: string
 }
 
 export type GlsShipmentInput = {
@@ -250,6 +251,8 @@ export const resolveGlsConfig = (): {
   const pickupCity = normalizeString(process.env.GLS_PICKUP_CITY)
   const pickupZip = normalizeString(process.env.GLS_PICKUP_ZIP)
   const pickupCountry = normalizeString(process.env.GLS_PICKUP_COUNTRY_CODE)
+  const webshopEngine =
+    normalizeString(process.env.GLS_WEBSHOP_ENGINE) || "Medusa"
 
   if (!serviceName) {
     missing.push("GLS_API_SERVICE")
@@ -324,6 +327,7 @@ export const resolveGlsConfig = (): {
       username,
       password,
       clientNumbers,
+      webshopEngine,
       passwordEncoding: resolvePasswordEncoding(
         process.env.GLS_PASSWORD_ENCODING,
         format
@@ -488,6 +492,7 @@ const buildGlsAuthPayload = (config: GlsConfig) => {
       config.passwordEncoding
     ),
     ClientNumberList: config.clientNumbers,
+    WebshopEngine: config.webshopEngine,
   }
 }
 
