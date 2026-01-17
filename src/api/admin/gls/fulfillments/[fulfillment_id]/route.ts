@@ -6,6 +6,7 @@ import {
 import type {
   FulfillmentDTO,
   IFulfillmentModuleService,
+  IOrderModuleService,
   Logger,
   OrderDTO,
   OrderShippingMethodDTO,
@@ -14,6 +15,7 @@ import type {
 
 import {
   createGlsShipment,
+  deriveGlsParcelMetadata,
   isGlsShippingMethod,
   isGlsShippingOption,
   readGlsPickupFromMetadata,
@@ -229,6 +231,8 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
   const query = req.scope.resolve<Query>(ContainerRegistrationKeys.QUERY)
   const fulfillmentModuleService =
     req.scope.resolve<IFulfillmentModuleService>(Modules.FULFILLMENT)
+  const orderModuleService =
+    req.scope.resolve<IOrderModuleService>(Modules.ORDER)
 
   const { data: fulfillments } = await query.graph({
     entity: "fulfillment",
@@ -256,6 +260,10 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
       "order.currency_code",
       "order.total",
       "order.metadata",
+      "order.items.*",
+      "order.items.variant.*",
+      "order.items.variant.product.*",
+      "order.items.variant.inventory_items.inventory.*",
       "order.shipping_address.*",
       "order.billing_address.*",
       "order.shipping_methods.*",
@@ -318,6 +326,15 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
   }
 
   try {
+    const { metadata: updatedOrderMetadata, updates } =
+      deriveGlsParcelMetadata(order, config.parcelDefaults)
+    if (Object.keys(updates).length) {
+      order.metadata = updatedOrderMetadata
+      await orderModuleService.updateOrders(order.id, {
+        metadata: updatedOrderMetadata,
+      })
+    }
+
     const result = await createGlsShipment(
       {
         order,

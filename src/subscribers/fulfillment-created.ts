@@ -11,6 +11,7 @@ import type {
   FulfillmentDTO,
   IFulfillmentModuleService,
   INotificationModuleService,
+  IOrderModuleService,
   Logger,
   OrderDTO,
   OrderShippingMethodDTO,
@@ -20,6 +21,7 @@ import type {
 import { dispatchNotificationsIndividually } from "../lib/dispatch-notifications"
 import {
   createGlsShipment,
+  deriveGlsParcelMetadata,
   isGlsShippingOption,
   isGlsShippingMethod,
   readGlsPickupFromMetadata,
@@ -283,6 +285,8 @@ export default async function fulfillmentCreatedHandler({
     container.resolve<INotificationModuleService>(Modules.NOTIFICATION)
   const fulfillmentModuleService =
     container.resolve<IFulfillmentModuleService>(Modules.FULFILLMENT)
+  const orderModuleService =
+    container.resolve<IOrderModuleService>(Modules.ORDER)
 
   const { data: fulfillments } = await query.graph({
     entity: "fulfillment",
@@ -310,6 +314,10 @@ export default async function fulfillmentCreatedHandler({
       "order.currency_code",
       "order.total",
       "order.metadata",
+      "order.items.*",
+      "order.items.variant.*",
+      "order.items.variant.product.*",
+      "order.items.variant.inventory_items.inventory.*",
       "order.shipping_address.*",
       "order.billing_address.*",
       "order.shipping_methods.*",
@@ -398,6 +406,15 @@ export default async function fulfillmentCreatedHandler({
   }
 
   try {
+    const { metadata: updatedOrderMetadata, updates } =
+      deriveGlsParcelMetadata(order, config.parcelDefaults)
+    if (Object.keys(updates).length) {
+      order.metadata = updatedOrderMetadata
+      await orderModuleService.updateOrders(order.id, {
+        metadata: updatedOrderMetadata,
+      })
+    }
+
     const result = await createGlsShipment(
       {
         order,

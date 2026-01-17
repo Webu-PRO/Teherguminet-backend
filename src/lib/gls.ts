@@ -85,7 +85,7 @@ type GlsConfig = {
     lengthCm?: number
     widthCm?: number
     heightCm?: number
-    packageType?: number
+    packageType: number
   }
 }
 
@@ -376,9 +376,10 @@ export const resolveGlsConfig = (): {
         heightCm: parsePositiveNumber(
           process.env.GLS_PARCEL_HEIGHT_CM
         ),
-        packageType: parsePositiveNumber(
-          process.env.GLS_PARCEL_PACKAGE_TYPE
-        ),
+        packageType:
+          parsePositiveNumber(
+            process.env.GLS_PARCEL_PACKAGE_TYPE
+          ) ?? 1,
       },
       passwordEncoding: resolvePasswordEncoding(
         process.env.GLS_PASSWORD_ENCODING,
@@ -650,6 +651,170 @@ const buildParcelContent = (order: OrderDTO, reference: string) => {
   return base.length > 64 ? `${base.slice(0, 61)}...` : base
 }
 
+const resolveItemQuantity = (item: unknown) => {
+  const quantity =
+    typeof (item as { quantity?: unknown })?.quantity === "number"
+      ? (item as { quantity?: number }).quantity
+      : undefined
+  return quantity && quantity > 0 ? quantity : 0
+}
+
+const resolveItemCandidate = (item: unknown, key: string) => {
+  if (!item || typeof item !== "object") {
+    return undefined
+  }
+
+  const record = item as Record<string, unknown>
+  const variant = record.variant as Record<string, unknown> | null
+  const product =
+    (variant?.product as Record<string, unknown> | null) ?? null
+  const inventory =
+    (
+      (variant?.inventory_items as Array<Record<string, unknown>> | null)?.[0]
+        ?.inventory as Record<string, unknown> | null
+    ) ?? null
+  const metadata = record.metadata as Record<string, unknown> | null
+
+  return (
+    variant?.[key] ??
+    product?.[key] ??
+    inventory?.[key] ??
+    metadata?.[key] ??
+    metadata?.[`${key}_cm`] ??
+    metadata?.[`gls_${key}_cm`]
+  )
+}
+
+const resolveItemWeight = (item: unknown) => {
+  if (!item || typeof item !== "object") {
+    return undefined
+  }
+
+  const record = item as Record<string, unknown>
+  const variant = record.variant as Record<string, unknown> | null
+  const product =
+    (variant?.product as Record<string, unknown> | null) ?? null
+  const inventory =
+    (
+      (variant?.inventory_items as Array<Record<string, unknown>> | null)?.[0]
+        ?.inventory as Record<string, unknown> | null
+    ) ?? null
+  const metadata = record.metadata as Record<string, unknown> | null
+
+  return (
+    variant?.weight ??
+    product?.weight ??
+    inventory?.weight ??
+    metadata?.weight ??
+    metadata?.weight_kg ??
+    metadata?.gls_weight_kg
+  )
+}
+
+const computeTotalWeightKg = (order: OrderDTO) => {
+  const items = Array.isArray(order.items) ? order.items : []
+  let total = 0
+  let hasWeight = false
+
+  for (const item of items) {
+    const weight = parsePositiveNumber(resolveItemWeight(item))
+    if (!weight) {
+      continue
+    }
+
+    const quantity = resolveItemQuantity(item)
+    if (!quantity) {
+      continue
+    }
+
+    total += weight * quantity
+    hasWeight = true
+  }
+
+  return hasWeight ? total : undefined
+}
+
+const computeMaxDimension = (
+  order: OrderDTO,
+  key: "length" | "width" | "height"
+) => {
+  const items = Array.isArray(order.items) ? order.items : []
+  let maxValue: number | undefined
+
+  for (const item of items) {
+    const value = parsePositiveNumber(resolveItemCandidate(item, key))
+    if (!value) {
+      continue
+    }
+
+    if (!maxValue || value > maxValue) {
+      maxValue = value
+    }
+  }
+
+  return maxValue
+}
+
+export const deriveGlsParcelMetadata = (
+  order: OrderDTO,
+  defaults: GlsConfig["parcelDefaults"]
+) => {
+  const metadata =
+    (order.metadata as Record<string, unknown> | null) ?? {}
+  const updates: Record<string, unknown> = {}
+
+  const existingWeight = parsePositiveNumber(metadata.gls_weight_kg)
+  const computedWeight = computeTotalWeightKg(order)
+  const weight =
+    existingWeight ?? computedWeight ?? defaults.weightKg
+  if (!existingWeight && weight) {
+    updates.gls_weight_kg = weight
+  }
+
+  const existingLength = parsePositiveNumber(metadata.gls_length_cm)
+  const length =
+    defaults.lengthCm ??
+    existingLength ??
+    computeMaxDimension(order, "length")
+  if (
+    length &&
+    (existingLength === undefined || existingLength !== length)
+  ) {
+    updates.gls_length_cm = length
+  }
+
+  const existingWidth = parsePositiveNumber(metadata.gls_width_cm)
+  const width =
+    existingWidth ??
+    computeMaxDimension(order, "width") ??
+    defaults.widthCm
+  if (!existingWidth && width) {
+    updates.gls_width_cm = width
+  }
+
+  const existingHeight = parsePositiveNumber(metadata.gls_height_cm)
+  const height =
+    existingHeight ??
+    computeMaxDimension(order, "height") ??
+    defaults.heightCm
+  if (!existingHeight && height) {
+    updates.gls_height_cm = height
+  }
+
+  const existingPackageType = parsePositiveNumber(
+    metadata.gls_package_type
+  )
+  const packageType = existingPackageType ?? defaults.packageType
+  if (!existingPackageType && packageType) {
+    updates.gls_package_type = packageType
+  }
+
+  return {
+    metadata: { ...metadata, ...updates },
+    updates,
+  }
+}
+
 const resolveParcelWeight = (
   input: GlsShipmentInput,
   defaults: GlsConfig["parcelDefaults"]
@@ -668,6 +833,7 @@ const resolveParcelWeight = (
       : undefined,
     input.order.shipping_methods?.[0]?.data?.total_weight_kg,
     input.order.shipping_methods?.[0]?.data?.total_weight,
+    computeTotalWeightKg(input.order),
     metadata?.gls_weight_kg,
     defaults.weightKg,
   ]
@@ -690,12 +856,17 @@ const resolveParcelDimensions = (
     (input.order.metadata as Record<string, unknown> | null) ?? null
 
   const length =
+    defaults.lengthCm ??
     parsePositiveNumber(metadata?.gls_length_cm) ??
-    defaults.lengthCm
+    computeMaxDimension(input.order, "length")
   const width =
-    parsePositiveNumber(metadata?.gls_width_cm) ?? defaults.widthCm
+    parsePositiveNumber(metadata?.gls_width_cm) ??
+    computeMaxDimension(input.order, "width") ??
+    defaults.widthCm
   const height =
-    parsePositiveNumber(metadata?.gls_height_cm) ?? defaults.heightCm
+    parsePositiveNumber(metadata?.gls_height_cm) ??
+    computeMaxDimension(input.order, "height") ??
+    defaults.heightCm
   const packageType =
     parsePositiveNumber(metadata?.gls_package_type) ??
     defaults.packageType
