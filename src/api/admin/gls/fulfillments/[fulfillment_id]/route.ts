@@ -268,10 +268,17 @@ const readGlsParcelIds = (metadata: Record<string, unknown>) => {
   )
 }
 
-const readGlsParcelNumbers = (metadata: Record<string, unknown>) => {
+const readGlsParcelNumbers = (
+  metadata: Record<string, unknown>,
+  labels?: Array<{ tracking_number?: string | null } | null> | null
+) => {
   const shipment = metadata[GLS_FULFILLMENT_METADATA_KEY]
   if (!shipment || typeof shipment !== "object") {
-    return []
+    return Array.isArray(labels)
+      ? labels
+          .map((label) => label?.tracking_number)
+          .filter((value): value is string => Boolean(value))
+      : []
   }
 
   const numbers = (shipment as Record<string, unknown>).parcel_numbers
@@ -279,9 +286,19 @@ const readGlsParcelNumbers = (metadata: Record<string, unknown>) => {
     return []
   }
 
-  return numbers.filter(
+  const normalized = numbers.filter(
     (value): value is string => typeof value === "string"
   )
+
+  if (normalized.length) {
+    return normalized
+  }
+
+  return Array.isArray(labels)
+    ? labels
+        .map((label) => label?.tracking_number)
+        .filter((value): value is string => Boolean(value))
+    : []
 }
 
 const readGlsCancellation = (metadata: Record<string, unknown>) => {
@@ -362,6 +379,7 @@ export async function DELETE(req: MedusaRequest, res: MedusaResponse) {
       "provider_id",
       "shipping_option_id",
       "metadata",
+      "labels.*",
       "shipping_option.id",
       "shipping_option.name",
       "shipping_option.provider_id",
@@ -419,7 +437,10 @@ export async function DELETE(req: MedusaRequest, res: MedusaResponse) {
   let resolvedParcelIds = parcelIds
 
   if (!resolvedParcelIds.length) {
-    const parcelNumbers = readGlsParcelNumbers(metadata)
+    const parcelNumbers = readGlsParcelNumbers(
+      metadata,
+      fulfillment.labels
+    )
     if (!parcelNumbers.length) {
       res.status(400).json({
         message:

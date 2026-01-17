@@ -1166,7 +1166,12 @@ const normalizeParcelNumberValue = (value: unknown) => {
 
   if (typeof value === "string") {
     const trimmed = value.trim()
-    return trimmed ? trimmed : null
+    if (!trimmed) {
+      return null
+    }
+
+    const digitsOnly = trimmed.replace(/\D/g, "")
+    return digitsOnly ? digitsOnly : trimmed
   }
 
   return null
@@ -1222,13 +1227,20 @@ export const findParcelIdsByNumbers = (
   parcelNumbers: string[]
 ) => {
   const ids = new Set<number>()
-  const wanted = new Set(
+  const wantedExact = new Set(
     parcelNumbers
       .map((value) => normalizeParcelNumberValue(value))
       .filter((value): value is string => Boolean(value))
   )
+  const wantedTrimmed = new Set(
+    Array.from(wantedExact)
+      .map((value) =>
+        value.length > 1 ? value.slice(0, -1) : value
+      )
+      .filter(Boolean)
+  )
 
-  if (!wanted.size || !payload || typeof payload !== "object") {
+  if (!wantedExact.size || !payload || typeof payload !== "object") {
     return []
   }
 
@@ -1259,12 +1271,16 @@ export const findParcelIdsByNumbers = (
       normalizeParcelNumberValue(record.ParcelNumber)
     const idCandidate = normalizeParcelId(record.ParcelId)
 
-    if (
-      numberCandidate &&
-      idCandidate &&
-      wanted.has(numberCandidate)
-    ) {
-      ids.add(idCandidate)
+    if (numberCandidate && idCandidate) {
+      const matchesExact = wantedExact.has(numberCandidate)
+      const matchesTrimmed = wantedTrimmed.has(numberCandidate)
+      const matchesCandidateTrimmed =
+        numberCandidate.length > 1 &&
+        wantedExact.has(numberCandidate.slice(0, -1))
+
+      if (matchesExact || matchesTrimmed || matchesCandidateTrimmed) {
+        ids.add(idCandidate)
+      }
     }
 
     for (const value of Object.values(record)) {
