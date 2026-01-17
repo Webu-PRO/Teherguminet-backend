@@ -631,7 +631,36 @@ const resolveParcelCount = (order: OrderDTO) => {
     return Math.min(99, Math.round(rawCount))
   }
 
+  const computedCount = computeParcelCountFromItems(order)
+  if (computedCount) {
+    return computedCount
+  }
+
   return 1
+}
+
+const computeParcelCountFromItems = (order: OrderDTO) => {
+  const items = Array.isArray(order.items) ? order.items : []
+  let count = 0
+
+  for (const item of items) {
+    if (item?.requires_shipping === false) {
+      continue
+    }
+
+    const quantity =
+      typeof item?.quantity === "number" ? item.quantity : undefined
+
+    if (quantity && quantity > 0) {
+      count += quantity
+    }
+  }
+
+  if (!count) {
+    return undefined
+  }
+
+  return Math.min(99, Math.max(1, Math.round(count)))
 }
 
 const buildParcelContent = (order: OrderDTO, reference: string) => {
@@ -762,12 +791,30 @@ export const deriveGlsParcelMetadata = (
   const metadata =
     (order.metadata as Record<string, unknown> | null) ?? {}
   const updates: Record<string, unknown> = {}
+  const existingCount =
+    typeof metadata.gls_parcel_count === "number" &&
+    metadata.gls_parcel_count > 0
+      ? Math.min(99, Math.round(metadata.gls_parcel_count))
+      : undefined
+  const computedCount = computeParcelCountFromItems(order)
+  const parcelCount = existingCount ?? computedCount ?? 1
+
+  if (!existingCount && computedCount) {
+    updates.gls_parcel_count = parcelCount
+  }
 
   const existingWeight = parsePositiveNumber(metadata.gls_weight_kg)
   const computedWeight = computeTotalWeightKg(order)
   const weight =
-    existingWeight ?? computedWeight ?? defaults.weightKg
-  if (!existingWeight && weight) {
+    existingWeight ??
+    (computedWeight && parcelCount > 0
+      ? Number((computedWeight / parcelCount).toFixed(2))
+      : undefined) ??
+    defaults.weightKg
+  if (
+    weight &&
+    (existingWeight === undefined || existingWeight !== weight)
+  ) {
     updates.gls_weight_kg = weight
   }
 
@@ -815,12 +862,20 @@ export const deriveGlsParcelMetadata = (
   }
 }
 
-const resolveParcelWeight = (
+const resolveParcelWeightInfo = (
   input: GlsShipmentInput,
   defaults: GlsConfig["parcelDefaults"]
 ) => {
   const metadata =
     (input.order.metadata as Record<string, unknown> | null) ?? null
+
+  const explicitWeight =
+    parsePositiveNumber(metadata?.gls_weight_kg) ??
+    defaults.weightKg
+
+  if (explicitWeight) {
+    return { weight: explicitWeight, isExplicit: true }
+  }
 
   const candidates = [
     input.fulfillment?.data
@@ -834,14 +889,12 @@ const resolveParcelWeight = (
     input.order.shipping_methods?.[0]?.data?.total_weight_kg,
     input.order.shipping_methods?.[0]?.data?.total_weight,
     computeTotalWeightKg(input.order),
-    metadata?.gls_weight_kg,
-    defaults.weightKg,
   ]
 
   for (const candidate of candidates) {
     const parsed = parsePositiveNumber(candidate)
     if (parsed) {
-      return parsed
+      return { weight: parsed, isExplicit: false }
     }
   }
 
@@ -882,26 +935,39 @@ const resolveParcelDimensions = (
 const buildParcelPropertyList = (
   input: GlsShipmentInput,
   config: GlsConfig,
-  reference: string
+  reference: string,
+  parcelCount: number
 ) => {
-  const weight = resolveParcelWeight(input, config.parcelDefaults)
+  const weightInfo = resolveParcelWeightInfo(
+    input,
+    config.parcelDefaults
+  )
   const { length, width, height, packageType } =
     resolveParcelDimensions(input, config.parcelDefaults)
 
-  if (!weight || !length || !width || !height || !packageType) {
+  if (
+    !weightInfo ||
+    !length ||
+    !width ||
+    !height ||
+    !packageType
+  ) {
     return undefined
   }
 
-  return [
-    {
-      Content: buildParcelContent(input.order, reference),
-      PackageType: packageType,
-      Height: height,
-      Length: length,
-      Width: width,
-      Weight: weight,
-    },
-  ]
+  const weightPerParcel =
+    weightInfo.isExplicit || parcelCount <= 1
+      ? weightInfo.weight
+      : Number((weightInfo.weight / parcelCount).toFixed(2))
+
+  return Array.from({ length: parcelCount }, () => ({
+    Content: buildParcelContent(input.order, reference),
+    PackageType: packageType,
+    Height: height,
+    Length: length,
+    Width: width,
+    Weight: weightPerParcel,
+  }))
 }
 
 const buildServiceList = (
@@ -939,14 +1005,13 @@ export const buildGlsShipmentRequest = (
   }
 
   const reference = resolveOrderReference(input.order)
+  const parcelCount = resolveParcelCount(input.order)
   const parcelProperties = buildParcelPropertyList(
     input,
     config,
-    reference
+    reference,
+    parcelCount
   )
-  const parcelCount = parcelProperties?.length
-    ? parcelProperties.length
-    : resolveParcelCount(input.order)
 
   return {
     ...buildGlsAuthPayload(config),
