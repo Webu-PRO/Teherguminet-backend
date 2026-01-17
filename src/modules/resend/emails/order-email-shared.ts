@@ -55,7 +55,7 @@ export const DEFAULT_STOREFRONT_URL = "https://teherguminet.hu";
 export const CONTACT_EMAIL = "hello@teherguminet.hu";
 export const CONTACT_PHONE = "+36 1 234 5678";
 
-export const F1_RED = "#E10600";
+export const F1_RED = "#e10600";
 export const PANEL_BG = "rgba(20,20,22,0.92)";
 export const TEXT_LIGHT = "#F5F5F7";
 

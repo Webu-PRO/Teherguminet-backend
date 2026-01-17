@@ -61,6 +61,19 @@ const resolveShippingMethod = (
   return methods.length === 1 ? methods[0] : methods.at(-1) ?? null
 }
 
+const isPickupLike = (value?: string | null) => {
+  if (!value) {
+    return false
+  }
+
+  const normalized = value.toLowerCase()
+  return (
+    normalized.includes("pickup") ||
+    normalized.includes("csomagpont") ||
+    normalized.includes("parcelshop")
+  )
+}
+
 const extractMetadata = (
   fulfillment: FulfillmentDTO
 ): Record<string, unknown> => {
@@ -145,7 +158,15 @@ export default async function fulfillmentCreatedHandler({
   }
 
   const glsPickup = readGlsPickupFromMetadata(order.metadata)
-  if (!glsPickup) {
+  const pickupHint =
+    isPickupLike(shippingMethod?.name) ||
+    isPickupLike(fulfillment.shipping_option?.name) ||
+    isPickupLike(fulfillment.shipping_option?.type?.label) ||
+    isPickupLike(fulfillment.shipping_option?.type?.description)
+  if (!glsPickup && pickupHint) {
+    logger?.warn?.(
+      `GLS: missing pickup point for fulfillment ${fulfillment.id}`
+    )
     return
   }
 
@@ -167,7 +188,7 @@ export default async function fulfillmentCreatedHandler({
       {
         order,
         fulfillment,
-        pickup: glsPickup,
+        pickup: glsPickup ?? undefined,
       },
       config
     )

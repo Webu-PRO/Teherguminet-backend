@@ -17,6 +17,46 @@ export type GlsPickupPoint = {
   provider?: string
 }
 
+type GlsAddress = {
+  Name: string
+  Street: string
+  HouseNumber: string
+  HouseNumberInfo?: string
+  City: string
+  ZipCode: string
+  CountryIsoCode: string
+  ContactName?: string
+  ContactPhone?: string
+  ContactEmail?: string
+}
+
+type GlsService = {
+  Code: string
+  PSDParameter?: {
+    StringValue?: string
+    IntegerValue?: number
+  }
+}
+
+type GlsParcel = {
+  ClientNumber: number
+  ClientReference: string
+  Count?: number
+  CODAmount?: number
+  CODReference?: string
+  Content?: string
+  PickupDate?: string
+  PickupAddress: GlsAddress
+  DeliveryAddress: GlsAddress
+  ServiceList?: GlsService[]
+}
+
+type GlsLabelOptions = {
+  typeOfPrinter?: string
+  printPosition?: number
+  showPrintDialog?: boolean
+}
+
 type GlsConfig = {
   baseUrl: string
   serviceName: string
@@ -27,12 +67,14 @@ type GlsConfig = {
   clientNumbers: number[]
   passwordEncoding: "base64" | "array"
   timeoutMs: number
+  pickupAddress: GlsAddress
+  labelOptions?: GlsLabelOptions
 }
 
 export type GlsShipmentInput = {
   order: OrderDTO
   fulfillment: FulfillmentDTO
-  pickup: GlsPickupPoint
+  pickup?: GlsPickupPoint | null
 }
 
 export type GlsShipmentResult = {
@@ -81,6 +123,33 @@ const resolvePasswordEncoding = (value?: string | null) => {
   return value === "array" ? "array" : "base64"
 }
 
+const parseNumber = (value?: string | null) => {
+  if (!value) {
+    return undefined
+  }
+
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
+const parseBoolean = (value?: string | null) => {
+  if (!value) {
+    return undefined
+  }
+
+  const normalized = value.trim().toLowerCase()
+  if (normalized === "true") {
+    return true
+  }
+  if (normalized === "false") {
+    return false
+  }
+
+  return undefined
+}
+
+const formatGlsDate = (value: Date) => `/Date(${value.getTime()})/`
+
 const buildPasswordValue = (
   password: string,
   encoding: "base64" | "array"
@@ -98,6 +167,49 @@ const normalizeServiceName = (serviceName: string) =>
   serviceName.replace(/\.svc$/i, "")
 
 const normalizeBaseUrl = (baseUrl: string) => baseUrl.replace(/\/$/, "")
+
+const splitStreetAndHouseNumber = (value?: string | null) => {
+  const normalized = normalizeString(value)
+  if (!normalized) {
+    return {
+      street: "",
+      houseNumber: "",
+      houseNumberInfo: undefined,
+    }
+  }
+
+  const match =
+    normalized.match(/^(.+?)\s+(\d+)(.*)$/) ||
+    normalized.match(/^(\d+)\s+(.+)$/)
+
+  if (match) {
+    if (match.length === 4) {
+      const [, street, houseNumber, rest] = match
+      const houseNumberInfo = normalizeOptionalString(rest)
+
+      return {
+        street: normalizeString(street),
+        houseNumber,
+        houseNumberInfo,
+      }
+    }
+
+    if (match.length === 3) {
+      const [, houseNumber, street] = match
+      return {
+        street: normalizeString(street),
+        houseNumber,
+        houseNumberInfo: undefined,
+      }
+    }
+  }
+
+  return {
+    street: normalized,
+    houseNumber: "",
+    houseNumberInfo: undefined,
+  }
+}
 
 const buildEndpoint = (config: GlsConfig) => {
   const baseUrl = normalizeBaseUrl(config.baseUrl)
@@ -119,6 +231,14 @@ export const resolveGlsConfig = (): {
   const username = normalizeString(process.env.GLS_USERNAME)
   const password = normalizeString(process.env.GLS_PASSWORD)
   const clientNumbers = parseClientNumbers(process.env.GLS_CLIENT_NUMBERS)
+  const pickupName = normalizeString(process.env.GLS_PICKUP_NAME)
+  const pickupStreet = normalizeString(process.env.GLS_PICKUP_STREET)
+  const pickupHouseNumber = normalizeString(
+    process.env.GLS_PICKUP_HOUSE_NUMBER
+  )
+  const pickupCity = normalizeString(process.env.GLS_PICKUP_CITY)
+  const pickupZip = normalizeString(process.env.GLS_PICKUP_ZIP)
+  const pickupCountry = normalizeString(process.env.GLS_PICKUP_COUNTRY_CODE)
 
   if (!serviceName) {
     missing.push("GLS_API_SERVICE")
@@ -140,8 +260,44 @@ export const resolveGlsConfig = (): {
     missing.push("GLS_CLIENT_NUMBERS")
   }
 
+  if (!pickupName) {
+    missing.push("GLS_PICKUP_NAME")
+  }
+
+  if (!pickupStreet) {
+    missing.push("GLS_PICKUP_STREET")
+  }
+
+  if (!pickupHouseNumber) {
+    missing.push("GLS_PICKUP_HOUSE_NUMBER")
+  }
+
+  if (!pickupCity) {
+    missing.push("GLS_PICKUP_CITY")
+  }
+
+  if (!pickupZip) {
+    missing.push("GLS_PICKUP_ZIP")
+  }
+
+  if (!pickupCountry) {
+    missing.push("GLS_PICKUP_COUNTRY_CODE")
+  }
+
   if (missing.length) {
     return { missing }
+  }
+
+  const labelOptions: GlsLabelOptions = {
+    typeOfPrinter: normalizeOptionalString(
+      process.env.GLS_LABEL_PRINTER_TYPE
+    ),
+    printPosition: parseNumber(
+      process.env.GLS_LABEL_PRINT_POSITION
+    ),
+    showPrintDialog: parseBoolean(
+      process.env.GLS_LABEL_SHOW_PRINT_DIALOG
+    ),
   }
 
   return {
@@ -160,6 +316,28 @@ export const resolveGlsConfig = (): {
       ),
       timeoutMs:
         Number(process.env.GLS_API_TIMEOUT_MS) || DEFAULT_TIMEOUT_MS,
+      pickupAddress: {
+        Name: pickupName,
+        Street: pickupStreet,
+        HouseNumber: pickupHouseNumber,
+        HouseNumberInfo: normalizeOptionalString(
+          process.env.GLS_PICKUP_HOUSE_NUMBER_INFO
+        ),
+        City: pickupCity,
+        ZipCode: pickupZip,
+        CountryIsoCode: pickupCountry.toUpperCase(),
+        ContactName:
+          normalizeOptionalString(
+            process.env.GLS_PICKUP_CONTACT_NAME
+          ) || pickupName,
+        ContactPhone: normalizeOptionalString(
+          process.env.GLS_PICKUP_CONTACT_PHONE
+        ),
+        ContactEmail: normalizeOptionalString(
+          process.env.GLS_PICKUP_CONTACT_EMAIL
+        ),
+      },
+      labelOptions,
     },
   }
 }
@@ -299,44 +477,167 @@ const buildGlsAuthPayload = (config: GlsConfig) => {
   }
 }
 
-const buildRecipient = (order: OrderDTO) => {
+const resolveAddressName = (order: OrderDTO) => {
   const address = order.shipping_address
+  const company = normalizeOptionalString(address?.company)
+  const person = [
+    normalizeOptionalString(address?.first_name),
+    normalizeOptionalString(address?.last_name),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .trim()
+
+  return company || person || normalizeOptionalString(order.email) || "Customer"
+}
+
+const buildDeliveryAddress = (
+  order: OrderDTO
+): GlsAddress | null => {
+  const address = order.shipping_address
+  if (!address) {
+    return null
+  }
+
+  const { street, houseNumber, houseNumberInfo } =
+    splitStreetAndHouseNumber(address.address_1)
+
+  const fallbackHouseInfo = normalizeOptionalString(address.address_2)
+  const mergedHouseInfo = [houseNumberInfo, fallbackHouseInfo]
+    .filter(Boolean)
+    .join(" ")
+    .trim()
+
+  const name = resolveAddressName(order)
+  const city = normalizeOptionalString(address.city)
+  const zip = normalizeOptionalString(address.postal_code)
+  const country = normalizeOptionalString(
+    address.country_code?.toUpperCase()
+  )
+
+  if (
+    !name ||
+    !street ||
+    !houseNumber ||
+    !city ||
+    !zip ||
+    !country
+  ) {
+    return null
+  }
 
   return {
-    name: [
-      normalizeOptionalString(address?.first_name),
-      normalizeOptionalString(address?.last_name),
-    ]
-      .filter(Boolean)
-      .join(" ")
-      .trim(),
-    address_1: normalizeOptionalString(address?.address_1),
-    address_2: normalizeOptionalString(address?.address_2),
-    city: normalizeOptionalString(address?.city),
-    postal_code: normalizeOptionalString(address?.postal_code),
-    country_code: normalizeOptionalString(
-      address?.country_code?.toUpperCase()
-    ),
-    phone: normalizeOptionalString(address?.phone),
-    email: normalizeOptionalString(order.email),
+    Name: name,
+    Street: street,
+    HouseNumber: houseNumber,
+    HouseNumberInfo: mergedHouseInfo || undefined,
+    City: city,
+    ZipCode: zip,
+    CountryIsoCode: country,
+    ContactName: name,
+    ContactPhone: normalizeOptionalString(address.phone),
+    ContactEmail: normalizeOptionalString(order.email),
   }
+}
+
+const resolveOrderReference = (order: OrderDTO) => {
+  const displayId = order.display_id
+
+  if (Number.isFinite(displayId)) {
+    return `TG-${displayId.toString().padStart(6, "0")}`
+  }
+
+  return order.id
+}
+
+const resolveParcelCount = (order: OrderDTO) => {
+  const metadata =
+    (order.metadata as Record<string, unknown> | null) ?? null
+  const rawCount = metadata?.gls_parcel_count
+
+  if (typeof rawCount === "number" && rawCount > 0) {
+    return Math.min(99, Math.round(rawCount))
+  }
+
+  return 1
+}
+
+const buildParcelContent = (order: OrderDTO, reference: string) => {
+  const items = Array.isArray(order.items) ? order.items : []
+  const titles = items
+    .map((item) =>
+      normalizeOptionalString(
+        item.product_title ?? item.title ?? ""
+      )
+    )
+    .filter(Boolean)
+
+  const base = titles.length
+    ? titles.join(", ")
+    : `Order ${reference}`
+
+  return base.length > 64 ? `${base.slice(0, 61)}...` : base
+}
+
+const buildServiceList = (
+  pickup?: GlsPickupPoint | null
+): GlsService[] | undefined => {
+  const pickupId = pickup?.id?.trim()
+
+  if (!pickupId) {
+    return undefined
+  }
+
+  return [
+    {
+      Code: "PSD",
+      PSDParameter: {
+        StringValue: pickupId,
+      },
+    },
+  ]
 }
 
 export const buildGlsShipmentRequest = (
   input: GlsShipmentInput,
   config: GlsConfig
 ) => {
-  const recipient = buildRecipient(input.order)
+  const deliveryAddress = buildDeliveryAddress(input.order)
+
+  if (!deliveryAddress) {
+    throw new Error("GLS: missing or invalid delivery address")
+  }
+
+  const clientNumber = config.clientNumbers[0]
+  if (!clientNumber) {
+    throw new Error("GLS: missing client number")
+  }
+
+  const reference = resolveOrderReference(input.order)
 
   return {
     ...buildGlsAuthPayload(config),
-    // TODO: Map this payload to the GLS create shipment schema.
-    shipment: {
-      reference: input.order.display_id ?? input.order.id,
-      fulfillment_id: input.fulfillment.id,
-      pickup_point: input.pickup,
-      recipient,
-    },
+    ParcelList: [
+      {
+        ClientNumber: clientNumber,
+        ClientReference: reference,
+        Count: resolveParcelCount(input.order),
+        Content: buildParcelContent(input.order, reference),
+        PickupDate: formatGlsDate(new Date()),
+        PickupAddress: config.pickupAddress,
+        DeliveryAddress: deliveryAddress,
+        ServiceList: buildServiceList(input.pickup),
+      },
+    ],
+    ...(config.labelOptions?.typeOfPrinter
+      ? { TypeOfPrinter: config.labelOptions.typeOfPrinter }
+      : {}),
+    ...(typeof config.labelOptions?.printPosition === "number"
+      ? { PrintPosition: config.labelOptions.printPosition }
+      : {}),
+    ...(typeof config.labelOptions?.showPrintDialog === "boolean"
+      ? { ShowPrintDialog: config.labelOptions.showPrintDialog }
+      : {}),
   }
 }
 
@@ -348,6 +649,24 @@ const sanitizeRequest = (payload: Record<string, unknown>) => {
   const sanitized = { ...payload }
   if ("Password" in sanitized) {
     sanitized.Password = "***"
+  }
+
+  return sanitized
+}
+
+const sanitizeResponse = (payload: unknown) => {
+  if (!payload || typeof payload !== "object") {
+    return payload
+  }
+
+  const sanitized = { ...(payload as Record<string, unknown>) }
+
+  if ("Labels" in sanitized) {
+    sanitized.Labels = "***"
+  }
+
+  if ("labels" in sanitized) {
+    sanitized.labels = "***"
   }
 
   return sanitized
@@ -393,7 +712,7 @@ export const createGlsShipment = async (
 
     return {
       request: sanitizeRequest(request),
-      response: data,
+      response: sanitizeResponse(data),
     }
   } finally {
     clearTimeout(timeout)

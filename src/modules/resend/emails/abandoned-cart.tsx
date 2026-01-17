@@ -194,7 +194,7 @@ export const AbandonedCartEmail = ({
 
               <Button
                 href={recoverUrl}
-                style={{ backgroundColor: F1_RED }}
+                style={{ backgroundColor: F1_RED, color: "#ffffff" }}
                 className="mt-6 inline-block rounded-full px-8 py-3 text-[14px] font-semibold text-white no-underline"
               >
                 {lang.ctaLabel}
