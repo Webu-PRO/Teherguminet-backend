@@ -1,42 +1,48 @@
-import type {
-  SubscriberArgs,
-  SubscriberConfig,
-} from "@medusajs/framework"
+import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import {
   ContainerRegistrationKeys,
   Modules,
 } from "@medusajs/framework/utils"
 import type {
-  CreateNotificationDTO,
   FulfillmentDTO,
   IFulfillmentModuleService,
-  INotificationModuleService,
   Logger,
   OrderDTO,
   OrderShippingMethodDTO,
   Query,
 } from "@medusajs/types"
 
-import { dispatchNotificationsIndividually } from "../lib/dispatch-notifications"
 import {
   createGlsShipment,
-  isGlsShippingOption,
   isGlsShippingMethod,
+  isGlsShippingOption,
   readGlsPickupFromMetadata,
   resolveGlsConfig,
-} from "../lib/gls"
+} from "../../../../lib/gls"
 
-type FulfillmentEventPayload = {
-  id: string
+type FulfillmentWithOrder = FulfillmentDTO & {
+  order?: OrderDTO
+  shipping_option?: {
+    id?: string | null
+    name?: string | null
+    provider_id?: string | null
+    shipping_option_type_id?: string | null
+    type?: {
+      id?: string | null
+      code?: string | null
+      label?: string | null
+      description?: string | null
+    } | null
+    data?: Record<string, unknown> | null
+    metadata?: Record<string, unknown> | null
+  } | null
 }
 
 const GLS_FULFILLMENT_METADATA_KEY = "gls_shipment"
-const GLS_NOTIFICATION_TEMPLATE = "admin-ui"
-const GLS_NOTIFICATION_CHANNEL = "feed"
 
-const resolveLogger = (container: SubscriberArgs["container"]) => {
+const resolveLogger = (req: MedusaRequest) => {
   try {
-    return container.resolve<Logger>(ContainerRegistrationKeys.LOGGER)
+    return req.scope.resolve<Logger>(ContainerRegistrationKeys.LOGGER)
   } catch {
     return undefined
   }
@@ -64,14 +70,6 @@ const resolveShippingMethod = (
   }
 
   return methods.length === 1 ? methods[0] : methods.at(-1) ?? null
-}
-
-const resolveOrderLabel = (order: OrderDTO) => {
-  if (Number.isFinite(order.display_id)) {
-    return `#${order.display_id}`
-  }
-
-  return order.id
 }
 
 const isPickupLike = (value?: string | null) => {
@@ -208,70 +206,18 @@ const buildTrackingUrl = (order: OrderDTO, parcelNumber: string) => {
   )}`
 }
 
-const buildGlsNotification = ({
-  order,
-  fulfillmentId,
-  kind,
-  title,
-  description,
-}: {
-  order: OrderDTO
-  fulfillmentId: string
-  kind: string
-  title: string
-  description: string
-}): CreateNotificationDTO => ({
-  to: "",
-  channel: GLS_NOTIFICATION_CHANNEL,
-  template: GLS_NOTIFICATION_TEMPLATE,
-  data: {
-    title,
-    description,
-  },
-  trigger_type: `gls.${kind}`,
-  resource_id: order.id,
-  resource_type: "order",
-  idempotency_key: `gls-${kind}-${fulfillmentId}`,
-})
+export async function POST(req: MedusaRequest, res: MedusaResponse) {
+  const { fulfillment_id: fulfillmentId } = req.params
 
-const notifyGlsIssue = async (
-  notificationService: INotificationModuleService | undefined,
-  order: OrderDTO,
-  fulfillmentId: string,
-  kind: string,
-  title: string,
-  description: string,
-  logger?: Logger
-) => {
-  if (!notificationService) {
+  if (!fulfillmentId) {
+    res.status(400).json({ message: "Missing fulfillment id." })
     return
   }
 
-  await dispatchNotificationsIndividually(
-    notificationService,
-    [
-      buildGlsNotification({
-        order,
-        fulfillmentId,
-        kind,
-        title,
-        description,
-      }),
-    ],
-    logger
-  )
-}
-
-export default async function fulfillmentCreatedHandler({
-  event: { data },
-  container,
-}: SubscriberArgs<FulfillmentEventPayload>) {
-  const logger = resolveLogger(container)
-  const query = container.resolve<Query>(ContainerRegistrationKeys.QUERY)
-  const notificationModuleService =
-    container.resolve<INotificationModuleService>(Modules.NOTIFICATION)
+  const logger = resolveLogger(req)
+  const query = req.scope.resolve<Query>(ContainerRegistrationKeys.QUERY)
   const fulfillmentModuleService =
-    container.resolve<IFulfillmentModuleService>(Modules.FULFILLMENT)
+    req.scope.resolve<IFulfillmentModuleService>(Modules.FULFILLMENT)
 
   const { data: fulfillments } = await query.graph({
     entity: "fulfillment",
@@ -304,32 +250,16 @@ export default async function fulfillmentCreatedHandler({
       "order.shipping_methods.*",
     ],
     filters: {
-      id: data.id,
+      id: fulfillmentId,
     },
   })
 
-  const fulfillment = fulfillments?.[0] as FulfillmentDTO & {
-    order?: OrderDTO
-    shipping_option?: {
-      id?: string | null
-      name?: string | null
-      provider_id?: string | null
-      shipping_option_type_id?: string | null
-      type?: {
-        id?: string | null
-        code?: string | null
-        label?: string | null
-        description?: string | null
-      } | null
-      data?: Record<string, unknown> | null
-      metadata?: Record<string, unknown> | null
-    } | null
-  }
+  const fulfillment = fulfillments?.[0] as
+    | FulfillmentWithOrder
+    | undefined
 
   if (!fulfillment || !fulfillment.order) {
-    logger?.warn?.(
-      `GLS: fulfillment ${data.id} missing order relation`
-    )
+    res.status(404).json({ message: "Fulfillment not found." })
     return
   }
 
@@ -338,7 +268,11 @@ export default async function fulfillmentCreatedHandler({
   const matchesGls =
     isGlsShippingOption(fulfillment.shipping_option) ||
     isGlsShippingMethod(shippingMethod)
+
   if (!matchesGls) {
+    res.status(400).json({
+      message: "This fulfillment is not using a GLS shipping method.",
+    })
     return
   }
 
@@ -349,40 +283,26 @@ export default async function fulfillmentCreatedHandler({
     isPickupLike(fulfillment.shipping_option?.type?.label) ||
     isPickupLike(fulfillment.shipping_option?.type?.description)
   if (!glsPickup && pickupHint) {
-    await notifyGlsIssue(
-      notificationModuleService,
-      order,
-      fulfillment.id,
-      "missing-pickup",
-      "GLS shipment missing pickup point",
-      `Order ${resolveOrderLabel(order)} requires a GLS pickup point, but none was provided.`,
-      logger
-    )
-    logger?.warn?.(
-      `GLS: missing pickup point for fulfillment ${fulfillment.id}`
-    )
+    res.status(400).json({
+      message:
+        "GLS pickup point is missing for a pickup delivery option.",
+    })
     return
   }
 
   const metadata = extractMetadata(fulfillment)
   if (metadata[GLS_FULFILLMENT_METADATA_KEY]) {
+    res.status(409).json({
+      message: "GLS shipment already created for this fulfillment.",
+    })
     return
   }
 
   const { config, missing } = resolveGlsConfig()
   if (!config) {
-    await notifyGlsIssue(
-      notificationModuleService,
-      order,
-      fulfillment.id,
-      "missing-config",
-      "GLS configuration missing",
-      `Order ${resolveOrderLabel(order)} could not be sent to GLS. Missing config: ${missing.join(", ")}.`,
-      logger
-    )
-    logger?.warn?.(
-      `GLS: missing config (${missing.join(", ")})`
-    )
+    res.status(400).json({
+      message: `Missing GLS configuration: ${missing.join(", ")}.`,
+    })
     return
   }
 
@@ -397,19 +317,6 @@ export default async function fulfillmentCreatedHandler({
     )
 
     const glsErrors = extractGlsErrorDescriptions(result.response)
-    if (glsErrors.length) {
-      const preview = glsErrors.slice(0, 3).join("; ")
-      await notifyGlsIssue(
-        notificationModuleService,
-        order,
-        fulfillment.id,
-        "api-errors",
-        "GLS shipment returned errors",
-        `Order ${resolveOrderLabel(order)} was sent to GLS but returned errors: ${preview}`,
-        logger
-      )
-    }
-
     const parcelNumbers = extractParcelNumbers(result.response)
     const existingLabels = Array.isArray(fulfillment.labels)
       ? fulfillment.labels
@@ -449,27 +356,22 @@ export default async function fulfillmentCreatedHandler({
       },
       ...(labelPayload ? { labels: labelPayload } : {}),
     })
+
+    res.status(200).json({
+      status: glsErrors.length ? "warning" : "success",
+      parcel_numbers: parcelNumbers,
+      errors: glsErrors,
+    })
   } catch (error) {
-    const message =
-      error instanceof Error && error.message
-        ? error.message
-        : "Unknown error"
-    await notifyGlsIssue(
-      notificationModuleService,
-      order,
-      fulfillment.id,
-      "request-failed",
-      "GLS shipment failed",
-      `Order ${resolveOrderLabel(order)} failed to send to GLS: ${message}`,
-      logger
-    )
     logger?.error?.(
       `GLS: failed to create shipment for fulfillment ${fulfillment.id}`,
       error as Error
     )
+    res.status(500).json({
+      message:
+        error instanceof Error && error.message
+          ? error.message
+          : "GLS shipment failed.",
+    })
   }
-}
-
-export const config: SubscriberConfig = {
-  event: "order.fulfillment_created",
 }
