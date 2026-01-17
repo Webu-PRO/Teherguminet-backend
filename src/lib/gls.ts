@@ -119,8 +119,19 @@ const parseCsvValues = (value?: string) => {
     .filter(Boolean)
 }
 
-const resolvePasswordEncoding = (value?: string | null) => {
-  return value === "array" ? "array" : "base64"
+const resolvePasswordEncoding = (
+  value?: string | null,
+  format?: string
+) => {
+  if (value === "array" || value === "base64") {
+    return value
+  }
+
+  if (format?.toLowerCase() === "json") {
+    return "array"
+  }
+
+  return "base64"
 }
 
 const parseNumber = (value?: string | null) => {
@@ -288,6 +299,8 @@ export const resolveGlsConfig = (): {
     return { missing }
   }
 
+  const format =
+    normalizeString(process.env.GLS_API_FORMAT) || "json"
   const labelOptions: GlsLabelOptions = {
     typeOfPrinter: normalizeOptionalString(
       process.env.GLS_LABEL_PRINTER_TYPE
@@ -307,12 +320,13 @@ export const resolveGlsConfig = (): {
         "https://api.mygls.hu",
       serviceName,
       methodName,
-      format: normalizeString(process.env.GLS_API_FORMAT) || "json",
+      format,
       username,
       password,
       clientNumbers,
       passwordEncoding: resolvePasswordEncoding(
-        process.env.GLS_PASSWORD_ENCODING
+        process.env.GLS_PASSWORD_ENCODING,
+        format
       ),
       timeoutMs:
         Number(process.env.GLS_API_TIMEOUT_MS) || DEFAULT_TIMEOUT_MS,
