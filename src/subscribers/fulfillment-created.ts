@@ -518,5 +518,5 @@ export default async function fulfillmentCreatedHandler({
 }
 
 export const config: SubscriberConfig = {
-  event: "order.fulfillment_created",
+  event: ["order.fulfillment_created", "fulfillment.created"],
 }
