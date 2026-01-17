@@ -63,6 +63,30 @@ const parseParcelNumbers = (shipment: Record<string, unknown> | null) => {
   return numbers.filter((value): value is string => typeof value === "string")
 }
 
+const copyToClipboard = async (value: string) => {
+  if (!value) {
+    return
+  }
+
+  if (
+    typeof navigator !== "undefined" &&
+    navigator.clipboard?.writeText
+  ) {
+    await navigator.clipboard.writeText(value)
+    return
+  }
+
+  const textarea = document.createElement("textarea")
+  textarea.value = value
+  textarea.style.position = "fixed"
+  textarea.style.opacity = "0"
+  document.body.appendChild(textarea)
+  textarea.focus()
+  textarea.select()
+  document.execCommand("copy")
+  document.body.removeChild(textarea)
+}
+
 const fetchOrder = async (orderId: string) => {
   const params = new URLSearchParams({
     fields: "id,fulfillments.*",
@@ -108,11 +132,17 @@ const OrderGlsShipmentWidget = () => {
       const order = await fetchOrder(orderId)
       setFulfillment(pickGlsFulfillment(order.fulfillments))
     } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to load order."
       toast.error("GLS shipment", {
-        description:
-          error instanceof Error
-            ? error.message
-            : "Failed to load order.",
+        description: message,
+        action: {
+          label: "Copy",
+          altText: "Copy GLS error",
+          onClick: () => void copyToClipboard(message),
+        },
       })
     } finally {
       setLoading(false)
@@ -164,8 +194,14 @@ const OrderGlsShipmentWidget = () => {
         : ""
 
       if (Array.isArray(payload?.errors) && payload.errors.length) {
+        const errorText = payload.errors.join("; ")
         toast.warning("GLS returned errors", {
-          description: payload.errors.join("; "),
+          description: errorText,
+          action: {
+            label: "Copy",
+            altText: "Copy GLS error",
+            onClick: () => void copyToClipboard(errorText),
+          },
         })
       } else {
         toast.success("GLS shipment created", {
@@ -175,11 +211,17 @@ const OrderGlsShipmentWidget = () => {
 
       await loadOrder()
     } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "GLS shipment request failed."
       toast.error("GLS shipment", {
-        description:
-          error instanceof Error
-            ? error.message
-            : "GLS shipment request failed.",
+        description: message,
+        action: {
+          label: "Copy",
+          altText: "Copy GLS error",
+          onClick: () => void copyToClipboard(message),
+        },
       })
     } finally {
       setSubmitting(false)
