@@ -107,7 +107,7 @@ const updateOrderItemThumbnails = async (
 
   const updates = order.items
     .map((item) => {
-      const record = item as Record<string, unknown>
+      const record = item as unknown as Record<string, unknown>
       const thumbnail = resolveItemThumbnail(record)
       if (!thumbnail || !record.id) {
         return null
