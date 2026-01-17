@@ -41,13 +41,19 @@ const pickGlsFulfillment = (fulfillments?: FulfillmentSummary[] | null) => {
   )
 }
 
-const readGlsShipment = (metadata?: Record<string, unknown> | null) => {
+const readGlsShipment = (
+  metadata?: Record<string, unknown> | null
+) => {
   if (!metadata || typeof metadata !== "object") {
     return null
   }
 
   const shipment = metadata.gls_shipment
-  return shipment && typeof shipment === "object" ? shipment : null
+  if (!shipment || typeof shipment !== "object") {
+    return null
+  }
+
+  return shipment as Record<string, unknown>
 }
 
 const parseParcelNumbers = (shipment: Record<string, unknown> | null) => {
@@ -61,6 +67,49 @@ const parseParcelNumbers = (shipment: Record<string, unknown> | null) => {
   }
 
   return numbers.filter((value): value is string => typeof value === "string")
+}
+
+const parseParcelIds = (shipment: Record<string, unknown> | null) => {
+  if (!shipment) {
+    return []
+  }
+
+  const ids = shipment.parcel_ids
+  if (!Array.isArray(ids)) {
+    return []
+  }
+
+  return ids.filter(
+    (value): value is number =>
+      typeof value === "number" && Number.isFinite(value)
+  )
+}
+
+const readLabelBase64 = (shipment: Record<string, unknown> | null) => {
+  if (!shipment) {
+    return null
+  }
+
+  const value = shipment.label_base64
+  if (typeof value !== "string") {
+    return null
+  }
+
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return null
+  }
+
+  return trimmed
+}
+
+const readCancelledAt = (shipment: Record<string, unknown> | null) => {
+  if (!shipment) {
+    return null
+  }
+
+  const value = shipment.cancelled_at
+  return typeof value === "string" ? value : null
 }
 
 const copyToClipboard = async (value: string) => {
@@ -117,6 +166,9 @@ const OrderGlsShipmentWidget = () => {
     useState<FulfillmentSummary | null>(null)
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [downloading, setDownloading] = useState(false)
+  const [canceling, setCanceling] = useState(false)
+  const [recreating, setRecreating] = useState(false)
 
   useEffect(() => {
     setOrderId(resolveOrderId())
@@ -130,7 +182,7 @@ const OrderGlsShipmentWidget = () => {
     setLoading(true)
     try {
       const order = await fetchOrder(orderId)
-      setFulfillment(pickGlsFulfillment(order.fulfillments))
+      setFulfillment(pickGlsFulfillment(order.fulfillments) ?? null)
     } catch (error) {
       const message =
         error instanceof Error
@@ -161,9 +213,25 @@ const OrderGlsShipmentWidget = () => {
     () => parseParcelNumbers(shipment),
     [shipment]
   )
+  const parcelIds = useMemo(
+    () => parseParcelIds(shipment),
+    [shipment]
+  )
+  const labelBase64 = useMemo(
+    () => readLabelBase64(shipment),
+    [shipment]
+  )
+  const cancelledAt = useMemo(
+    () => readCancelledAt(shipment),
+    [shipment]
+  )
   const hasShipment = Boolean(shipment)
   const hasParcelNumbers = parcelNumbers.length > 0
-  const isLocked = hasShipment && hasParcelNumbers
+  const isCancelled = Boolean(cancelledAt)
+  const isLocked = hasShipment && hasParcelNumbers && !isCancelled
+  const hasLabel = Boolean(labelBase64) && !isCancelled
+  const canCancel = parcelIds.length > 0 && !isCancelled
+  const canRecreate = hasShipment && !recreating
 
   const handleCreate = useCallback(async () => {
     if (!fulfillment) {
@@ -228,6 +296,238 @@ const OrderGlsShipmentWidget = () => {
     }
   }, [fulfillment, loadOrder])
 
+  const handleDownload = useCallback(async () => {
+    if (!fulfillment) {
+      return
+    }
+
+    setDownloading(true)
+    try {
+      const response = await fetch(
+        `/admin/gls/fulfillments/${fulfillment.id}`,
+        {
+          credentials: "include",
+        }
+      )
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}))
+        const message =
+          payload?.message ??
+          "Failed to download the GLS label."
+        throw new Error(message)
+      }
+
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = `gls-label-${orderId ?? fulfillment.id}.pdf`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to download the GLS label."
+      toast.error("GLS label", {
+        description: message,
+        action: {
+          label: "Copy",
+          altText: "Copy GLS error",
+          onClick: () => void copyToClipboard(message),
+        },
+      })
+    } finally {
+      setDownloading(false)
+    }
+  }, [fulfillment, orderId])
+
+  const handleCancel = useCallback(async () => {
+    if (!fulfillment) {
+      return
+    }
+
+    if (
+      typeof window !== "undefined" &&
+      !window.confirm(
+        "Cancel GLS label? This will invalidate the label in GLS."
+      )
+    ) {
+      return
+    }
+
+    setCanceling(true)
+    try {
+      const response = await fetch(
+        `/admin/gls/fulfillments/${fulfillment.id}`,
+        {
+          method: "DELETE",
+          credentials: "include",
+        }
+      )
+
+      const payload = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        const message =
+          payload?.message ??
+          "Failed to cancel the GLS label."
+        throw new Error(message)
+      }
+
+      if (Array.isArray(payload?.errors) && payload.errors.length) {
+        const errorText = payload.errors.join("; ")
+        toast.warning("GLS cancellation returned errors", {
+          description: errorText,
+          action: {
+            label: "Copy",
+            altText: "Copy GLS error",
+            onClick: () => void copyToClipboard(errorText),
+          },
+        })
+      } else {
+        toast.success("GLS label cancelled")
+      }
+
+      await loadOrder()
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to cancel the GLS label."
+      toast.error("GLS label", {
+        description: message,
+        action: {
+          label: "Copy",
+          altText: "Copy GLS error",
+          onClick: () => void copyToClipboard(message),
+        },
+      })
+    } finally {
+      setCanceling(false)
+    }
+  }, [fulfillment, loadOrder])
+
+  const handleRecreate = useCallback(async () => {
+    if (!fulfillment) {
+      return
+    }
+
+    if (
+      typeof window !== "undefined" &&
+      !window.confirm(
+        "Recreate GLS label? This will cancel the current label and request a new one."
+      )
+    ) {
+      return
+    }
+
+    setRecreating(true)
+    try {
+      if (canCancel) {
+        const cancelResponse = await fetch(
+          `/admin/gls/fulfillments/${fulfillment.id}`,
+          {
+            method: "DELETE",
+            credentials: "include",
+          }
+        )
+
+        const cancelPayload = await cancelResponse
+          .json()
+          .catch(() => ({}))
+
+        if (!cancelResponse.ok) {
+          const message =
+            cancelPayload?.message ??
+            "Failed to cancel the GLS label."
+          throw new Error(message)
+        }
+
+        if (
+          Array.isArray(cancelPayload?.errors) &&
+          cancelPayload.errors.length
+        ) {
+          const errorText = cancelPayload.errors.join("; ")
+          toast.warning("GLS cancellation returned errors", {
+            description: errorText,
+            action: {
+              label: "Copy",
+              altText: "Copy GLS error",
+              onClick: () => void copyToClipboard(errorText),
+            },
+          })
+        }
+      } else if (hasShipment && !isCancelled) {
+        throw new Error(
+          "GLS parcel IDs are missing. Recreate is not possible for older labels."
+        )
+      }
+
+      const createResponse = await fetch(
+        `/admin/gls/fulfillments/${fulfillment.id}`,
+        {
+          method: "POST",
+          credentials: "include",
+        }
+      )
+
+      const createPayload = await createResponse
+        .json()
+        .catch(() => ({}))
+
+      if (!createResponse.ok) {
+        const message =
+          createPayload?.message ??
+          "GLS shipment request failed. Check the logs."
+        throw new Error(message)
+      }
+
+      if (
+        Array.isArray(createPayload?.errors) &&
+        createPayload.errors.length
+      ) {
+        const errorText = createPayload.errors.join("; ")
+        toast.warning("GLS returned errors", {
+          description: errorText,
+          action: {
+            label: "Copy",
+            altText: "Copy GLS error",
+            onClick: () => void copyToClipboard(errorText),
+          },
+        })
+      } else {
+        toast.success("GLS shipment recreated")
+      }
+
+      await loadOrder()
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to recreate the GLS label."
+      toast.error("GLS label", {
+        description: message,
+        action: {
+          label: "Copy",
+          altText: "Copy GLS error",
+          onClick: () => void copyToClipboard(message),
+        },
+      })
+    } finally {
+      setRecreating(false)
+    }
+  }, [
+    canCancel,
+    fulfillment,
+    hasShipment,
+    isCancelled,
+    loadOrder,
+  ])
+
   if (!orderId || loading || !fulfillment) {
     return null
   }
@@ -246,6 +546,36 @@ const OrderGlsShipmentWidget = () => {
       >
         {isLocked ? "GLS shipment created" : "Create GLS shipment"}
       </Button>
+      <Button
+        size="small"
+        variant="secondary"
+        onClick={handleDownload}
+        isLoading={downloading}
+        disabled={!hasLabel || downloading}
+      >
+        Download GLS label
+      </Button>
+      <Button
+        size="small"
+        variant="secondary"
+        onClick={handleCancel}
+        isLoading={canceling}
+        disabled={!canCancel}
+      >
+        Cancel GLS label
+      </Button>
+      <Button
+        size="small"
+        variant="secondary"
+        onClick={handleRecreate}
+        isLoading={recreating}
+        disabled={!canRecreate}
+      >
+        Recreate GLS label
+      </Button>
+      {isCancelled ? (
+        <Text size="xsmall">GLS label cancelled</Text>
+      ) : null}
       {parcelNumbers.length ? (
         <Text size="xsmall">Parcel: {parcelNumbers.join(", ")}</Text>
       ) : null}

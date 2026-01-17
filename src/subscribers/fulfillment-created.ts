@@ -272,6 +272,15 @@ const shouldSkipExistingShipment = (
     return false
   }
 
+  const cancelledAt =
+    typeof (existing as Record<string, unknown>)?.cancelled_at ===
+    "string"
+      ? (existing as Record<string, unknown>).cancelled_at
+      : undefined
+  if (cancelledAt) {
+    return false
+  }
+
   return extractParcelNumbers(existing).length > 0
 }
 
@@ -477,6 +486,12 @@ export default async function fulfillmentCreatedHandler({
           request: result.request,
           response: result.response,
           parcel_numbers: parcelNumbers,
+          ...(result.parcelIds?.length
+            ? { parcel_ids: result.parcelIds }
+            : {}),
+          ...(result.labelBase64
+            ? { label_base64: result.labelBase64 }
+            : {}),
         },
       },
       ...(labelPayload ? { labels: labelPayload } : {}),

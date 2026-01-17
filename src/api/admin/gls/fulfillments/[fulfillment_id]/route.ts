@@ -15,6 +15,7 @@ import type {
 
 import {
   createGlsShipment,
+  deleteGlsLabels,
   deriveGlsParcelMetadata,
   isGlsShippingMethod,
   isGlsShippingOption,
@@ -41,6 +42,7 @@ type FulfillmentWithOrder = FulfillmentDTO & {
 }
 
 const GLS_FULFILLMENT_METADATA_KEY = "gls_shipment"
+const GLS_LABEL_FILENAME_PREFIX = "gls-label"
 
 const resolveLogger = (req: MedusaRequest) => {
   try {
@@ -216,7 +218,236 @@ const shouldSkipExistingShipment = (
     return false
   }
 
+  const cancelledAt =
+    typeof (existing as Record<string, unknown>)?.cancelled_at ===
+    "string"
+      ? (existing as Record<string, unknown>).cancelled_at
+      : undefined
+  if (cancelledAt) {
+    return false
+  }
+
   return extractParcelNumbers(existing).length > 0
+}
+
+const readGlsLabel = (metadata: Record<string, unknown>) => {
+  const shipment = metadata[GLS_FULFILLMENT_METADATA_KEY]
+  if (!shipment || typeof shipment !== "object") {
+    return null
+  }
+
+  const label = (shipment as Record<string, unknown>).label_base64
+  if (typeof label !== "string") {
+    return null
+  }
+
+  const trimmed = label.trim()
+  if (!trimmed) {
+    return null
+  }
+
+  return trimmed.includes(",") ? trimmed.split(",").pop() ?? null : trimmed
+}
+
+const readGlsParcelIds = (metadata: Record<string, unknown>) => {
+  const shipment = metadata[GLS_FULFILLMENT_METADATA_KEY]
+  if (!shipment || typeof shipment !== "object") {
+    return []
+  }
+
+  const ids = (shipment as Record<string, unknown>).parcel_ids
+  if (!Array.isArray(ids)) {
+    return []
+  }
+
+  return ids.filter(
+    (value): value is number =>
+      typeof value === "number" && Number.isFinite(value)
+  )
+}
+
+const readGlsCancellation = (metadata: Record<string, unknown>) => {
+  const shipment = metadata[GLS_FULFILLMENT_METADATA_KEY]
+  if (!shipment || typeof shipment !== "object") {
+    return null
+  }
+
+  const cancelledAt = (shipment as Record<string, unknown>)
+    .cancelled_at
+  return typeof cancelledAt === "string" ? cancelledAt : null
+}
+
+export async function GET(req: MedusaRequest, res: MedusaResponse) {
+  const { fulfillment_id: fulfillmentId } = req.params
+
+  if (!fulfillmentId) {
+    res.status(400).json({ message: "Missing fulfillment id." })
+    return
+  }
+
+  const query = req.scope.resolve<Query>(ContainerRegistrationKeys.QUERY)
+  const { data: fulfillments } = await query.graph({
+    entity: "fulfillment",
+    fields: ["id", "metadata", "order.display_id"],
+    filters: {
+      id: fulfillmentId,
+    },
+  })
+
+  const fulfillment = fulfillments?.[0] as
+    | FulfillmentWithOrder
+    | undefined
+
+  if (!fulfillment) {
+    res.status(404).json({ message: "Fulfillment not found." })
+    return
+  }
+
+  const metadata = extractMetadata(fulfillment)
+  const labelBase64 = readGlsLabel(metadata)
+  if (!labelBase64) {
+    res.status(404).json({
+      message:
+        "GLS label not found for this fulfillment. Create the GLS shipment first.",
+    })
+    return
+  }
+
+  const filename = `${GLS_LABEL_FILENAME_PREFIX}-${fulfillment.order?.display_id ?? fulfillment.id}.pdf`
+  const buffer = Buffer.from(labelBase64, "base64")
+
+  res.setHeader("Content-Type", "application/pdf")
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="${filename}"`
+  )
+  res.status(200).send(buffer)
+}
+
+export async function DELETE(req: MedusaRequest, res: MedusaResponse) {
+  const { fulfillment_id: fulfillmentId } = req.params
+
+  if (!fulfillmentId) {
+    res.status(400).json({ message: "Missing fulfillment id." })
+    return
+  }
+
+  const logger = resolveLogger(req)
+  const query = req.scope.resolve<Query>(ContainerRegistrationKeys.QUERY)
+  const fulfillmentModuleService =
+    req.scope.resolve<IFulfillmentModuleService>(Modules.FULFILLMENT)
+
+  const { data: fulfillments } = await query.graph({
+    entity: "fulfillment",
+    fields: [
+      "id",
+      "provider_id",
+      "shipping_option_id",
+      "metadata",
+      "shipping_option.id",
+      "shipping_option.name",
+      "shipping_option.provider_id",
+      "shipping_option.shipping_option_type_id",
+      "shipping_option.type.id",
+      "shipping_option.type.code",
+      "shipping_option.type.label",
+      "shipping_option.type.description",
+      "shipping_option.data",
+      "shipping_option.metadata",
+      "order.id",
+      "order.display_id",
+      "order.shipping_methods.*",
+    ],
+    filters: {
+      id: fulfillmentId,
+    },
+  })
+
+  const fulfillment = fulfillments?.[0] as
+    | FulfillmentWithOrder
+    | undefined
+
+  if (!fulfillment || !fulfillment.order) {
+    res.status(404).json({ message: "Fulfillment not found." })
+    return
+  }
+
+  const metadata = extractMetadata(fulfillment)
+  const cancelledAt = readGlsCancellation(metadata)
+  if (cancelledAt) {
+    res.status(409).json({
+      message: "GLS label already cancelled for this fulfillment.",
+    })
+    return
+  }
+
+  const shippingMethod = resolveShippingMethod(
+    fulfillment.order,
+    fulfillment
+  )
+  const matchesGls =
+    isGlsShippingOption(fulfillment.shipping_option) ||
+    isGlsShippingMethod(shippingMethod)
+
+  if (!matchesGls) {
+    res.status(400).json({
+      message: "This fulfillment is not using a GLS shipping method.",
+    })
+    return
+  }
+
+  const parcelIds = readGlsParcelIds(metadata)
+  if (!parcelIds.length) {
+    res.status(400).json({
+      message:
+        "GLS parcel IDs are missing. Recreate the shipment to store parcel IDs before cancelling.",
+    })
+    return
+  }
+
+  const { config, missing } = resolveGlsConfig()
+  if (!config) {
+    res.status(400).json({
+      message: `Missing GLS configuration: ${missing.join(", ")}.`,
+    })
+    return
+  }
+
+  try {
+    const result = await deleteGlsLabels(parcelIds, config)
+    const glsErrors = extractGlsErrorDescriptions(result.response)
+
+    await fulfillmentModuleService.updateFulfillment(fulfillment.id, {
+      metadata: {
+        ...metadata,
+        [GLS_FULFILLMENT_METADATA_KEY]: {
+          ...(metadata[GLS_FULFILLMENT_METADATA_KEY] as Record<
+            string,
+            unknown
+          >),
+          cancelled_at: new Date().toISOString(),
+          delete_request: result.request,
+          delete_response: result.response,
+        },
+      },
+    })
+
+    res.status(200).json({
+      status: glsErrors.length ? "warning" : "success",
+      errors: glsErrors,
+    })
+  } catch (error) {
+    logger?.error?.(
+      `GLS: failed to cancel shipment for fulfillment ${fulfillment.id}`,
+      error as Error
+    )
+    res.status(500).json({
+      message:
+        error instanceof Error && error.message
+          ? error.message
+          : "GLS cancellation failed.",
+    })
+  }
 }
 
 export async function POST(req: MedusaRequest, res: MedusaResponse) {
@@ -384,6 +615,12 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
           request: result.request,
           response: result.response,
           parcel_numbers: parcelNumbers,
+          ...(result.parcelIds?.length
+            ? { parcel_ids: result.parcelIds }
+            : {}),
+          ...(result.labelBase64
+            ? { label_base64: result.labelBase64 }
+            : {}),
         },
       },
       ...(labelPayload ? { labels: labelPayload } : {}),

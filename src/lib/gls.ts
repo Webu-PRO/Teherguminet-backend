@@ -99,6 +99,8 @@ export type GlsShipmentInput = {
 export type GlsShipmentResult = {
   request: Record<string, unknown>
   response: unknown
+  labelBase64?: string
+  parcelIds?: number[]
 }
 
 const DEFAULT_TIMEOUT_MS = 15000
@@ -271,11 +273,16 @@ const splitStreetAndHouseNumber = (value?: string | null) => {
   }
 }
 
-const buildEndpoint = (config: GlsConfig) => {
+const buildEndpoint = (
+  config: GlsConfig,
+  methodOverride?: string
+) => {
   const baseUrl = normalizeBaseUrl(config.baseUrl)
   const serviceName = normalizeServiceName(config.serviceName)
   const format = config.format.replace(/^\//, "").trim()
-  const methodName = config.methodName.replace(/^\//, "").trim()
+  const methodName = (
+    methodOverride ?? config.methodName
+  ).replace(/^\//, "").trim()
 
   return `${baseUrl}/${serviceName}.svc/${format}/${methodName}`
 }
@@ -1143,12 +1150,184 @@ const sanitizeResponse = (payload: unknown) => {
   return sanitized
 }
 
+const normalizeParcelId = (value: unknown) => {
+  const parsed = normalizeNumericValue(value)
+  if (!parsed || parsed <= 0) {
+    return null
+  }
+
+  return Math.round(parsed)
+}
+
+export const extractParcelIds = (payload: unknown) => {
+  const ids = new Set<number>()
+
+  if (!payload || typeof payload !== "object") {
+    return []
+  }
+
+  const seen = new Set<object>()
+  const stack: unknown[] = [payload]
+
+  while (stack.length) {
+    const current = stack.pop()
+    if (!current || typeof current !== "object") {
+      continue
+    }
+
+    if (seen.has(current as object)) {
+      continue
+    }
+    seen.add(current as object)
+
+    if (Array.isArray(current)) {
+      for (const item of current) {
+        stack.push(item)
+      }
+      continue
+    }
+
+    const record = current as Record<string, unknown>
+    const candidate =
+      normalizeParcelId(record.ParcelId) ??
+      normalizeParcelId(record.parcelId)
+
+    if (candidate) {
+      ids.add(candidate)
+    }
+
+    for (const value of Object.values(record)) {
+      stack.push(value)
+    }
+  }
+
+  return Array.from(ids)
+}
+
+const coerceLabelValue = (value: unknown) => {
+  if (typeof value === "string") {
+    const trimmed = value.trim()
+    return trimmed ? trimmed : null
+  }
+
+  if (
+    Array.isArray(value) &&
+    value.every((entry) => typeof entry === "number")
+  ) {
+    return Buffer.from(value as number[]).toString("base64")
+  }
+
+  return null
+}
+
+const extractLabelBase64 = (payload: unknown) => {
+  if (!payload || typeof payload !== "object") {
+    return undefined
+  }
+
+  const seen = new Set<object>()
+  const stack: unknown[] = [payload]
+
+  while (stack.length) {
+    const current = stack.pop()
+    if (!current || typeof current !== "object") {
+      continue
+    }
+
+    if (seen.has(current as object)) {
+      continue
+    }
+    seen.add(current as object)
+
+    if (Array.isArray(current)) {
+      for (const item of current) {
+        stack.push(item)
+      }
+      continue
+    }
+
+    const record = current as Record<string, unknown>
+    for (const [key, value] of Object.entries(record)) {
+      if (key.toLowerCase() === "labels") {
+        const label = coerceLabelValue(value)
+        if (label) {
+          return label
+        }
+      }
+    }
+
+    for (const value of Object.values(record)) {
+      stack.push(value)
+    }
+  }
+
+  return undefined
+}
+
 export const createGlsShipment = async (
   input: GlsShipmentInput,
   config: GlsConfig
 ): Promise<GlsShipmentResult> => {
   const endpoint = buildEndpoint(config)
   const request = buildGlsShipmentRequest(input, config)
+
+  const controller = new AbortController()
+  const timeout = setTimeout(
+    () => controller.abort(),
+    config.timeoutMs
+  )
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(request),
+      signal: controller.signal,
+    })
+
+    const text = await response.text()
+    let data: unknown = text
+
+    try {
+      data = text ? JSON.parse(text) : null
+    } catch {
+      data = text
+    }
+
+    if (!response.ok) {
+      throw new Error(
+        `GLS API error (${response.status} ${response.statusText})`
+      )
+    }
+
+    const labelBase64 = extractLabelBase64(data) ?? undefined
+    const parcelIds = extractParcelIds(data)
+
+    return {
+      request: sanitizeRequest(request),
+      response: sanitizeResponse(data),
+      labelBase64,
+      parcelIds: parcelIds.length ? parcelIds : undefined,
+    }
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+export const deleteGlsLabels = async (
+  parcelIds: number[],
+  config: GlsConfig
+) => {
+  const methodName =
+    normalizeString(process.env.GLS_DELETE_LABEL_METHOD) ||
+    "DeleteLabels"
+  const endpoint = buildEndpoint(config, methodName)
+  const request = {
+    ...buildGlsAuthPayload(config),
+    ParcelIdList: parcelIds,
+  }
 
   const controller = new AbortController()
   const timeout = setTimeout(
