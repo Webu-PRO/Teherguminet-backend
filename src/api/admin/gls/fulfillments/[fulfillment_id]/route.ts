@@ -18,7 +18,7 @@ import {
   isGlsShippingOption,
   readGlsPickupFromMetadata,
   resolveGlsConfig,
-} from "../../../../lib/gls"
+} from "../../../../../lib/gls"
 
 type FulfillmentWithOrder = FulfillmentDTO & {
   order?: OrderDTO

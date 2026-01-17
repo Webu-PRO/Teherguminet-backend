@@ -19,8 +19,13 @@ const resolveOrderId = () => {
     return null
   }
 
-  const match = window.location.pathname.match(/\\/orders\\/([^/]+)/)
-  return match?.[1] ?? null
+  const parts = window.location.pathname.split("/orders/")
+  if (parts.length < 2) {
+    return null
+  }
+
+  const idPart = parts[1]?.split("/")[0]
+  return idPart || null
 }
 
 const isGlsProvider = (value?: string | null) =>
