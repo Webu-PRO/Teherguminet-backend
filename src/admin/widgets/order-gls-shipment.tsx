@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { defineWidgetConfig } from "@medusajs/admin-sdk"
-import { Button, StatusBadge, Text, toast } from "@medusajs/ui"
+import {
+  Button,
+  StatusBadge,
+  Text,
+  toast,
+  usePrompt,
+} from "@medusajs/ui"
 
 type FulfillmentSummary = {
   id: string
@@ -169,6 +175,7 @@ const OrderGlsShipmentWidget = () => {
   const [downloading, setDownloading] = useState(false)
   const [canceling, setCanceling] = useState(false)
   const [recreating, setRecreating] = useState(false)
+  const prompt = usePrompt()
 
   useEffect(() => {
     setOrderId(resolveOrderId())
@@ -368,12 +375,15 @@ const OrderGlsShipmentWidget = () => {
       return
     }
 
-    if (
-      typeof window !== "undefined" &&
-      !window.confirm(
-        "Cancel GLS label? This will invalidate the label in GLS."
-      )
-    ) {
+    const confirmed = await prompt({
+      title: "Cancel GLS label?",
+      description: "This will invalidate the label in GLS.",
+      variant: "danger",
+      confirmText: "Cancel label",
+      cancelText: "Keep label",
+    })
+
+    if (!confirmed) {
       return
     }
 
@@ -434,12 +444,16 @@ const OrderGlsShipmentWidget = () => {
       return
     }
 
-    if (
-      typeof window !== "undefined" &&
-      !window.confirm(
-        "Recreate GLS label? This will cancel the current label and request a new one."
-      )
-    ) {
+    const confirmed = await prompt({
+      title: "Recreate GLS label?",
+      description:
+        "This will cancel the current label and request a new one.",
+      variant: "confirmation",
+      confirmText: "Recreate label",
+      cancelText: "Cancel",
+    })
+
+    if (!confirmed) {
       return
     }
 

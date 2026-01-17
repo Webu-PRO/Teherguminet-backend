@@ -29,7 +29,9 @@ import {
 } from "../lib/gls"
 
 type FulfillmentEventPayload = {
-  id: string
+  id?: string
+  fulfillment_id?: string
+  order_id?: string
 }
 
 const GLS_FULFILLMENT_METADATA_KEY = "gls_shipment"
@@ -289,6 +291,12 @@ export default async function fulfillmentCreatedHandler({
   container,
 }: SubscriberArgs<FulfillmentEventPayload>) {
   const logger = resolveLogger(container)
+  const fulfillmentId = data.fulfillment_id ?? data.id
+
+  if (!fulfillmentId) {
+    logger?.warn?.("GLS: missing fulfillment id in event payload")
+    return
+  }
   const query = container.resolve<Query>(ContainerRegistrationKeys.QUERY)
   const notificationModuleService =
     container.resolve<INotificationModuleService>(Modules.NOTIFICATION)
@@ -332,7 +340,7 @@ export default async function fulfillmentCreatedHandler({
       "order.shipping_methods.*",
     ],
     filters: {
-      id: data.id,
+      id: fulfillmentId,
     },
   })
 
@@ -356,7 +364,7 @@ export default async function fulfillmentCreatedHandler({
 
   if (!fulfillment || !fulfillment.order) {
     logger?.warn?.(
-      `GLS: fulfillment ${data.id} missing order relation`
+      `GLS: fulfillment ${fulfillmentId} missing order relation`
     )
     return
   }
