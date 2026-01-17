@@ -19,6 +19,7 @@ import {
 import {
   CONTACT_EMAIL,
   CONTACT_PHONE,
+  F1_RED,
   buildOrderUrl,
   resolveCustomerName,
   resolveOrderId,
@@ -121,7 +122,7 @@ const styles = {
     marginTop: "18px",
   } as React.CSSProperties,
   cta: {
-    backgroundColor: "#111111",
+    backgroundColor: F1_RED,
     borderRadius: "999px",
     padding: "12px 18px",
     fontSize: "14px",

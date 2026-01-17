@@ -12,6 +12,7 @@ import {
   Section,
   Text,
 } from "@react-email/components";
+import { F1_RED } from "./order-email-shared";
 
 export type UserInvitedEmailProps = {
   invite_url: string;
@@ -162,7 +163,7 @@ const styles = {
     fontFamily: FONT_STACK,
   } as React.CSSProperties,
   cta: {
-    backgroundColor: "#111111",
+    backgroundColor: F1_RED,
     borderRadius: "999px",
     padding: "12px 18px",
     fontSize: "14px",

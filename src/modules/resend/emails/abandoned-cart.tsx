@@ -14,6 +14,7 @@ import {
   Text,
 } from "@react-email/components";
 import { LanguageCode, resolveLanguageFromHints } from "../email-language";
+import { F1_RED } from "./order-email-shared";
 
 export type AbandonedCartEmailProps = {
   customerName?: string | null;
@@ -193,7 +194,8 @@ export const AbandonedCartEmail = ({
 
               <Button
                 href={recoverUrl}
-                className="mt-6 inline-block rounded-full bg-[#111111] px-8 py-3 text-[14px] font-semibold text-white no-underline"
+                style={{ backgroundColor: F1_RED }}
+                className="mt-6 inline-block rounded-full px-8 py-3 text-[14px] font-semibold text-white no-underline"
               >
                 {lang.ctaLabel}
               </Button>

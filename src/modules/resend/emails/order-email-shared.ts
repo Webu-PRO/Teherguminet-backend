@@ -64,7 +64,7 @@ export const LANGUAGE_THEMES = {
     cardBackground:
       "linear-gradient(135deg, rgba(225,6,0,0.32) 0%, rgba(12,12,15,0.92) 70%)",
     itemBackground: "rgba(225,6,0,0.12)",
-    ctaBackground: "#F75757",
+    ctaBackground: F1_RED,
     ctaShadow: "0 10px 24px rgba(225,6,0,0.45)",
     tagColor: "rgba(246,214,214,0.9)",
   },
@@ -72,8 +72,8 @@ export const LANGUAGE_THEMES = {
     cardBackground:
       "linear-gradient(135deg, rgba(20,120,255,0.32) 0%, rgba(12,12,15,0.92) 70%)",
     itemBackground: "rgba(32,140,255,0.12)",
-    ctaBackground: "#1C7ED6",
-    ctaShadow: "0 10px 24px rgba(28,126,214,0.45)",
+    ctaBackground: F1_RED,
+    ctaShadow: "0 10px 24px rgba(225,6,0,0.45)",
     tagColor: "rgba(210,232,255,0.92)",
   },
 } as const;

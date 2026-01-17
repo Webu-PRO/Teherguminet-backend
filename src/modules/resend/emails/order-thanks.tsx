@@ -16,6 +16,7 @@ import { LanguageCode, resolveLanguageFromOrder } from "../email-language";
 import {
   CONTACT_EMAIL,
   CONTACT_PHONE,
+  F1_RED,
   LANGUAGE_THEMES,
   buildOrderUrl,
   formatAmount,
@@ -185,7 +186,7 @@ const styles = {
     marginTop: "18px",
   } as React.CSSProperties,
   cta: {
-    backgroundColor: "#111111",
+    backgroundColor: F1_RED,
     borderRadius: "999px",
     padding: "12px 18px",
     fontSize: "14px",

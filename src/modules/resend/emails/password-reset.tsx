@@ -11,7 +11,7 @@ import {
   Section,
   Text,
 } from "@react-email/components";
-import { CONTACT_EMAIL, CONTACT_PHONE } from "./order-email-shared";
+import { CONTACT_EMAIL, CONTACT_PHONE, F1_RED } from "./order-email-shared";
 
 export type PasswordResetEmailProps = {
   reset_url: string;
@@ -165,7 +165,7 @@ const styles = {
     marginTop: "14px",
   } as React.CSSProperties,
   cta: {
-    backgroundColor: "#111111",
+    backgroundColor: F1_RED,
     borderRadius: "999px",
     padding: "12px 18px",
     fontSize: "14px",
