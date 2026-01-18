@@ -48,6 +48,8 @@ type FulfillmentWithOrder = FulfillmentDTO & {
 
 const GLS_FULFILLMENT_METADATA_KEY = "gls_shipment"
 const GLS_LABEL_FILENAME_PREFIX = "gls-label"
+const GLS_NOTIFICATION_TEMPLATE = "admin-ui"
+const GLS_NOTIFICATION_CHANNEL = "feed"
 
 const resolveLogger = (req: MedusaRequest) => {
   try {
@@ -79,6 +81,14 @@ const resolveShippingMethod = (
   }
 
   return methods.length === 1 ? methods[0] : methods.at(-1) ?? null
+}
+
+const resolveOrderLabel = (order: OrderDTO) => {
+  if (Number.isFinite(order.display_id)) {
+    return `#${order.display_id}`
+  }
+
+  return order.id
 }
 
 const isPickupLike = (value?: string | null) => {
@@ -143,6 +153,38 @@ const extractGlsErrorDescriptions = (payload: unknown) => {
   }
 
   return descriptions
+}
+
+const notifyGlsCancellationIssue = async (
+  notificationService: INotificationModuleService | undefined,
+  order: OrderDTO,
+  fulfillmentId: string,
+  description: string,
+  logger?: Logger
+) => {
+  if (!notificationService) {
+    return
+  }
+
+  const notification: CreateNotificationDTO = {
+    to: "",
+    channel: GLS_NOTIFICATION_CHANNEL,
+    template: GLS_NOTIFICATION_TEMPLATE,
+    data: {
+      title: "GLS cancellation failed",
+      description,
+    },
+    trigger_type: "gls.cancel_failed",
+    resource_id: order.id,
+    resource_type: "order",
+    idempotency_key: `gls-cancel-failed-${fulfillmentId}`,
+  }
+
+  await dispatchNotificationsIndividually(
+    notificationService,
+    [notification],
+    logger
+  )
 }
 
 const normalizeParcelNumber = (value: unknown) => {
@@ -608,6 +650,7 @@ export async function DELETE(req: MedusaRequest, res: MedusaResponse) {
     return
   }
 
+  const orderLabel = resolveOrderLabel(fulfillment.order)
   const metadata = extractMetadata(fulfillment)
   const cancelledAt = readGlsCancellation(metadata)
   if (cancelledAt) {
@@ -731,12 +774,6 @@ export async function DELETE(req: MedusaRequest, res: MedusaResponse) {
     }
     const shouldMarkCancelled = errors.length === 0
 
-    const existingLabels = Array.isArray(fulfillment.labels)
-      ? fulfillment.labels
-      : []
-    const labelPayload =
-      shouldMarkCancelled && existingLabels.length ? [] : undefined
-
     await fulfillmentModuleService.updateFulfillment(fulfillment.id, {
       metadata: {
         ...metadata,
@@ -753,7 +790,6 @@ export async function DELETE(req: MedusaRequest, res: MedusaResponse) {
           delete_response: result.response,
         },
       },
-      ...(labelPayload ? { labels: labelPayload } : {}),
     })
 
     const email = fulfillment.order?.email?.trim()
@@ -778,6 +814,17 @@ export async function DELETE(req: MedusaRequest, res: MedusaResponse) {
       )
     }
 
+    if (errors.length) {
+      const preview = errors.slice(0, 3).join("; ")
+      await notifyGlsCancellationIssue(
+        notificationModuleService,
+        fulfillment.order,
+        fulfillment.id,
+        `Order ${orderLabel}: GLS cancellation returned errors: ${preview}`,
+        logger
+      )
+    }
+
     res.status(200).json({
       status: errors.length ? "warning" : "success",
       errors,
@@ -787,11 +834,19 @@ export async function DELETE(req: MedusaRequest, res: MedusaResponse) {
       `GLS: failed to cancel shipment for fulfillment ${fulfillment.id}`,
       error as Error
     )
+    const message =
+      error instanceof Error && error.message
+        ? error.message
+        : "GLS cancellation failed."
+    await notifyGlsCancellationIssue(
+      notificationModuleService,
+      fulfillment.order,
+      fulfillment.id,
+      `Order ${orderLabel}: GLS cancellation request failed: ${message}`,
+      logger
+    )
     res.status(500).json({
-      message:
-        error instanceof Error && error.message
-          ? error.message
-          : "GLS cancellation failed.",
+      message,
     })
   }
 }
