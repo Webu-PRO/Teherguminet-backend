@@ -37,6 +37,7 @@ type FulfillmentEventPayload = {
 const GLS_FULFILLMENT_METADATA_KEY = "gls_shipment"
 const GLS_NOTIFICATION_TEMPLATE = "admin-ui"
 const GLS_NOTIFICATION_CHANNEL = "feed"
+const GLS_CUSTOMER_TEMPLATE = "gls-shipment-created"
 
 const resolveLogger = (container: SubscriberArgs["container"]) => {
   try {
@@ -198,6 +199,20 @@ const extractParcelNumbers = (payload: unknown) => {
   }
 
   return Array.from(numbers)
+}
+
+const readCustomerNotifiedAt = (
+  existing?: Record<string, unknown> | null
+) => {
+  const value = existing?.customer_notified_at
+  return typeof value === "string" && value.trim() ? value : undefined
+}
+
+const readCancelledAt = (
+  existing?: Record<string, unknown> | null
+) => {
+  const value = existing?.cancelled_at
+  return typeof value === "string" && value.trim() ? value : undefined
 }
 
 const buildTrackingUrl = (order: OrderDTO, parcelNumber: string) => {
@@ -460,6 +475,14 @@ export default async function fulfillmentCreatedHandler({
     }
 
     const parcelNumbers = extractParcelNumbers(result.response)
+    const existingShipment = metadata[
+      GLS_FULFILLMENT_METADATA_KEY
+    ] as Record<string, unknown> | null
+    const shouldNotifyCustomer =
+      parcelNumbers.length > 0 &&
+      Boolean(order.email?.trim()) &&
+      (Boolean(readCancelledAt(existingShipment)) ||
+        !readCustomerNotifiedAt(existingShipment))
     const existingLabels = Array.isArray(fulfillment.labels)
       ? fulfillment.labels
       : []
@@ -486,24 +509,71 @@ export default async function fulfillmentCreatedHandler({
         ]
       : undefined
 
+    const shipmentMetadata = {
+      created_at: new Date().toISOString(),
+      request: result.request,
+      response: result.response,
+      parcel_numbers: parcelNumbers,
+      ...(result.parcelIds?.length
+        ? { parcel_ids: result.parcelIds }
+        : {}),
+      ...(result.labelBase64
+        ? { label_base64: result.labelBase64 }
+        : {}),
+    }
+
     await fulfillmentModuleService.updateFulfillment(fulfillment.id, {
       metadata: {
         ...metadata,
-        [GLS_FULFILLMENT_METADATA_KEY]: {
-          created_at: new Date().toISOString(),
-          request: result.request,
-          response: result.response,
-          parcel_numbers: parcelNumbers,
-          ...(result.parcelIds?.length
-            ? { parcel_ids: result.parcelIds }
-            : {}),
-          ...(result.labelBase64
-            ? { label_base64: result.labelBase64 }
-            : {}),
-        },
+        [GLS_FULFILLMENT_METADATA_KEY]: shipmentMetadata,
       },
       ...(labelPayload ? { labels: labelPayload } : {}),
     })
+
+    if (shouldNotifyCustomer && notificationModuleService) {
+      const email = order.email?.trim()
+      if (email) {
+        const notification: CreateNotificationDTO = {
+          to: email,
+          channel: "email",
+          template: GLS_CUSTOMER_TEMPLATE,
+          data: {
+            order,
+            parcelNumbers,
+          },
+          trigger_type: "gls.shipment_created",
+          resource_id: order.id,
+          resource_type: "order",
+        }
+
+        try {
+          await dispatchNotificationsIndividually(
+            notificationModuleService,
+            [notification],
+            logger
+          )
+
+          await fulfillmentModuleService.updateFulfillment(
+            fulfillment.id,
+            {
+              metadata: {
+                ...metadata,
+                [GLS_FULFILLMENT_METADATA_KEY]: {
+                  ...shipmentMetadata,
+                  customer_notified_at: new Date().toISOString(),
+                  customer_notified_parcels: parcelNumbers,
+                },
+              },
+            }
+          )
+        } catch (error) {
+          logger?.warn?.(
+            `GLS: failed to send customer email for fulfillment ${fulfillment.id}`
+          )
+          logger?.error?.(error as Error)
+        }
+      }
+    }
   } catch (error) {
     const message =
       error instanceof Error && error.message

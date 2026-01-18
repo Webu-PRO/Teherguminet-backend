@@ -4,8 +4,10 @@ import {
   Modules,
 } from "@medusajs/framework/utils"
 import type {
+  CreateNotificationDTO,
   FulfillmentDTO,
   IFulfillmentModuleService,
+  INotificationModuleService,
   IOrderModuleService,
   Logger,
   OrderDTO,
@@ -13,6 +15,7 @@ import type {
   Query,
 } from "@medusajs/types"
 
+import { dispatchNotificationsIndividually } from "../../../../../lib/dispatch-notifications"
 import {
   createGlsShipment,
   deleteGlsLabels,
@@ -371,6 +374,14 @@ export async function DELETE(req: MedusaRequest, res: MedusaResponse) {
   const query = req.scope.resolve<Query>(ContainerRegistrationKeys.QUERY)
   const fulfillmentModuleService =
     req.scope.resolve<IFulfillmentModuleService>(Modules.FULFILLMENT)
+  let notificationModuleService: INotificationModuleService | undefined
+  try {
+    notificationModuleService = req.scope.resolve<INotificationModuleService>(
+      Modules.NOTIFICATION
+    )
+  } catch {
+    notificationModuleService = undefined
+  }
 
   const { data: fulfillments } = await query.graph({
     entity: "fulfillment",
@@ -393,6 +404,12 @@ export async function DELETE(req: MedusaRequest, res: MedusaResponse) {
       "order.id",
       "order.display_id",
       "order.created_at",
+      "order.email",
+      "order.currency_code",
+      "order.metadata",
+      "order.shipping_address.*",
+      "order.billing_address.*",
+      "order.customer.*",
       "order.shipping_methods.*",
     ],
     filters: {
@@ -541,6 +558,28 @@ export async function DELETE(req: MedusaRequest, res: MedusaResponse) {
       },
       ...(labelPayload ? { labels: labelPayload } : {}),
     })
+
+    const email = fulfillment.order?.email?.trim()
+    if (email && notificationModuleService) {
+      const notification: CreateNotificationDTO = {
+        to: email,
+        channel: "email",
+        template: "gls-label-cancelled",
+        data: {
+          order: fulfillment.order,
+          parcelNumbers,
+        },
+        trigger_type: "gls.label_cancelled",
+        resource_id: fulfillment.order.id,
+        resource_type: "order",
+      }
+
+      await dispatchNotificationsIndividually(
+        notificationModuleService,
+        [notification],
+        logger
+      )
+    }
 
     res.status(200).json({
       status: glsErrors.length ? "warning" : "success",

@@ -39,6 +39,18 @@ import {
   type PasswordResetEmailProps,
 } from "./emails/password-reset";
 import {
+  GlsLabelCancelledEmail,
+  type GlsLabelCancelledEmailProps,
+} from "./emails/gls-label-cancelled";
+import {
+  GlsShipmentCreatedEmail,
+  type GlsShipmentCreatedEmailProps,
+} from "./emails/gls-shipment-created";
+import {
+  OrderItemsCancelledEmail,
+  type OrderItemsCancelledEmailProps,
+} from "./emails/order-items-cancelled";
+import {
   LanguageCode,
   resolveLanguageFromHints,
   resolveLanguageFromOrder,
@@ -70,6 +82,9 @@ enum Templates {
   USER_INVITED = "user-invited",
   ABANDONED_CART = "abandoned-cart",
   PASSWORD_RESET = "password-reset",
+  GLS_LABEL_CANCELLED = "gls-label-cancelled",
+  ORDER_ITEMS_CANCELLED = "order-items-cancelled",
+  GLS_SHIPMENT_CREATED = "gls-shipment-created",
 }
 
 type TemplateRenderer = (props: unknown) => ReactElement;
@@ -89,6 +104,12 @@ const templates: Partial<Record<Templates, TemplateRenderer>> = {
     AbandonedCartEmail(props as AbandonedCartEmailProps),
   [Templates.PASSWORD_RESET]: (props) =>
     PasswordResetEmail(props as PasswordResetEmailProps),
+  [Templates.GLS_LABEL_CANCELLED]: (props) =>
+    GlsLabelCancelledEmail(props as GlsLabelCancelledEmailProps),
+  [Templates.ORDER_ITEMS_CANCELLED]: (props) =>
+    OrderItemsCancelledEmail(props as OrderItemsCancelledEmailProps),
+  [Templates.GLS_SHIPMENT_CREATED]: (props) =>
+    GlsShipmentCreatedEmail(props as GlsShipmentCreatedEmailProps),
 };
 
 const BRAND_NAME = "Teherguminet.hu";
@@ -132,7 +153,10 @@ const resolveNotificationLanguage = (
   if (
     template === Templates.ORDER_PLACED ||
     template === Templates.ORDER_THANKS ||
-    template === Templates.ORDER_DELIVERED
+    template === Templates.ORDER_DELIVERED ||
+    template === Templates.GLS_LABEL_CANCELLED ||
+    template === Templates.ORDER_ITEMS_CANCELLED ||
+    template === Templates.GLS_SHIPMENT_CREATED
   ) {
     return resolveLanguageFromOrder(data?.order ?? data);
   }
@@ -284,6 +308,48 @@ class ResendNotificationProviderService extends AbstractNotificationProviderServ
           : `A kosarad még vár rád – ${BRAND_NAME}`;
       case Templates.PASSWORD_RESET:
         return `Reset your password – ${BRAND_NAME}`;
+      case Templates.GLS_LABEL_CANCELLED: {
+        const orderRef = resolveOrderReference(
+          (notification.data as any)?.order
+        );
+        if (language === "sk") {
+          return orderRef
+            ? `GLS štítok zrušený pre objednávku #${orderRef} – ${BRAND_NAME}`
+            : `GLS štítok zrušený – ${BRAND_NAME}`;
+        }
+
+        return orderRef
+          ? `GLS címke törölve a #${orderRef} rendeléshez – ${BRAND_NAME}`
+          : `GLS címke törölve – ${BRAND_NAME}`;
+      }
+      case Templates.ORDER_ITEMS_CANCELLED: {
+        const orderRef = resolveOrderReference(
+          (notification.data as any)?.order
+        );
+        if (language === "sk") {
+          return orderRef
+            ? `Zrušené položky v objednávke #${orderRef} – ${BRAND_NAME}`
+            : `Zrušené položky v objednávke – ${BRAND_NAME}`;
+        }
+
+        return orderRef
+          ? `Törölt tételek a #${orderRef} rendelésben – ${BRAND_NAME}`
+          : `Törölt tételek a rendelésben – ${BRAND_NAME}`;
+      }
+      case Templates.GLS_SHIPMENT_CREATED: {
+        const orderRef = resolveOrderReference(
+          (notification.data as any)?.order
+        );
+        if (language === "sk") {
+          return orderRef
+            ? `GLS zásielka vytvorená #${orderRef} – ${BRAND_NAME}`
+            : `GLS zásielka vytvorená – ${BRAND_NAME}`;
+        }
+
+        return orderRef
+          ? `GLS csomag létrehozva a #${orderRef} rendeléshez – ${BRAND_NAME}`
+          : `GLS csomag létrehozva – ${BRAND_NAME}`;
+      }
       default:
         return `New message from ${BRAND_NAME}`;
     }
