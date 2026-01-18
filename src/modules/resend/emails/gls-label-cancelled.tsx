@@ -697,7 +697,7 @@ export const GlsLabelCancelledEmail = ({
                           verticalAlign: "middle",
                         }}
                       >
-                        <Link href={orderUrl} style={styles.brandWrap}>
+                        <div style={styles.brandWrap}>
                           <table
                             role="presentation"
                             style={{ borderCollapse: "collapse" }}
@@ -724,7 +724,7 @@ export const GlsLabelCancelledEmail = ({
                               </tr>
                             </tbody>
                           </table>
-                        </Link>
+                        </div>
                       </td>
 
                       <td

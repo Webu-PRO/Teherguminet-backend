@@ -1,4 +1,5 @@
 import { loadEnv, defineConfig } from "@medusajs/utils";
+import path from "path";
 
 const DEFAULT_STORE_CORS = [
   "http://localhost:8000",
@@ -31,6 +32,15 @@ const formatCors = (value: string | undefined, defaults: string[]) => {
   return Array.from(new Set(defaults)).join(",");
 };
 
+const normalizeAdminPath = (value?: string) => {
+  const trimmed = value?.trim();
+  if (trimmed) {
+    return (trimmed.startsWith("/") ? trimmed : `/${trimmed}`) as `/${string}`;
+  }
+
+  return "/app" as `/${string}`;
+};
+
 loadEnv(process.env.NODE_ENV || "development", process.cwd());
 
 const sharedRedisUrl = process.env.REDIS_URL;
@@ -52,7 +62,7 @@ const resolveOptionalNumber = (value: string | undefined) => {
   return Number.isFinite(parsed) ? parsed : undefined;
 };
 const s3DownloadDuration = resolveOptionalNumber(
-  process.env.S3_DOWNLOAD_FILE_DURATION
+  process.env.S3_DOWNLOAD_FILE_DURATION,
 );
 const s3AdditionalClientConfig =
   process.env.S3_CUSTOM_AGENT && process.env.S3_CUSTOM_AGENT.trim().length > 0
@@ -96,6 +106,11 @@ if (hasResendConfig) {
 }
 
 module.exports = defineConfig({
+  admin: {
+    path: normalizeAdminPath(process.env.ADMIN_PATH),
+    // @ts-expect-error Admin bundler supports sources but AdminOptions typing is stale.
+    sources: [path.resolve(process.cwd(), "src/admin")],
+  },
   projectConfig: {
     databaseUrl: process.env.DATABASE_URL,
     redisUrl: sharedRedisUrl,
@@ -205,7 +220,6 @@ module.exports = defineConfig({
       },
     },
   },
-  // @ts-expect-error Auth configuration isn't typed in the current Medusa release
   auth: {
     customer: {
       strategies: {
