@@ -881,17 +881,6 @@ export const GlsLabelCancelledEmail = ({
                 copy={copy}
               />
 
-              {/* Operational note */}
-              <Section style={{ marginTop: `${TOKENS.space.sectionGap}px` }}>
-                <Text style={styles.label}>Operational note</Text>
-                <Text style={styles.hint} className="muted">
-                  This email is designed for high deliverability across major
-                  clients. Keep content transactional and avoid heavy images.
-                  Any label re-issue is handled by internal fulfillment
-                  workflows; customers are notified only when a new shipment
-                  artifact is created.
-                </Text>
-              </Section>
             </Section>
           </Section>
 

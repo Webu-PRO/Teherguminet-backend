@@ -11,6 +11,7 @@ import {
 type FulfillmentSummary = {
   id: string
   provider_id?: string | null
+  created_at?: string | null
   metadata?: Record<string, unknown> | null
   labels?: Array<{ tracking_number?: string | null } | null> | null
 }
@@ -50,16 +51,6 @@ const resolveOrderId = () => {
 const isGlsProvider = (value?: string | null) =>
   typeof value === "string" && value.toLowerCase().includes("gls")
 
-const pickGlsFulfillment = (fulfillments?: FulfillmentSummary[] | null) => {
-  if (!Array.isArray(fulfillments)) {
-    return null
-  }
-
-  return fulfillments.find((fulfillment) =>
-    isGlsProvider(fulfillment.provider_id)
-  )
-}
-
 const readGlsShipment = (
   metadata?: Record<string, unknown> | null
 ) => {
@@ -73,6 +64,60 @@ const readGlsShipment = (
   }
 
   return shipment as Record<string, unknown>
+}
+
+const isShipmentCancelled = (
+  fulfillment: FulfillmentSummary
+) => {
+  const shipment = readGlsShipment(fulfillment.metadata)
+  if (!shipment) {
+    return false
+  }
+
+  return typeof shipment.cancelled_at === "string"
+}
+
+const parseCreatedAt = (value?: string | null) => {
+  if (!value) {
+    return null
+  }
+
+  const parsed = Date.parse(value)
+  return Number.isNaN(parsed) ? null : parsed
+}
+
+const pickGlsFulfillment = (fulfillments?: FulfillmentSummary[] | null) => {
+  if (!Array.isArray(fulfillments)) {
+    return null
+  }
+
+  const glsFulfillments = fulfillments
+    .map((fulfillment, index) => ({
+      fulfillment,
+      index,
+      createdAt: parseCreatedAt(fulfillment.created_at),
+    }))
+    .filter(({ fulfillment }) => isGlsProvider(fulfillment.provider_id))
+
+  if (!glsFulfillments.length) {
+    return null
+  }
+
+  glsFulfillments.sort((a, b) => {
+    const aTime = a.createdAt ?? 0
+    const bTime = b.createdAt ?? 0
+    if (aTime !== bTime) {
+      return bTime - aTime
+    }
+
+    return b.index - a.index
+  })
+
+  const active = glsFulfillments.find(
+    ({ fulfillment }) => !isShipmentCancelled(fulfillment)
+  )
+
+  return active?.fulfillment ?? glsFulfillments[0].fulfillment
 }
 
 const parseParcelNumbers = (shipment: Record<string, unknown> | null) => {
