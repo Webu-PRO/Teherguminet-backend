@@ -20,6 +20,19 @@ type OrderSummary = {
   fulfillments?: FulfillmentSummary[] | null
 }
 
+type ParcelStatusSummary = {
+  parcel_number: string
+  status?: {
+    code?: string
+    description?: string
+    date?: string
+    info?: string
+    depot_city?: string
+    depot_number?: string
+  }
+  errors?: string[]
+}
+
 const resolveOrderId = () => {
   if (typeof window === "undefined") {
     return null
@@ -73,6 +86,38 @@ const parseParcelNumbers = (shipment: Record<string, unknown> | null) => {
   }
 
   return numbers.filter((value): value is string => typeof value === "string")
+}
+
+const parsePreviousParcelNumbers = (
+  shipment: Record<string, unknown> | null
+) => {
+  if (!shipment) {
+    return []
+  }
+
+  const numbers = shipment.previous_parcel_numbers
+  if (!Array.isArray(numbers)) {
+    return []
+  }
+
+  const parsed: string[] = []
+  const seen = new Set<string>()
+
+  for (const value of numbers) {
+    if (typeof value !== "string") {
+      continue
+    }
+
+    const trimmed = value.trim()
+    if (!trimmed || seen.has(trimmed)) {
+      continue
+    }
+
+    seen.add(trimmed)
+    parsed.push(trimmed)
+  }
+
+  return parsed
 }
 
 const parseParcelIds = (shipment: Record<string, unknown> | null) => {
@@ -142,6 +187,37 @@ const copyToClipboard = async (value: string) => {
   document.body.removeChild(textarea)
 }
 
+const resolveParcelStatusColor = (value: string) => {
+  const normalized = value.toLowerCase()
+
+  if (
+    normalized.includes("return") ||
+    normalized.includes("cancel") ||
+    normalized.includes("fail") ||
+    normalized.includes("exception") ||
+    normalized.includes("unsuccess")
+  ) {
+    return "red"
+  }
+
+  if (
+    normalized.includes("delivered") ||
+    normalized.includes("success")
+  ) {
+    return "green"
+  }
+
+  if (
+    normalized.includes("transit") ||
+    normalized.includes("pickup") ||
+    normalized.includes("out for delivery")
+  ) {
+    return "orange"
+  }
+
+  return "grey"
+}
+
 const fetchOrder = async (orderId: string) => {
   const params = new URLSearchParams({
     fields: "id,fulfillments.*",
@@ -175,6 +251,11 @@ const OrderGlsShipmentWidget = () => {
   const [downloading, setDownloading] = useState(false)
   const [canceling, setCanceling] = useState(false)
   const [recreating, setRecreating] = useState(false)
+  const [statusLoading, setStatusLoading] = useState(false)
+  const [statusError, setStatusError] = useState<string | null>(null)
+  const [parcelStatuses, setParcelStatuses] = useState<
+    ParcelStatusSummary[]
+  >([])
   const prompt = usePrompt()
 
   useEffect(() => {
@@ -220,6 +301,19 @@ const OrderGlsShipmentWidget = () => {
     () => parseParcelNumbers(shipment),
     [shipment]
   )
+  const previousParcelNumbers = useMemo(() => {
+    const parsed = parsePreviousParcelNumbers(shipment)
+    if (!parsed.length) {
+      return []
+    }
+
+    if (!parcelNumbers.length) {
+      return parsed
+    }
+
+    const current = new Set(parcelNumbers)
+    return parsed.filter((value) => !current.has(value))
+  }, [parcelNumbers, shipment])
   const parcelIds = useMemo(
     () => parseParcelIds(shipment),
     [shipment]
@@ -232,15 +326,23 @@ const OrderGlsShipmentWidget = () => {
     () => readCancelledAt(shipment),
     [shipment]
   )
+  const parcelNumbersKey = useMemo(
+    () => parcelNumbers.join("|"),
+    [parcelNumbers]
+  )
   const hasShipment = Boolean(shipment)
   const hasParcelNumbers = parcelNumbers.length > 0
   const isCancelled = Boolean(cancelledAt)
+  const hasCreatedLabel =
+    hasParcelNumbers ||
+    parcelIds.length > 0 ||
+    Boolean(labelBase64)
   const isLocked = hasShipment && hasParcelNumbers && !isCancelled
   const hasLabel = Boolean(labelBase64) && !isCancelled
   const canCancel =
     (parcelIds.length > 0 || parcelNumbers.length > 0) &&
     !isCancelled
-  const canRecreate = hasShipment && !recreating
+  const canRecreate = hasCreatedLabel && !recreating
 
   const statusLabel = isCancelled
     ? "Cancelled"
@@ -257,6 +359,114 @@ const OrderGlsShipmentWidget = () => {
         : hasShipment
           ? "orange"
           : "grey"
+
+  const parcelStatusBadge = useMemo(() => {
+    if (isCancelled || !parcelNumbers.length) {
+      return null
+    }
+
+    if (statusLoading) {
+      return { label: "Fetching status", color: "orange" as const }
+    }
+
+    if (statusError) {
+      return { label: "Status unavailable", color: "red" as const }
+    }
+
+    if (!parcelStatuses.length) {
+      return { label: "Status pending", color: "grey" as const }
+    }
+
+    const labels = parcelStatuses
+      .map((entry) => entry.status?.description ?? entry.status?.code)
+      .filter((value): value is string => Boolean(value))
+      .map((value) => value.trim())
+      .filter(Boolean)
+    const uniqueLabels = Array.from(new Set(labels))
+    const total = parcelStatuses.length
+    const hasErrors = parcelStatuses.some(
+      (entry) => entry.errors?.length
+    )
+
+    if (!uniqueLabels.length) {
+      return {
+        label: hasErrors ? "Status unavailable" : "Status pending",
+        color: hasErrors ? ("red" as const) : ("grey" as const),
+      }
+    }
+
+    if (uniqueLabels.length === 1) {
+      const baseLabel = uniqueLabels[0]
+      const suffix = total > 1 ? ` (${total})` : ""
+      return {
+        label: `${baseLabel}${suffix}`,
+        color: resolveParcelStatusColor(baseLabel) as
+          | "red"
+          | "green"
+          | "orange"
+          | "grey",
+      }
+    }
+
+    return {
+      label: `Multiple statuses (${total})`,
+      color: "orange" as const,
+    }
+  }, [
+    isCancelled,
+    parcelNumbers.length,
+    parcelStatuses,
+    statusError,
+    statusLoading,
+  ])
+
+  const loadParcelStatuses = useCallback(async () => {
+    if (!fulfillment || !parcelNumbers.length || isCancelled) {
+      setParcelStatuses([])
+      setStatusError(null)
+      setStatusLoading(false)
+      return
+    }
+
+    setStatusLoading(true)
+    setStatusError(null)
+
+    try {
+      const response = await fetch(
+        `/admin/gls/fulfillments/${fulfillment.id}/statuses`,
+        {
+          credentials: "include",
+        }
+      )
+
+      const payload = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        const message =
+          payload?.message ??
+          "Failed to fetch GLS parcel statuses."
+        throw new Error(message)
+      }
+
+      const statuses = Array.isArray(payload?.statuses)
+        ? (payload.statuses as ParcelStatusSummary[])
+        : []
+      setParcelStatuses(statuses)
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to fetch GLS parcel statuses."
+      setParcelStatuses([])
+      setStatusError(message)
+    } finally {
+      setStatusLoading(false)
+    }
+  }, [fulfillment, isCancelled, parcelNumbers.length, parcelNumbersKey])
+
+  useEffect(() => {
+    void loadParcelStatuses()
+  }, [loadParcelStatuses])
 
   const handleCreate = useCallback(async () => {
     if (!fulfillment) {
@@ -492,6 +702,8 @@ const OrderGlsShipmentWidget = () => {
               onClick: () => void copyToClipboard(errorText),
             },
           })
+          await loadOrder()
+          return
         }
       } else if (hasShipment && !isCancelled) {
         throw new Error(
@@ -570,7 +782,14 @@ const OrderGlsShipmentWidget = () => {
         <Text size="small" weight="plus">
           GLS
         </Text>
-        <StatusBadge color={statusColor}>{statusLabel}</StatusBadge>
+        <div className="flex items-center gap-x-2">
+          {parcelStatusBadge ? (
+            <StatusBadge color={parcelStatusBadge.color}>
+              {parcelStatusBadge.label}
+            </StatusBadge>
+          ) : null}
+          <StatusBadge color={statusColor}>{statusLabel}</StatusBadge>
+        </div>
       </div>
       <div className="mt-3 flex flex-col gap-y-2">
         <Button
@@ -613,9 +832,15 @@ const OrderGlsShipmentWidget = () => {
         >
           Recreate GLS label
         </Button>
-        {!isCancelled && parcelNumbers.length ? (
+        {parcelNumbers.length ? (
           <Text size="xsmall" className="text-ui-fg-subtle">
-            Parcel: {parcelNumbers.join(", ")}
+            {isCancelled ? "Parcel (cancelled):" : "Parcel:"}{" "}
+            {parcelNumbers.join(", ")}
+          </Text>
+        ) : null}
+        {previousParcelNumbers.length ? (
+          <Text size="xsmall" className="text-ui-fg-subtle">
+            Previous parcel(s): {previousParcelNumbers.join(", ")}
           </Text>
         ) : null}
       </div>

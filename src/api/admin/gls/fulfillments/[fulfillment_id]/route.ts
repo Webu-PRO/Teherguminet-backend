@@ -271,6 +271,103 @@ const readGlsParcelIds = (metadata: Record<string, unknown>) => {
   )
 }
 
+const normalizeParcelId = (value: unknown) => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.round(value)
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) {
+      return Math.round(parsed)
+    }
+  }
+
+  return null
+}
+
+const collectDeleteSuccessIds = (
+  value: unknown,
+  ids: Set<number>
+) => {
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      collectDeleteSuccessIds(entry, ids)
+    }
+    return
+  }
+
+  if (typeof value === "number") {
+    ids.add(Math.round(value))
+    return
+  }
+
+  if (typeof value === "string") {
+    const parsed = normalizeParcelId(value)
+    if (parsed) {
+      ids.add(parsed)
+    }
+    return
+  }
+
+  if (!value || typeof value !== "object") {
+    return
+  }
+
+  const record = value as Record<string, unknown>
+  const candidate =
+    normalizeParcelId(record.ParcelId) ??
+    normalizeParcelId(record.parcelId)
+  if (candidate) {
+    ids.add(candidate)
+  }
+
+  for (const entry of Object.values(record)) {
+    collectDeleteSuccessIds(entry, ids)
+  }
+}
+
+const extractDeleteSuccessIds = (payload: unknown) => {
+  const ids = new Set<number>()
+
+  if (!payload || typeof payload !== "object") {
+    return []
+  }
+
+  const seen = new Set<object>()
+  const stack: unknown[] = [payload]
+
+  while (stack.length) {
+    const current = stack.pop()
+    if (!current || typeof current !== "object") {
+      continue
+    }
+
+    if (seen.has(current as object)) {
+      continue
+    }
+    seen.add(current as object)
+
+    if (Array.isArray(current)) {
+      for (const item of current) {
+        stack.push(item)
+      }
+      continue
+    }
+
+    const record = current as Record<string, unknown>
+    for (const [key, value] of Object.entries(record)) {
+      if (key.toLowerCase().includes("successfullydeleted")) {
+        collectDeleteSuccessIds(value, ids)
+      }
+
+      stack.push(value)
+    }
+  }
+
+  return Array.from(ids)
+}
+
 const readGlsParcelNumbers = (
   metadata: Record<string, unknown>,
   labels?: Array<{ tracking_number?: string | null } | null> | null
@@ -302,6 +399,91 @@ const readGlsParcelNumbers = (
         .map((label) => label?.tracking_number)
         .filter((value): value is string => Boolean(value))
     : []
+}
+
+const readShipmentParcelNumbers = (
+  shipment: Record<string, unknown> | null
+) => {
+  if (!shipment || typeof shipment !== "object") {
+    return []
+  }
+
+  const numbers = (shipment as Record<string, unknown>)
+    .parcel_numbers
+  if (!Array.isArray(numbers)) {
+    return []
+  }
+
+  const parsed: string[] = []
+  const seen = new Set<string>()
+
+  for (const value of numbers) {
+    if (typeof value !== "string") {
+      continue
+    }
+
+    const trimmed = value.trim()
+    if (!trimmed || seen.has(trimmed)) {
+      continue
+    }
+
+    seen.add(trimmed)
+    parsed.push(trimmed)
+  }
+
+  return parsed
+}
+
+const readPreviousParcelNumbers = (
+  shipment: Record<string, unknown> | null
+) => {
+  if (!shipment || typeof shipment !== "object") {
+    return []
+  }
+
+  const numbers = (shipment as Record<string, unknown>)
+    .previous_parcel_numbers
+  if (!Array.isArray(numbers)) {
+    return []
+  }
+
+  const parsed: string[] = []
+  const seen = new Set<string>()
+
+  for (const value of numbers) {
+    if (typeof value !== "string") {
+      continue
+    }
+
+    const trimmed = value.trim()
+    if (!trimmed || seen.has(trimmed)) {
+      continue
+    }
+
+    seen.add(trimmed)
+    parsed.push(trimmed)
+  }
+
+  return parsed
+}
+
+const mergeParcelNumbers = (
+  current: string[],
+  next: string[]
+) => {
+  const merged: string[] = []
+  const seen = new Set<string>()
+
+  for (const value of [...current, ...next]) {
+    if (seen.has(value)) {
+      continue
+    }
+
+    seen.add(value)
+    merged.push(value)
+  }
+
+  return merged
 }
 
 const readGlsCancellation = (metadata: Record<string, unknown>) => {
@@ -536,11 +718,24 @@ export async function DELETE(req: MedusaRequest, res: MedusaResponse) {
   try {
     const result = await deleteGlsLabels(resolvedParcelIds, config)
     const glsErrors = extractGlsErrorDescriptions(result.response)
+    const deletedIds = extractDeleteSuccessIds(result.response)
+    const deletedSet = new Set(deletedIds)
+    const missingDeletes = resolvedParcelIds.filter(
+      (id) => !deletedSet.has(id)
+    )
+    const errors = [...glsErrors]
+    if (missingDeletes.length) {
+      errors.push(
+        `GLS did not confirm cancellation for parcel IDs: ${missingDeletes.join(", ")}`
+      )
+    }
+    const shouldMarkCancelled = errors.length === 0
 
     const existingLabels = Array.isArray(fulfillment.labels)
       ? fulfillment.labels
       : []
-    const labelPayload = existingLabels.length ? [] : undefined
+    const labelPayload =
+      shouldMarkCancelled && existingLabels.length ? [] : undefined
 
     await fulfillmentModuleService.updateFulfillment(fulfillment.id, {
       metadata: {
@@ -551,7 +746,9 @@ export async function DELETE(req: MedusaRequest, res: MedusaResponse) {
             unknown
           >),
           parcel_ids: resolvedParcelIds,
-          cancelled_at: new Date().toISOString(),
+          ...(shouldMarkCancelled
+            ? { cancelled_at: new Date().toISOString() }
+            : {}),
           delete_request: result.request,
           delete_response: result.response,
         },
@@ -560,7 +757,7 @@ export async function DELETE(req: MedusaRequest, res: MedusaResponse) {
     })
 
     const email = fulfillment.order?.email?.trim()
-    if (email && notificationModuleService) {
+    if (shouldMarkCancelled && email && notificationModuleService) {
       const notification: CreateNotificationDTO = {
         to: email,
         channel: "email",
@@ -582,8 +779,8 @@ export async function DELETE(req: MedusaRequest, res: MedusaResponse) {
     }
 
     res.status(200).json({
-      status: glsErrors.length ? "warning" : "success",
-      errors: glsErrors,
+      status: errors.length ? "warning" : "success",
+      errors,
     })
   } catch (error) {
     logger?.error?.(
@@ -730,6 +927,16 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
 
     const glsErrors = extractGlsErrorDescriptions(result.response)
     const parcelNumbers = extractParcelNumbers(result.response)
+    const existingShipment = metadata[
+      GLS_FULFILLMENT_METADATA_KEY
+    ] as Record<string, unknown> | null
+    const previousParcelNumbers = mergeParcelNumbers(
+      readPreviousParcelNumbers(existingShipment),
+      readShipmentParcelNumbers(existingShipment)
+    )
+    const filteredPreviousNumbers = previousParcelNumbers.filter(
+      (number) => !parcelNumbers.includes(number)
+    )
     const existingLabels = Array.isArray(fulfillment.labels)
       ? fulfillment.labels
       : []
@@ -764,6 +971,9 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
           request: result.request,
           response: result.response,
           parcel_numbers: parcelNumbers,
+          ...(filteredPreviousNumbers.length
+            ? { previous_parcel_numbers: filteredPreviousNumbers }
+            : {}),
           ...(result.parcelIds?.length
             ? { parcel_ids: result.parcelIds }
             : {}),

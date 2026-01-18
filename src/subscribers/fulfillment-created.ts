@@ -201,6 +201,89 @@ const extractParcelNumbers = (payload: unknown) => {
   return Array.from(numbers)
 }
 
+const readShipmentParcelNumbers = (
+  shipment?: Record<string, unknown> | null
+) => {
+  if (!shipment || typeof shipment !== "object") {
+    return []
+  }
+
+  const numbers = shipment.parcel_numbers
+  if (!Array.isArray(numbers)) {
+    return []
+  }
+
+  const parsed: string[] = []
+  const seen = new Set<string>()
+
+  for (const value of numbers) {
+    if (typeof value !== "string") {
+      continue
+    }
+
+    const trimmed = value.trim()
+    if (!trimmed || seen.has(trimmed)) {
+      continue
+    }
+
+    seen.add(trimmed)
+    parsed.push(trimmed)
+  }
+
+  return parsed
+}
+
+const readPreviousParcelNumbers = (
+  shipment?: Record<string, unknown> | null
+) => {
+  if (!shipment || typeof shipment !== "object") {
+    return []
+  }
+
+  const numbers = shipment.previous_parcel_numbers
+  if (!Array.isArray(numbers)) {
+    return []
+  }
+
+  const parsed: string[] = []
+  const seen = new Set<string>()
+
+  for (const value of numbers) {
+    if (typeof value !== "string") {
+      continue
+    }
+
+    const trimmed = value.trim()
+    if (!trimmed || seen.has(trimmed)) {
+      continue
+    }
+
+    seen.add(trimmed)
+    parsed.push(trimmed)
+  }
+
+  return parsed
+}
+
+const mergeParcelNumbers = (
+  current: string[],
+  next: string[]
+) => {
+  const merged: string[] = []
+  const seen = new Set<string>()
+
+  for (const value of [...current, ...next]) {
+    if (seen.has(value)) {
+      continue
+    }
+
+    seen.add(value)
+    merged.push(value)
+  }
+
+  return merged
+}
+
 const readCustomerNotifiedAt = (
   existing?: Record<string, unknown> | null
 ) => {
@@ -478,6 +561,13 @@ export default async function fulfillmentCreatedHandler({
     const existingShipment = metadata[
       GLS_FULFILLMENT_METADATA_KEY
     ] as Record<string, unknown> | null
+    const previousParcelNumbers = mergeParcelNumbers(
+      readPreviousParcelNumbers(existingShipment),
+      readShipmentParcelNumbers(existingShipment)
+    )
+    const filteredPreviousNumbers = previousParcelNumbers.filter(
+      (number) => !parcelNumbers.includes(number)
+    )
     const shouldNotifyCustomer =
       parcelNumbers.length > 0 &&
       Boolean(order.email?.trim()) &&
@@ -514,6 +604,9 @@ export default async function fulfillmentCreatedHandler({
       request: result.request,
       response: result.response,
       parcel_numbers: parcelNumbers,
+      ...(filteredPreviousNumbers.length
+        ? { previous_parcel_numbers: filteredPreviousNumbers }
+        : {}),
       ...(result.parcelIds?.length
         ? { parcel_ids: result.parcelIds }
         : {}),

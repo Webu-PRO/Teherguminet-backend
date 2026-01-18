@@ -1474,6 +1474,85 @@ export const getGlsParcelList = async (
   }
 }
 
+export const getGlsParcelStatuses = async (
+  config: GlsConfig,
+  params: {
+    parcelNumber: string | number
+    returnPOD?: boolean
+    languageIsoCode?: string
+  }
+) => {
+  const methodName =
+    normalizeString(process.env.GLS_PARCEL_STATUS_METHOD) ||
+    "GetParcelStatuses"
+  const endpoint = buildEndpoint(config, methodName)
+  const normalizedParcelNumber = normalizeParcelNumberValue(
+    params.parcelNumber
+  )
+
+  if (!normalizedParcelNumber) {
+    throw new Error("GLS: missing parcel number")
+  }
+
+  const parcelNumber = Number(normalizedParcelNumber)
+  if (!Number.isFinite(parcelNumber)) {
+    throw new Error("GLS: invalid parcel number")
+  }
+
+  const request: Record<string, unknown> = {
+    ...buildGlsAuthPayload(config),
+    ParcelNumber: parcelNumber,
+  }
+
+  if (params.returnPOD === true) {
+    request.ReturnPOD = true
+  }
+
+  const language = normalizeString(params.languageIsoCode)
+  if (language) {
+    request.LanguageIsoCode = language.toUpperCase()
+  }
+
+  const controller = new AbortController()
+  const timeout = setTimeout(
+    () => controller.abort(),
+    config.timeoutMs
+  )
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(request),
+      signal: controller.signal,
+    })
+
+    const text = await response.text()
+    let data: unknown = text
+
+    try {
+      data = text ? JSON.parse(text) : null
+    } catch {
+      data = text
+    }
+
+    if (!response.ok) {
+      throw new Error(
+        `GLS API error (${response.status} ${response.statusText})`
+      )
+    }
+
+    return {
+      request: sanitizeRequest(request),
+      response: sanitizeResponse(data),
+    }
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
 export const deleteGlsLabels = async (
   parcelIds: number[],
   config: GlsConfig
