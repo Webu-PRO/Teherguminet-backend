@@ -390,7 +390,10 @@ const OrderGlsShipmentWidget = () => {
   const isLocked = hasShipment && hasParcelNumbers && !isCancelled
   const hasLabel = Boolean(labelBase64) && !isCancelled
   const canCancel =
-    (parcelIds.length > 0 || parcelNumbers.length > 0) &&
+    (parcelIds.length > 0 ||
+      parcelNumbers.length > 0 ||
+      previousParcelNumbers.length > 0 ||
+      hasShipment) &&
     !isCancelled
   const canRecreate = hasCreatedLabel && !recreating
 
@@ -823,6 +826,10 @@ const OrderGlsShipmentWidget = () => {
   ])
 
   const handleCancelByParcelNumber = useCallback(async () => {
+    if (!fulfillment) {
+      return
+    }
+
     const parcelNumber = cancelParcelNumber.trim()
     if (!parcelNumber) {
       toast.error("GLS cancel", {
@@ -846,7 +853,9 @@ const OrderGlsShipmentWidget = () => {
     setCancelByNumberLoading(true)
     try {
       const response = await fetch(
-        `/admin/gls/parcels/${encodeURIComponent(parcelNumber)}`,
+        `/admin/gls/parcels/${encodeURIComponent(parcelNumber)}?fulfillment_id=${encodeURIComponent(
+          fulfillment.id
+        )}`,
         {
           method: "DELETE",
           credentials: "include",
@@ -894,7 +903,7 @@ const OrderGlsShipmentWidget = () => {
     } finally {
       setCancelByNumberLoading(false)
     }
-  }, [cancelParcelNumber, loadOrder, prompt])
+  }, [cancelParcelNumber, fulfillment, loadOrder, prompt])
 
   if (!orderId || loading || !fulfillment) {
     return null

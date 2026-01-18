@@ -636,7 +636,7 @@ const buildDeliveryAddress = (
   }
 }
 
-const resolveOrderReference = (order: OrderDTO) => {
+export const resolveOrderReference = (order: OrderDTO) => {
   const displayId = order.display_id
 
   if (Number.isFinite(displayId)) {

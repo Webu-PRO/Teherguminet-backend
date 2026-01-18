@@ -25,6 +25,7 @@ import {
   isGlsShippingMethod,
   isGlsShippingOption,
   readGlsPickupFromMetadata,
+  resolveOrderReference,
   resolveGlsConfig,
 } from "../../../../../lib/gls"
 
@@ -313,6 +314,21 @@ const readGlsParcelIds = (metadata: Record<string, unknown>) => {
   )
 }
 
+const readClientReference = (metadata: Record<string, unknown>) => {
+  const shipment = metadata[GLS_FULFILLMENT_METADATA_KEY]
+  if (!shipment || typeof shipment !== "object") {
+    return null
+  }
+
+  const value = (shipment as Record<string, unknown>).client_reference
+  if (typeof value !== "string") {
+    return null
+  }
+
+  const trimmed = value.trim()
+  return trimmed ? trimmed : null
+}
+
 const normalizeParcelId = (value: unknown) => {
   if (typeof value === "number" && Number.isFinite(value)) {
     return Math.round(value)
@@ -326,6 +342,160 @@ const normalizeParcelId = (value: unknown) => {
   }
 
   return null
+}
+
+const normalizeClientReference = (value: unknown) => {
+  if (typeof value !== "string") {
+    return ""
+  }
+
+  return value.trim().toUpperCase()
+}
+
+const extractPrintDataInfoList = (payload: unknown) => {
+  const entries: Record<string, unknown>[] = []
+
+  if (!payload || typeof payload !== "object") {
+    return entries
+  }
+
+  const seen = new Set<object>()
+  const stack: unknown[] = [payload]
+
+  while (stack.length) {
+    const current = stack.pop()
+    if (!current || typeof current !== "object") {
+      continue
+    }
+
+    if (seen.has(current as object)) {
+      continue
+    }
+    seen.add(current as object)
+
+    if (Array.isArray(current)) {
+      for (const item of current) {
+        stack.push(item)
+      }
+      continue
+    }
+
+    const record = current as Record<string, unknown>
+    for (const [key, value] of Object.entries(record)) {
+      if (key.toLowerCase() === "printdatainfolist") {
+        if (Array.isArray(value)) {
+          for (const entry of value) {
+            if (entry && typeof entry === "object") {
+              entries.push(entry as Record<string, unknown>)
+            }
+          }
+        }
+        continue
+      }
+
+      stack.push(value)
+    }
+  }
+
+  return entries
+}
+
+const findParcelIdsByClientReference = (
+  payload: unknown,
+  reference: string
+) => {
+  const normalizedReference = normalizeClientReference(reference)
+  if (!normalizedReference) {
+    return []
+  }
+
+  const ids = new Set<number>()
+  const entries = extractPrintDataInfoList(payload)
+
+  for (const entry of entries) {
+    const refCandidate =
+      normalizeClientReference(entry.ClientReference) ||
+      normalizeClientReference(entry.clientReference)
+
+    if (!refCandidate || refCandidate !== normalizedReference) {
+      continue
+    }
+
+    const idCandidate =
+      normalizeParcelId(entry.ParcelId) ??
+      normalizeParcelId(entry.parcelId)
+
+    if (idCandidate) {
+      ids.add(idCandidate)
+    }
+  }
+
+  return Array.from(ids)
+}
+
+const recoverParcelIdsForCancellation = async (
+  config: ReturnType<typeof resolveGlsConfig>["config"],
+  params: {
+    fromDate: Date
+    toDate: Date
+    clientReference?: string | null
+    parcelNumbers?: string[]
+  }
+) => {
+  if (!config) {
+    return []
+  }
+
+  const lookups = await Promise.allSettled([
+    getGlsParcelList(config, {
+      printDateFrom: params.fromDate,
+      printDateTo: params.toDate,
+    }),
+    getGlsParcelList(config, {
+      pickupDateFrom: params.fromDate,
+      pickupDateTo: params.toDate,
+    }),
+  ])
+
+  const responses = lookups.flatMap((entry) =>
+    entry.status === "fulfilled" ? [entry.value.response] : []
+  )
+
+  if (!responses.length) {
+    return []
+  }
+
+  const byReference = new Set<number>()
+  if (params.clientReference) {
+    for (const response of responses) {
+      for (const id of findParcelIdsByClientReference(
+        response,
+        params.clientReference
+      )) {
+        byReference.add(id)
+      }
+    }
+  }
+
+  if (byReference.size) {
+    return Array.from(byReference)
+  }
+
+  if (!params.parcelNumbers?.length) {
+    return []
+  }
+
+  const byNumbers = new Set<number>()
+  for (const response of responses) {
+    for (const id of findParcelIdsByNumbers(
+      response,
+      params.parcelNumbers
+    )) {
+      byNumbers.add(id)
+    }
+  }
+
+  return Array.from(byNumbers)
 }
 
 const collectDeleteSuccessIds = (
@@ -408,6 +578,30 @@ const extractDeleteSuccessIds = (payload: unknown) => {
   }
 
   return Array.from(ids)
+}
+
+const isNotFoundCancellationError = (value: string) => {
+  const normalized = value.toLowerCase()
+  return (
+    normalized.includes("not exist") ||
+    normalized.includes("not found") ||
+    normalized.includes("not found with current settings")
+  )
+}
+
+const isMissingCancellationConfirmation = (value: string) =>
+  value.toLowerCase().includes("did not confirm cancellation")
+
+const isRecoverableCancellationError = (errors: string[]) => {
+  if (!errors.length) {
+    return false
+  }
+
+  return errors.every(
+    (error) =>
+      isNotFoundCancellationError(error) ||
+      isMissingCancellationConfirmation(error)
+  )
 }
 
 const readGlsParcelNumbers = (
@@ -679,76 +873,26 @@ export async function DELETE(req: MedusaRequest, res: MedusaResponse) {
     metadata,
     fulfillment.labels
   )
+  const existingShipment =
+    metadata[GLS_FULFILLMENT_METADATA_KEY] &&
+    typeof metadata[GLS_FULFILLMENT_METADATA_KEY] === "object"
+      ? (metadata[GLS_FULFILLMENT_METADATA_KEY] as Record<
+          string,
+          unknown
+        >)
+      : null
+  const previousParcelNumbers =
+    readPreviousParcelNumbers(existingShipment)
+  const candidateParcelNumbers = mergeParcelNumbers(
+    parcelNumbers,
+    previousParcelNumbers
+  )
+  const clientReference =
+    readClientReference(metadata) ??
+    resolveOrderReference(fulfillment.order)
+
   const parcelIds = readGlsParcelIds(metadata)
   let resolvedParcelIds = parcelIds
-
-  if (!resolvedParcelIds.length) {
-    if (!parcelNumbers.length) {
-      res.status(400).json({
-        message:
-          "GLS parcel IDs are missing. Recreate the shipment to store parcel IDs before cancelling.",
-      })
-      return
-    }
-
-    const { config: lookupConfig, missing: lookupMissing } =
-      resolveGlsConfig()
-    if (!lookupConfig) {
-      res.status(400).json({
-        message: `Missing GLS configuration: ${lookupMissing.join(", ")}.`,
-      })
-      return
-    }
-
-    const now = new Date()
-    const createdAt = fulfillment.order?.created_at
-      ? new Date(fulfillment.order.created_at)
-      : null
-    const fallbackDays =
-      Number(process.env.GLS_CANCEL_LOOKBACK_DAYS) || 30
-    const fallbackFrom = new Date(now)
-    fallbackFrom.setDate(now.getDate() - fallbackDays)
-    const fromDate = createdAt
-      ? new Date(createdAt.getTime() - 24 * 60 * 60 * 1000)
-      : fallbackFrom
-    const toDate = now
-
-    try {
-      const listResult = await getGlsParcelList(lookupConfig, {
-        pickupDateFrom: fromDate,
-        pickupDateTo: toDate,
-      })
-      resolvedParcelIds = findParcelIdsByNumbers(
-        listResult.response,
-        parcelNumbers
-      )
-
-      if (!resolvedParcelIds.length) {
-        const printResult = await getGlsParcelList(lookupConfig, {
-          printDateFrom: fromDate,
-          printDateTo: toDate,
-        })
-        resolvedParcelIds = findParcelIdsByNumbers(
-          printResult.response,
-          parcelNumbers
-        )
-      }
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Unknown error"
-      logger?.warn?.(
-        `GLS: failed to lookup parcel ids for cancellation (${message})`
-      )
-    }
-  }
-
-  if (!resolvedParcelIds.length) {
-    res.status(404).json({
-      message:
-        "GLS parcel IDs are missing. Increase GLS_CANCEL_LOOKBACK_DAYS or cancel the label in MyGLS.",
-    })
-    return
-  }
 
   const { config, missing } = resolveGlsConfig()
   if (!config) {
@@ -758,37 +902,125 @@ export async function DELETE(req: MedusaRequest, res: MedusaResponse) {
     return
   }
 
-  try {
-    const result = await deleteGlsLabels(resolvedParcelIds, config)
+  const now = new Date()
+  const createdAt = fulfillment.order?.created_at
+    ? new Date(fulfillment.order.created_at)
+    : null
+  const fallbackDays =
+    Number(process.env.GLS_CANCEL_LOOKBACK_DAYS) || 30
+  const fallbackFrom = new Date(now)
+  fallbackFrom.setDate(now.getDate() - fallbackDays)
+  const fromDate = createdAt
+    ? new Date(createdAt.getTime() - 24 * 60 * 60 * 1000)
+    : fallbackFrom
+  const toDate = now
+
+  const attemptCancellation = async (ids: number[]) => {
+    const result = await deleteGlsLabels(ids, config)
     const glsErrors = extractGlsErrorDescriptions(result.response)
     const deletedIds = extractDeleteSuccessIds(result.response)
     const deletedSet = new Set(deletedIds)
-    const missingDeletes = resolvedParcelIds.filter(
-      (id) => !deletedSet.has(id)
-    )
+    const missingDeletes = ids.filter((id) => !deletedSet.has(id))
     const errors = [...glsErrors]
     if (missingDeletes.length) {
       errors.push(
         `GLS did not confirm cancellation for parcel IDs: ${missingDeletes.join(", ")}`
       )
     }
+
+    return {
+      errors,
+      request: result.request,
+      response: result.response,
+    }
+  }
+
+  try {
+    let cancelResult:
+      | { errors: string[]; request: Record<string, unknown>; response: unknown }
+      | null = null
+    let attemptedRecovery = false
+
+    if (resolvedParcelIds.length) {
+      cancelResult = await attemptCancellation(resolvedParcelIds)
+    }
+
+    const shouldRecover =
+      !resolvedParcelIds.length ||
+      (cancelResult
+        ? isRecoverableCancellationError(cancelResult.errors)
+        : false)
+
+    if (shouldRecover) {
+      attemptedRecovery = true
+      const recoveredIds = await recoverParcelIdsForCancellation(
+        config,
+        {
+          fromDate,
+          toDate,
+          clientReference,
+          parcelNumbers: candidateParcelNumbers,
+        }
+      )
+
+      if (recoveredIds.length) {
+        resolvedParcelIds = recoveredIds
+        cancelResult = await attemptCancellation(resolvedParcelIds)
+      }
+    }
+
+    if (!resolvedParcelIds.length) {
+      const message =
+        "GLS parcel IDs could not be recovered. Cancel the label in MyGLS."
+      const updatedShipment = {
+        ...(existingShipment ?? {}),
+        client_reference: clientReference,
+      }
+
+      await fulfillmentModuleService.updateFulfillment(fulfillment.id, {
+        metadata: {
+          ...metadata,
+          [GLS_FULFILLMENT_METADATA_KEY]: updatedShipment,
+        },
+      })
+
+      await notifyGlsCancellationIssue(
+        notificationModuleService,
+        fulfillment.order,
+        fulfillment.id,
+        `Order ${orderLabel}: ${message}`,
+        logger
+      )
+
+      res.status(200).json({
+        status: "warning",
+        errors: [message],
+        needs_manual_cancel: true,
+      })
+      return
+    }
+
+    const errors = cancelResult?.errors ?? []
     const shouldMarkCancelled = errors.length === 0
+    const updatedShipment = {
+      ...(existingShipment ?? {}),
+      client_reference: clientReference,
+      parcel_ids: resolvedParcelIds,
+      ...(cancelResult
+        ? {
+            delete_request: cancelResult.request,
+            delete_response: cancelResult.response,
+          }
+        : {}),
+      ...(shouldMarkCancelled
+        ? { cancelled_at: new Date().toISOString() }
+        : {}),
+    }
 
     await fulfillmentModuleService.updateFulfillment(fulfillment.id, {
       metadata: {
         ...metadata,
-        [GLS_FULFILLMENT_METADATA_KEY]: {
-          ...(metadata[GLS_FULFILLMENT_METADATA_KEY] as Record<
-            string,
-            unknown
-          >),
-          parcel_ids: resolvedParcelIds,
-          ...(shouldMarkCancelled
-            ? { cancelled_at: new Date().toISOString() }
-            : {}),
-          delete_request: result.request,
-          delete_response: result.response,
-        },
+        [GLS_FULFILLMENT_METADATA_KEY]: updatedShipment,
       },
     })
 
@@ -814,6 +1046,12 @@ export async function DELETE(req: MedusaRequest, res: MedusaResponse) {
       )
     }
 
+    const needsManualCancel =
+      !shouldMarkCancelled &&
+      (attemptedRecovery
+        ? isRecoverableCancellationError(errors)
+        : false)
+
     if (errors.length) {
       const preview = errors.slice(0, 3).join("; ")
       await notifyGlsCancellationIssue(
@@ -828,6 +1066,7 @@ export async function DELETE(req: MedusaRequest, res: MedusaResponse) {
     res.status(200).json({
       status: errors.length ? "warning" : "success",
       errors,
+      ...(needsManualCancel ? { needs_manual_cancel: true } : {}),
     })
   } catch (error) {
     logger?.error?.(
@@ -982,6 +1221,7 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
 
     const glsErrors = extractGlsErrorDescriptions(result.response)
     const parcelNumbers = extractParcelNumbers(result.response)
+    const clientReference = resolveOrderReference(order)
     const existingShipment = metadata[
       GLS_FULFILLMENT_METADATA_KEY
     ] as Record<string, unknown> | null
@@ -1025,6 +1265,7 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
           created_at: new Date().toISOString(),
           request: result.request,
           response: result.response,
+          client_reference: clientReference,
           parcel_numbers: parcelNumbers,
           ...(filteredPreviousNumbers.length
             ? { previous_parcel_numbers: filteredPreviousNumbers }

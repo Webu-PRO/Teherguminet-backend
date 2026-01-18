@@ -1,6 +1,14 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
-import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
-import type { Logger } from "@medusajs/types"
+import {
+  ContainerRegistrationKeys,
+  Modules,
+} from "@medusajs/framework/utils"
+import type {
+  FulfillmentDTO,
+  IFulfillmentModuleService,
+  Logger,
+  Query,
+} from "@medusajs/types"
 
 import {
   deleteGlsLabels,
@@ -17,6 +25,14 @@ type ParcelStatusEntry = {
   StatusInfo?: string
   DepotCity?: string
   DepotNumber?: string
+}
+
+type LabelSummary = {
+  tracking_number?: string | null
+}
+
+type FulfillmentSummary = FulfillmentDTO & {
+  labels?: Array<LabelSummary | null> | null
 }
 
 const resolveLogger = (req: MedusaRequest) => {
@@ -44,6 +60,92 @@ const normalizeParcelNumber = (value: unknown) => {
 
   return null
 }
+
+const extractMetadata = (fulfillment: FulfillmentSummary) => {
+  return (fulfillment.metadata as Record<string, unknown>) ?? {}
+}
+
+const readGlsShipment = (metadata: Record<string, unknown>) => {
+  const shipment = metadata.gls_shipment
+  if (!shipment || typeof shipment !== "object") {
+    return null
+  }
+
+  return shipment as Record<string, unknown>
+}
+
+const readShipmentParcelNumbers = (
+  shipment: Record<string, unknown> | null
+) => {
+  if (!shipment) {
+    return []
+  }
+
+  const numbers = shipment.parcel_numbers
+  if (!Array.isArray(numbers)) {
+    return []
+  }
+
+  const parsed: string[] = []
+  const seen = new Set<string>()
+
+  for (const value of numbers) {
+    if (typeof value !== "string") {
+      continue
+    }
+
+    const trimmed = value.trim()
+    if (!trimmed || seen.has(trimmed)) {
+      continue
+    }
+
+    seen.add(trimmed)
+    parsed.push(trimmed)
+  }
+
+  return parsed
+}
+
+const readLabelParcelNumbers = (
+  labels?: Array<LabelSummary | null> | null
+) => {
+  if (!Array.isArray(labels)) {
+    return []
+  }
+
+  const parsed: string[] = []
+  const seen = new Set<string>()
+
+  for (const label of labels) {
+    const value = label?.tracking_number
+    if (typeof value !== "string") {
+      continue
+    }
+
+    const trimmed = value.trim()
+    if (!trimmed || seen.has(trimmed)) {
+      continue
+    }
+
+    seen.add(trimmed)
+    parsed.push(trimmed)
+  }
+
+  return parsed
+}
+
+const hasParcelNumber = (values: string[], target: string) =>
+  values.some((value) => normalizeParcelNumber(value) === target)
+
+const isParcelNotExistsError = (value: string) => {
+  const normalized = value.toLowerCase()
+  return (
+    normalized.includes("parcel id") && normalized.includes("not exist")
+  )
+}
+
+const isMissingCancellationConfirmation = (value: string) =>
+  value.toLowerCase().includes("did not confirm cancellation")
 
 const extractGlsErrorDescriptions = (payload: unknown) => {
   if (!payload || typeof payload !== "object") {
@@ -535,6 +637,81 @@ export async function DELETE(req: MedusaRequest, res: MedusaResponse) {
       errors.push(
         `GLS did not confirm cancellation for parcel IDs: ${missingDeletes.join(", ")}`
       )
+    }
+    const hasNotExistsError = glsErrors.some(isParcelNotExistsError)
+    const shouldMarkCancelled =
+      errors.length === 0 ||
+      (hasNotExistsError &&
+        errors.every(
+          (error) =>
+            isParcelNotExistsError(error) ||
+            isMissingCancellationConfirmation(error)
+        ))
+
+    const fulfillmentIdParam = req.query?.fulfillment_id
+    const fulfillmentId =
+      typeof fulfillmentIdParam === "string"
+        ? fulfillmentIdParam.trim()
+        : null
+
+    if (fulfillmentId) {
+      try {
+        const query = req.scope.resolve<Query>(
+          ContainerRegistrationKeys.QUERY
+        )
+        const fulfillmentModuleService =
+          req.scope.resolve<IFulfillmentModuleService>(
+            Modules.FULFILLMENT
+          )
+        const { data: fulfillments } = await query.graph({
+          entity: "fulfillment",
+          fields: ["id", "metadata", "labels.*"],
+          filters: {
+            id: fulfillmentId,
+          },
+        })
+        const fulfillment = fulfillments?.[0] as
+          | FulfillmentSummary
+          | undefined
+
+        if (fulfillment) {
+          const metadata = extractMetadata(fulfillment)
+          const shipment = readGlsShipment(metadata)
+          const shipmentNumbers = readShipmentParcelNumbers(shipment)
+          const labelNumbers = readLabelParcelNumbers(fulfillment.labels)
+          const matchesParcel =
+            hasParcelNumber(shipmentNumbers, parcelNumber) ||
+            hasParcelNumber(labelNumbers, parcelNumber)
+
+          if (matchesParcel) {
+            const updatedShipment = {
+              ...(shipment ?? {}),
+              parcel_ids: parcelIds,
+              delete_request: result.request,
+              delete_response: result.response,
+              ...(shouldMarkCancelled
+                ? { cancelled_at: new Date().toISOString() }
+                : {}),
+            }
+
+            await fulfillmentModuleService.updateFulfillment(
+              fulfillment.id,
+              {
+                metadata: {
+                  ...metadata,
+                  gls_shipment: updatedShipment,
+                },
+              }
+            )
+          }
+        }
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Unknown error"
+        logger?.warn?.(
+          `GLS: failed to update fulfillment metadata for parcel cancellation (${message})`
+        )
+      }
     }
 
     res.status(200).json({
