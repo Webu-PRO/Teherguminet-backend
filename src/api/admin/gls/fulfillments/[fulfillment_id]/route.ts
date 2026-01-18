@@ -597,6 +597,11 @@ const isRecoverableCancellationError = (errors: string[]) => {
     return false
   }
 
+  const hasNotFound = errors.some(isNotFoundCancellationError)
+  if (!hasNotFound) {
+    return false
+  }
+
   return errors.every(
     (error) =>
       isNotFoundCancellationError(error) ||
@@ -1001,7 +1006,9 @@ export async function DELETE(req: MedusaRequest, res: MedusaResponse) {
     }
 
     const errors = cancelResult?.errors ?? []
-    const shouldMarkCancelled = errors.length === 0
+    const shouldMarkCancelled =
+      errors.length === 0 || isRecoverableCancellationError(errors)
+    const responseErrors = shouldMarkCancelled ? [] : errors
     const updatedShipment = {
       ...(existingShipment ?? {}),
       client_reference: clientReference,
@@ -1052,8 +1059,8 @@ export async function DELETE(req: MedusaRequest, res: MedusaResponse) {
         ? isRecoverableCancellationError(errors)
         : false)
 
-    if (errors.length) {
-      const preview = errors.slice(0, 3).join("; ")
+    if (responseErrors.length) {
+      const preview = responseErrors.slice(0, 3).join("; ")
       await notifyGlsCancellationIssue(
         notificationModuleService,
         fulfillment.order,
@@ -1064,8 +1071,8 @@ export async function DELETE(req: MedusaRequest, res: MedusaResponse) {
     }
 
     res.status(200).json({
-      status: errors.length ? "warning" : "success",
-      errors,
+      status: responseErrors.length ? "warning" : "success",
+      errors: responseErrors,
       ...(needsManualCancel ? { needs_manual_cancel: true } : {}),
     })
   } catch (error) {

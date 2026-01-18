@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { defineWidgetConfig } from "@medusajs/admin-sdk"
 import {
   Button,
-  Input,
   StatusBadge,
   Text,
   toast,
@@ -302,10 +301,6 @@ const OrderGlsShipmentWidget = () => {
   const [parcelStatuses, setParcelStatuses] = useState<
     ParcelStatusSummary[]
   >([])
-  const [cancelParcelNumber, setCancelParcelNumber] =
-    useState("")
-  const [cancelByNumberLoading, setCancelByNumberLoading] =
-    useState(false)
   const prompt = usePrompt()
 
   useEffect(() => {
@@ -825,86 +820,6 @@ const OrderGlsShipmentWidget = () => {
     loadOrder,
   ])
 
-  const handleCancelByParcelNumber = useCallback(async () => {
-    if (!fulfillment) {
-      return
-    }
-
-    const parcelNumber = cancelParcelNumber.trim()
-    if (!parcelNumber) {
-      toast.error("GLS cancel", {
-        description: "Enter a parcel number.",
-      })
-      return
-    }
-
-    const confirmed = await prompt({
-      title: "Cancel GLS parcel?",
-      description: `This will cancel GLS parcel ${parcelNumber}.`,
-      variant: "danger",
-      confirmText: "Cancel parcel",
-      cancelText: "Keep parcel",
-    })
-
-    if (!confirmed) {
-      return
-    }
-
-    setCancelByNumberLoading(true)
-    try {
-      const response = await fetch(
-        `/admin/gls/parcels/${encodeURIComponent(parcelNumber)}?fulfillment_id=${encodeURIComponent(
-          fulfillment.id
-        )}`,
-        {
-          method: "DELETE",
-          credentials: "include",
-        }
-      )
-
-      const payload = await response.json().catch(() => ({}))
-
-      if (!response.ok) {
-        const message =
-          payload?.message ??
-          "Failed to cancel the GLS parcel."
-        throw new Error(message)
-      }
-
-      if (Array.isArray(payload?.errors) && payload.errors.length) {
-        const errorText = payload.errors.join("; ")
-        toast.warning("GLS cancellation returned errors", {
-          description: errorText,
-          action: {
-            label: "Copy",
-            altText: "Copy GLS error",
-            onClick: () => void copyToClipboard(errorText),
-          },
-        })
-      } else {
-        toast.success("GLS parcel cancelled")
-      }
-
-      setCancelParcelNumber("")
-      await loadOrder()
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Failed to cancel the GLS parcel."
-      toast.error("GLS cancel", {
-        description: message,
-        action: {
-          label: "Copy",
-          altText: "Copy GLS error",
-          onClick: () => void copyToClipboard(message),
-        },
-      })
-    } finally {
-      setCancelByNumberLoading(false)
-    }
-  }, [cancelParcelNumber, fulfillment, loadOrder, prompt])
-
   if (!orderId || loading || !fulfillment) {
     return null
   }
@@ -965,28 +880,6 @@ const OrderGlsShipmentWidget = () => {
         >
           Recreate GLS label
         </Button>
-        <div className="mt-2 flex flex-col gap-y-2">
-          <Text size="xsmall" className="text-ui-fg-subtle">
-            Cancel by parcel number
-          </Text>
-          <Input
-            value={cancelParcelNumber}
-            onChange={(event) =>
-              setCancelParcelNumber(event.target.value)
-            }
-            placeholder="3385368955"
-          />
-          <Button
-            size="small"
-            variant="secondary"
-            className="w-full"
-            onClick={handleCancelByParcelNumber}
-            isLoading={cancelByNumberLoading}
-            disabled={cancelByNumberLoading}
-          >
-            Cancel GLS parcel
-          </Button>
-        </div>
         {parcelNumbers.length ? (
           <Text size="xsmall" className="text-ui-fg-subtle">
             {isCancelled ? "Parcel (cancelled):" : "Parcel:"}{" "}

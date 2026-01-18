@@ -647,6 +647,7 @@ export async function DELETE(req: MedusaRequest, res: MedusaResponse) {
             isParcelNotExistsError(error) ||
             isMissingCancellationConfirmation(error)
         ))
+    const responseErrors = shouldMarkCancelled ? [] : errors
 
     const fulfillmentIdParam = req.query?.fulfillment_id
     const fulfillmentId =
@@ -715,9 +716,9 @@ export async function DELETE(req: MedusaRequest, res: MedusaResponse) {
     }
 
     res.status(200).json({
-      status: errors.length ? "warning" : "success",
+      status: responseErrors.length ? "warning" : "success",
       parcel_ids: parcelIds,
-      errors,
+      errors: responseErrors,
     })
   } catch (error) {
     logger?.error?.(
