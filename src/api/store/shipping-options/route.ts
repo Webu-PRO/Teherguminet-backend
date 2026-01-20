@@ -1,5 +1,12 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
-import { listShippingOptionsForCartWithPricingWorkflow } from "@medusajs/core-flows"
+import {
+  listShippingOptionsForCartWithPricingWorkflow,
+  listShippingOptionsForCartWorkflow,
+} from "@medusajs/core-flows"
+import {
+  computeCartTotalWeightKg,
+  isWeightBasedProviderId,
+} from "../../../lib/cart-weight"
 
 type ShippingOptionsQuery = {
   cart_id?: string
@@ -39,13 +46,42 @@ export async function GET(
 
   const isReturnRaw = query.is_return ?? filterable.is_return
 
-  const workflow = listShippingOptionsForCartWithPricingWorkflow(
-    req.scope
-  )
-  const { result: shipping_options } = await workflow.run({
+  const baseWorkflow = listShippingOptionsForCartWorkflow(req.scope)
+  const { result: baseOptions } = await baseWorkflow.run({
     input: {
       cart_id: cartId,
       is_return: isReturnRaw === "true" || isReturnRaw === true,
+    },
+  })
+
+  if (!baseOptions?.length) {
+    res.json({ shipping_options: [] })
+    return
+  }
+
+  const hasWeightBasedOption = baseOptions.some((option) =>
+    isWeightBasedProviderId(option.provider_id)
+  )
+  const totalWeightKg = hasWeightBasedOption
+    ? await computeCartTotalWeightKg(req.scope, cartId)
+    : null
+  const options = baseOptions.map((option) => ({
+    id: option.id,
+    ...(totalWeightKg
+      ? isWeightBasedProviderId(option.provider_id)
+        ? { data: { total_weight_kg: totalWeightKg } }
+        : {}
+      : {}),
+  }))
+
+  const pricingWorkflow = listShippingOptionsForCartWithPricingWorkflow(
+    req.scope
+  )
+  const { result: shipping_options } = await pricingWorkflow.run({
+    input: {
+      cart_id: cartId,
+      is_return: isReturnRaw === "true" || isReturnRaw === true,
+      options,
     },
   })
 
