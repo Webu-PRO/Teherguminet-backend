@@ -144,7 +144,7 @@ module.exports = defineConfig({
             id: "teherguminet",
             options: {
               price_per_kg: 40,
-              weight_unit: "g",
+              weight_unit: "kg",
             },
           },
           {
