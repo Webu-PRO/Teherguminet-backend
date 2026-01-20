@@ -607,6 +607,8 @@ export default async function fulfillmentCreatedHandler({
     }
 
     const parcelNumbers = extractParcelNumbers(result.response)
+    const hasBlockingErrors =
+      glsErrors.length > 0 && parcelNumbers.length === 0
     const previousParcelNumbers = mergeParcelNumbers(
       readPreviousParcelNumbers(existingShipment),
       readShipmentParcelNumbers(existingShipment)
@@ -638,40 +640,51 @@ export default async function fulfillmentCreatedHandler({
         label_url: trackingUrl,
       }
     })
-    const labelPayload = labelsToAdd.length
-      ? [
-          ...existingLabels.map((label) => ({ id: label.id })),
-          ...labelsToAdd,
-        ]
-      : undefined
+    const labelPayload =
+      !hasBlockingErrors && labelsToAdd.length
+        ? [
+            ...existingLabels.map((label) => ({ id: label.id })),
+            ...labelsToAdd,
+          ]
+        : undefined
 
     const shipmentMetadata = {
       created_at: new Date().toISOString(),
       request: result.request,
       response: result.response,
       parcel_numbers: parcelNumbers,
+      ...(glsErrors.length ? { errors: glsErrors } : {}),
       ...(filteredPreviousNumbers.length
         ? { previous_parcel_numbers: filteredPreviousNumbers }
         : {}),
-      ...(result.parcelIds?.length
+      ...(!hasBlockingErrors && result.parcelIds?.length
         ? { parcel_ids: result.parcelIds }
         : {}),
-      ...(result.labelBase64
+      ...(!hasBlockingErrors && result.labelBase64
         ? { label_base64: result.labelBase64 }
         : {}),
     }
+    const logStatus = hasBlockingErrors
+      ? "error"
+      : glsErrors.length
+        ? "warning"
+        : "success"
+    const logMessage = hasBlockingErrors
+      ? "GLS shipment failed. Label not created."
+      : glsErrors.length
+        ? "GLS returned errors during shipment creation."
+        : "GLS shipment created."
     const logEntry = appendGlsShipmentLog(existingShipment, {
       action: "create_shipment",
-      status: glsErrors.length ? "warning" : "success",
-      message: glsErrors.length
-        ? "GLS returned errors during shipment creation."
-        : "GLS shipment created.",
+      status: logStatus,
+      message: logMessage,
       errors: glsErrors.length ? glsErrors : undefined,
       request: result.request,
       response: result.response,
       details: {
         parcel_numbers: parcelNumbers,
         parcel_ids: result.parcelIds,
+        ...(hasBlockingErrors ? { blocked: true } : {}),
       },
       source: "subscriber",
     })
@@ -719,7 +732,7 @@ export default async function fulfillmentCreatedHandler({
               metadata: {
                 ...metadata,
                 [GLS_FULFILLMENT_METADATA_KEY]: {
-                  ...shipmentMetadata,
+                  ...shipmentPayload,
                   customer_notified_at: new Date().toISOString(),
                   customer_notified_parcels: parcelNumbers,
                 },

@@ -709,9 +709,14 @@ const OrderGlsShipmentWidget = () => {
       )
 
       const payload = await response.json().catch(() => ({}))
+      const errors = Array.isArray(payload?.errors)
+        ? payload.errors
+        : []
+      const errorText = errors.length ? errors.join("; ") : null
 
       if (!response.ok) {
         const message =
+          errorText ??
           payload?.message ??
           "GLS shipment request failed. Check the logs."
         throw new Error(message)
@@ -721,8 +726,7 @@ const OrderGlsShipmentWidget = () => {
         ? payload.parcel_numbers.join(", ")
         : ""
 
-      if (Array.isArray(payload?.errors) && payload.errors.length) {
-        const errorText = payload.errors.join("; ")
+      if (errors.length) {
         toast.warning("GLS returned errors", {
           description: errorText,
           action: {
@@ -736,8 +740,6 @@ const OrderGlsShipmentWidget = () => {
           description: numbers ? `Parcel: ${numbers}` : undefined,
         })
       }
-
-      await loadOrder()
     } catch (error) {
       const message =
         error instanceof Error
@@ -753,6 +755,7 @@ const OrderGlsShipmentWidget = () => {
       })
     } finally {
       setSubmitting(false)
+      await loadOrder()
     }
   }, [fulfillment, loadOrder])
 
@@ -906,28 +909,30 @@ const OrderGlsShipmentWidget = () => {
         const cancelPayload = await cancelResponse
           .json()
           .catch(() => ({}))
+        const cancelErrors = Array.isArray(cancelPayload?.errors)
+          ? cancelPayload.errors
+          : []
+        const cancelErrorText = cancelErrors.length
+          ? cancelErrors.join("; ")
+          : null
 
         if (!cancelResponse.ok) {
           const message =
+            cancelErrorText ??
             cancelPayload?.message ??
             "Failed to cancel the GLS label."
           throw new Error(message)
         }
 
-        if (
-          Array.isArray(cancelPayload?.errors) &&
-          cancelPayload.errors.length
-        ) {
-          const errorText = cancelPayload.errors.join("; ")
+        if (cancelErrors.length) {
           toast.warning("GLS cancellation returned errors", {
-            description: errorText,
+            description: cancelErrorText,
             action: {
               label: "Copy",
               altText: "Copy GLS error",
-              onClick: () => void copyToClipboard(errorText),
+              onClick: () => void copyToClipboard(cancelErrorText),
             },
           })
-          await loadOrder()
           return
         }
       } else if (hasShipment && !isCancelled) {
@@ -947,32 +952,33 @@ const OrderGlsShipmentWidget = () => {
       const createPayload = await createResponse
         .json()
         .catch(() => ({}))
+      const createErrors = Array.isArray(createPayload?.errors)
+        ? createPayload.errors
+        : []
+      const createErrorText = createErrors.length
+        ? createErrors.join("; ")
+        : null
 
       if (!createResponse.ok) {
         const message =
+          createErrorText ??
           createPayload?.message ??
           "GLS shipment request failed. Check the logs."
         throw new Error(message)
       }
 
-      if (
-        Array.isArray(createPayload?.errors) &&
-        createPayload.errors.length
-      ) {
-        const errorText = createPayload.errors.join("; ")
+      if (createErrors.length) {
         toast.warning("GLS returned errors", {
-          description: errorText,
+          description: createErrorText,
           action: {
             label: "Copy",
             altText: "Copy GLS error",
-            onClick: () => void copyToClipboard(errorText),
+            onClick: () => void copyToClipboard(createErrorText),
           },
         })
       } else {
         toast.success("GLS shipment recreated")
       }
-
-      await loadOrder()
     } catch (error) {
       const message =
         error instanceof Error
@@ -988,6 +994,7 @@ const OrderGlsShipmentWidget = () => {
       })
     } finally {
       setRecreating(false)
+      await loadOrder()
     }
   }, [
     canCancel,
