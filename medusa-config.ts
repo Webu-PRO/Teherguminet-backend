@@ -138,10 +138,6 @@ module.exports = defineConfig({
           {
             resolve: "./src/modules/fulfillment-manual",
             id: "manual",
-            options: {
-              price_per_kg: 40,
-              weight_unit: "g",
-            },
           },
           {
             resolve: "./src/modules/fulfillment-manual",
