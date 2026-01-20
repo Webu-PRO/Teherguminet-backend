@@ -20,6 +20,7 @@ import type {
 
 import { dispatchNotificationsIndividually } from "../lib/dispatch-notifications"
 import {
+  appendGlsShipmentLog,
   createGlsShipment,
   deriveGlsParcelMetadata,
   isGlsShippingOption,
@@ -476,6 +477,37 @@ export default async function fulfillmentCreatedHandler({
     return
   }
 
+  const metadata = extractMetadata(fulfillment)
+  const existingShipment =
+    metadata[GLS_FULFILLMENT_METADATA_KEY] &&
+    typeof metadata[GLS_FULFILLMENT_METADATA_KEY] === "object"
+      ? (metadata[GLS_FULFILLMENT_METADATA_KEY] as Record<
+          string,
+          unknown
+        >)
+      : null
+  const writeLogEntry = async (
+    entry: Parameters<typeof appendGlsShipmentLog>[1]
+  ) => {
+    try {
+      const updatedShipment = appendGlsShipmentLog(
+        existingShipment,
+        entry
+      )
+      await fulfillmentModuleService.updateFulfillment(fulfillment.id, {
+        metadata: {
+          ...metadata,
+          [GLS_FULFILLMENT_METADATA_KEY]: updatedShipment,
+        },
+      })
+    } catch (error) {
+      logger?.warn?.(
+        `GLS: failed to update shipment log for ${fulfillment.id}`
+      )
+      logger?.error?.(error as Error)
+    }
+  }
+
   const glsPickup = readGlsPickupFromMetadata(order.metadata)
   const pickupHint =
     isPickupLike(shippingMethod?.name) ||
@@ -492,13 +524,21 @@ export default async function fulfillmentCreatedHandler({
       `Order ${resolveOrderLabel(order)} requires a GLS pickup point, but none was provided.`,
       logger
     )
+    await writeLogEntry({
+      action: "create_shipment",
+      status: "error",
+      message: "Missing GLS pickup point for pickup delivery option.",
+      details: {
+        pickup_required: true,
+      },
+      source: "subscriber",
+    })
     logger?.warn?.(
       `GLS: missing pickup point for fulfillment ${fulfillment.id}`
     )
     return
   }
 
-  const metadata = extractMetadata(fulfillment)
   if (shouldSkipExistingShipment(metadata)) {
     return
   }
@@ -514,6 +554,15 @@ export default async function fulfillmentCreatedHandler({
       `Order ${resolveOrderLabel(order)} could not be sent to GLS. Missing config: ${missing.join(", ")}.`,
       logger
     )
+    await writeLogEntry({
+      action: "create_shipment",
+      status: "error",
+      message: "Missing GLS configuration.",
+      details: {
+        missing,
+      },
+      source: "subscriber",
+    })
     logger?.warn?.(
       `GLS: missing config (${missing.join(", ")})`
     )
@@ -558,9 +607,6 @@ export default async function fulfillmentCreatedHandler({
     }
 
     const parcelNumbers = extractParcelNumbers(result.response)
-    const existingShipment = metadata[
-      GLS_FULFILLMENT_METADATA_KEY
-    ] as Record<string, unknown> | null
     const previousParcelNumbers = mergeParcelNumbers(
       readPreviousParcelNumbers(existingShipment),
       readShipmentParcelNumbers(existingShipment)
@@ -614,11 +660,32 @@ export default async function fulfillmentCreatedHandler({
         ? { label_base64: result.labelBase64 }
         : {}),
     }
+    const logEntry = appendGlsShipmentLog(existingShipment, {
+      action: "create_shipment",
+      status: glsErrors.length ? "warning" : "success",
+      message: glsErrors.length
+        ? "GLS returned errors during shipment creation."
+        : "GLS shipment created.",
+      errors: glsErrors.length ? glsErrors : undefined,
+      request: result.request,
+      response: result.response,
+      details: {
+        parcel_numbers: parcelNumbers,
+        parcel_ids: result.parcelIds,
+      },
+      source: "subscriber",
+    })
+    const logEntries = Array.isArray(logEntry.log)
+      ? logEntry.log
+      : undefined
+    const shipmentPayload = logEntries
+      ? { ...shipmentMetadata, log: logEntries }
+      : shipmentMetadata
 
     await fulfillmentModuleService.updateFulfillment(fulfillment.id, {
       metadata: {
         ...metadata,
-        [GLS_FULFILLMENT_METADATA_KEY]: shipmentMetadata,
+        [GLS_FULFILLMENT_METADATA_KEY]: shipmentPayload,
       },
       ...(labelPayload ? { labels: labelPayload } : {}),
     })
@@ -681,6 +748,13 @@ export default async function fulfillmentCreatedHandler({
       `Order ${resolveOrderLabel(order)} failed to send to GLS: ${message}`,
       logger
     )
+    await writeLogEntry({
+      action: "create_shipment",
+      status: "error",
+      message: "GLS shipment failed.",
+      errors: [message],
+      source: "subscriber",
+    })
     logger?.error?.(
       `GLS: failed to create shipment for fulfillment ${fulfillment.id}`,
       error as Error

@@ -34,6 +34,18 @@ type ParcelStatusSummary = {
   errors?: string[]
 }
 
+type GlsLogEntry = {
+  timestamp: string | null
+  action: string
+  status: "success" | "warning" | "error" | "info"
+  message?: string | null
+  errors?: string[]
+  request?: Record<string, unknown> | null
+  response?: unknown
+  details?: Record<string, unknown> | null
+  source?: string | null
+}
+
 const resolveOrderId = () => {
   if (typeof window === "undefined") {
     return null
@@ -64,6 +76,123 @@ const readGlsShipment = (
   }
 
   return shipment as Record<string, unknown>
+}
+
+const isRecord = (
+  value: unknown
+): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === "object" && !Array.isArray(value)
+
+const normalizeLogStatus = (
+  value: unknown
+): GlsLogEntry["status"] => {
+  if (value === "success" || value === "warning") {
+    return value
+  }
+  if (value === "error" || value === "info") {
+    return value
+  }
+  return "info"
+}
+
+const parseLogEntry = (value: unknown): GlsLogEntry | null => {
+  if (!isRecord(value)) {
+    return null
+  }
+
+  const timestamp =
+    typeof value.timestamp === "string" ? value.timestamp : null
+  const action =
+    typeof value.action === "string" && value.action.trim().length
+      ? value.action.trim()
+      : "event"
+  const status = normalizeLogStatus(value.status)
+  const message =
+    typeof value.message === "string" && value.message.trim().length
+      ? value.message.trim()
+      : null
+  const errors = Array.isArray(value.errors)
+    ? value.errors.filter(
+        (entry): entry is string =>
+          typeof entry === "string" && entry.trim().length > 0
+      )
+    : undefined
+  const request = isRecord(value.request) ? value.request : null
+  const response = value.response ?? null
+  const details = isRecord(value.details) ? value.details : null
+  const source =
+    typeof value.source === "string" && value.source.trim().length
+      ? value.source.trim()
+      : null
+
+  return {
+    timestamp,
+    action,
+    status,
+    message,
+    ...(errors?.length ? { errors } : {}),
+    ...(request ? { request } : {}),
+    response,
+    ...(details ? { details } : {}),
+    ...(source ? { source } : {}),
+  }
+}
+
+const parseGlsLogEntries = (
+  shipment: Record<string, unknown> | null
+) => {
+  if (!shipment) {
+    return [] as GlsLogEntry[]
+  }
+
+  const rawLog = shipment.log
+  const entries = Array.isArray(rawLog)
+    ? (rawLog
+        .map(parseLogEntry)
+        .filter(Boolean) as GlsLogEntry[])
+    : []
+
+  if (entries.length) {
+    return entries.slice().reverse()
+  }
+
+  const legacyEntries: GlsLogEntry[] = []
+  const request = isRecord(shipment.request) ? shipment.request : null
+  const response = shipment.response ?? null
+  if (request || response) {
+    legacyEntries.push({
+      timestamp:
+        typeof shipment.created_at === "string"
+          ? shipment.created_at
+          : null,
+      action: "create_shipment",
+      status: "info",
+      message: "Legacy GLS shipment data.",
+      request,
+      response,
+    })
+  }
+
+  const deleteRequest = isRecord(shipment.delete_request)
+    ? shipment.delete_request
+    : null
+  const deleteResponse = shipment.delete_response ?? null
+  if (deleteRequest || deleteResponse) {
+    const cancelledAt =
+      typeof shipment.cancelled_at === "string"
+        ? shipment.cancelled_at
+        : null
+    legacyEntries.push({
+      timestamp: cancelledAt,
+      action: "cancel_label",
+      status: cancelledAt ? "success" : "warning",
+      message: "Legacy GLS cancellation data.",
+      request: deleteRequest,
+      response: deleteResponse,
+    })
+  }
+
+  return legacyEntries
 }
 
 const isShipmentCancelled = (
@@ -263,6 +392,49 @@ const resolveParcelStatusColor = (value: string) => {
   return "grey"
 }
 
+const resolveLogStatusColor = (
+  status: GlsLogEntry["status"]
+): "red" | "green" | "orange" | "grey" => {
+  if (status === "success") {
+    return "green"
+  }
+
+  if (status === "warning") {
+    return "orange"
+  }
+
+  if (status === "error") {
+    return "red"
+  }
+
+  return "grey"
+}
+
+const formatLogTimestamp = (value: string | null) => {
+  if (!value) {
+    return "Unknown time"
+  }
+
+  const parsed = Date.parse(value)
+  if (Number.isNaN(parsed)) {
+    return value
+  }
+
+  return new Date(parsed).toLocaleString()
+}
+
+const safeStringify = (value: unknown) => {
+  if (value === null || value === undefined) {
+    return ""
+  }
+
+  try {
+    return JSON.stringify(value, null, 2)
+  } catch {
+    return String(value)
+  }
+}
+
 const fetchOrder = async (orderId: string) => {
   const params = new URLSearchParams({
     fields: "id,fulfillments.*",
@@ -301,6 +473,7 @@ const OrderGlsShipmentWidget = () => {
   const [parcelStatuses, setParcelStatuses] = useState<
     ParcelStatusSummary[]
   >([])
+  const [logOpen, setLogOpen] = useState(false)
   const prompt = usePrompt()
 
   useEffect(() => {
@@ -341,6 +514,10 @@ const OrderGlsShipmentWidget = () => {
   const shipment = useMemo(
     () => readGlsShipment(fulfillment?.metadata),
     [fulfillment]
+  )
+  const logEntries = useMemo(
+    () => parseGlsLogEntries(shipment),
+    [shipment]
   )
   const parcelNumbers = useMemo(
     () => parseParcelNumbers(shipment),
@@ -890,6 +1067,87 @@ const OrderGlsShipmentWidget = () => {
           <Text size="xsmall" className="text-ui-fg-subtle">
             Previous parcel(s): {previousParcelNumbers.join(", ")}
           </Text>
+        ) : null}
+      </div>
+      <div className="mt-4 border-t border-ui-border-base pt-3">
+        <div className="flex items-center justify-between">
+          <Text size="small" weight="plus">
+            GLS log
+          </Text>
+          <Button
+            size="small"
+            variant="secondary"
+            onClick={() => setLogOpen((prev) => !prev)}
+            disabled={!logEntries.length}
+          >
+            {logOpen ? "Hide log" : "View log"}
+          </Button>
+        </div>
+        {!logEntries.length ? (
+          <Text size="xsmall" className="mt-2 text-ui-fg-subtle">
+            No GLS log entries yet.
+          </Text>
+        ) : null}
+        {logOpen ? (
+          <div className="mt-3 flex flex-col gap-y-2">
+            {logEntries.map((entry, index) => (
+              <div
+                key={`${entry.timestamp ?? "unknown"}-${index}`}
+                className="rounded-md border border-ui-border-base bg-ui-bg-base p-3"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <Text size="xsmall" weight="plus">
+                    {formatLogTimestamp(entry.timestamp)}
+                    {entry.action ? ` - ${entry.action}` : ""}
+                  </Text>
+                  <div className="flex items-center gap-x-2">
+                    {entry.source ? (
+                      <Text
+                        size="xsmall"
+                        className="text-ui-fg-subtle"
+                      >
+                        {entry.source}
+                      </Text>
+                    ) : null}
+                    <StatusBadge
+                      color={resolveLogStatusColor(entry.status)}
+                    >
+                      {entry.status}
+                    </StatusBadge>
+                  </div>
+                </div>
+                {entry.message ? (
+                  <Text
+                    size="xsmall"
+                    className="mt-1 text-ui-fg-subtle"
+                  >
+                    {entry.message}
+                  </Text>
+                ) : null}
+                {entry.errors?.length ? (
+                  <Text
+                    size="xsmall"
+                    className="mt-1 text-ui-fg-subtle"
+                  >
+                    Errors: {entry.errors.join("; ")}
+                  </Text>
+                ) : null}
+                {entry.details ? (
+                  <pre className="mt-2 max-h-48 overflow-auto rounded bg-ui-bg-base p-2 text-[11px] text-ui-fg-subtle">
+                    {safeStringify(entry.details)}
+                  </pre>
+                ) : null}
+                {entry.request || entry.response ? (
+                  <pre className="mt-2 max-h-64 overflow-auto rounded bg-ui-bg-base p-2 text-[11px] text-ui-fg-subtle">
+                    {safeStringify({
+                      request: entry.request ?? null,
+                      response: entry.response ?? null,
+                    })}
+                  </pre>
+                ) : null}
+              </div>
+            ))}
+          </div>
         ) : null}
       </div>
     </div>

@@ -103,7 +103,126 @@ export type GlsShipmentResult = {
   parcelIds?: number[]
 }
 
+export type GlsShipmentLogEntry = {
+  timestamp: string
+  action: string
+  status: "success" | "warning" | "error" | "info"
+  message?: string
+  errors?: string[]
+  request?: Record<string, unknown>
+  response?: unknown
+  details?: Record<string, unknown>
+  source?: string
+}
+
+export type GlsShipmentLogEntryInput = Omit<
+  GlsShipmentLogEntry,
+  "timestamp"
+> & {
+  timestamp?: string
+}
+
 const DEFAULT_TIMEOUT_MS = 15000
+const DEFAULT_LOG_LIMIT = 50
+
+const isRecord = (
+  value: unknown
+): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === "object" && !Array.isArray(value)
+
+const normalizeLogStatus = (
+  value: unknown
+): GlsShipmentLogEntry["status"] => {
+  if (value === "success" || value === "warning") {
+    return value
+  }
+  if (value === "error" || value === "info") {
+    return value
+  }
+  return "info"
+}
+
+const normalizeLogErrors = (value: unknown) => {
+  if (!Array.isArray(value)) {
+    return undefined
+  }
+
+  const errors = value
+    .map((entry) => {
+      if (typeof entry === "string") {
+        return entry.trim()
+      }
+      if (entry === null || entry === undefined) {
+        return ""
+      }
+      return String(entry)
+    })
+    .filter(Boolean)
+
+  return errors.length ? errors : undefined
+}
+
+const normalizeLogEntry = (
+  entry: GlsShipmentLogEntryInput
+): GlsShipmentLogEntry => {
+  const timestamp =
+    typeof entry.timestamp === "string" && entry.timestamp.trim()
+      ? entry.timestamp.trim()
+      : new Date().toISOString()
+  const action =
+    typeof entry.action === "string" && entry.action.trim()
+      ? entry.action.trim()
+      : "unknown"
+  const status = normalizeLogStatus(entry.status)
+  const message =
+    typeof entry.message === "string" && entry.message.trim()
+      ? entry.message.trim()
+      : undefined
+  const errors = normalizeLogErrors(entry.errors)
+  const request = isRecord(entry.request) ? entry.request : undefined
+  const response = entry.response
+  const details = isRecord(entry.details)
+    ? entry.details
+    : undefined
+  const source =
+    typeof entry.source === "string" && entry.source.trim()
+      ? entry.source.trim()
+      : undefined
+
+  return {
+    timestamp,
+    action,
+    status,
+    ...(message ? { message } : {}),
+    ...(errors ? { errors } : {}),
+    ...(request ? { request } : {}),
+    ...(response !== undefined ? { response } : {}),
+    ...(details ? { details } : {}),
+    ...(source ? { source } : {}),
+  }
+}
+
+export const appendGlsShipmentLog = (
+  shipment: Record<string, unknown> | null,
+  entry: GlsShipmentLogEntryInput,
+  maxEntries: number = DEFAULT_LOG_LIMIT
+) => {
+  const base = isRecord(shipment) ? shipment : {}
+  const existingLog = Array.isArray(base.log)
+    ? base.log.filter(isRecord)
+    : []
+  const normalizedEntry = normalizeLogEntry(entry)
+  const nextLog = [...existingLog, normalizedEntry]
+
+  if (maxEntries > 0 && nextLog.length > maxEntries) {
+    nextLog.splice(0, nextLog.length - maxEntries)
+  }
+
+  return {
+    ...base,
+    log: nextLog,
+  }
+}
 
 const normalizeString = (value?: string | null) => {
   if (typeof value !== "string") {

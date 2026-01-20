@@ -17,6 +17,7 @@ import type {
 
 import { dispatchNotificationsIndividually } from "../../../../../lib/dispatch-notifications"
 import {
+  appendGlsShipmentLog,
   createGlsShipment,
   deleteGlsLabels,
   deriveGlsParcelMetadata,
@@ -851,6 +852,36 @@ export async function DELETE(req: MedusaRequest, res: MedusaResponse) {
 
   const orderLabel = resolveOrderLabel(fulfillment.order)
   const metadata = extractMetadata(fulfillment)
+  let currentShipment =
+    metadata[GLS_FULFILLMENT_METADATA_KEY] &&
+    typeof metadata[GLS_FULFILLMENT_METADATA_KEY] === "object"
+      ? (metadata[GLS_FULFILLMENT_METADATA_KEY] as Record<
+          string,
+          unknown
+        >)
+      : null
+  const writeLogEntry = async (
+    entry: Parameters<typeof appendGlsShipmentLog>[1]
+  ) => {
+    try {
+      const updatedShipment = appendGlsShipmentLog(
+        currentShipment,
+        entry
+      )
+      currentShipment = updatedShipment
+      await fulfillmentModuleService.updateFulfillment(fulfillment.id, {
+        metadata: {
+          ...metadata,
+          [GLS_FULFILLMENT_METADATA_KEY]: updatedShipment,
+        },
+      })
+    } catch (error) {
+      logger?.warn?.(
+        `GLS: failed to update shipment log for ${fulfillment.id}`
+      )
+      logger?.error?.(error as Error)
+    }
+  }
   const cancelledAt = readGlsCancellation(metadata)
   if (cancelledAt) {
     res.status(409).json({
@@ -878,16 +909,8 @@ export async function DELETE(req: MedusaRequest, res: MedusaResponse) {
     metadata,
     fulfillment.labels
   )
-  const existingShipment =
-    metadata[GLS_FULFILLMENT_METADATA_KEY] &&
-    typeof metadata[GLS_FULFILLMENT_METADATA_KEY] === "object"
-      ? (metadata[GLS_FULFILLMENT_METADATA_KEY] as Record<
-          string,
-          unknown
-        >)
-      : null
   const previousParcelNumbers =
-    readPreviousParcelNumbers(existingShipment)
+    readPreviousParcelNumbers(currentShipment)
   const candidateParcelNumbers = mergeParcelNumbers(
     parcelNumbers,
     previousParcelNumbers
@@ -901,6 +924,15 @@ export async function DELETE(req: MedusaRequest, res: MedusaResponse) {
 
   const { config, missing } = resolveGlsConfig()
   if (!config) {
+    await writeLogEntry({
+      action: "cancel_label",
+      status: "error",
+      message: "Missing GLS configuration.",
+      details: {
+        missing,
+      },
+      source: "admin",
+    })
     res.status(400).json({
       message: `Missing GLS configuration: ${missing.join(", ")}.`,
     })
@@ -977,9 +1009,26 @@ export async function DELETE(req: MedusaRequest, res: MedusaResponse) {
     if (!resolvedParcelIds.length) {
       const message =
         "GLS parcel IDs could not be recovered. Cancel the label in MyGLS."
+      const logEntry = appendGlsShipmentLog(currentShipment, {
+        action: "cancel_label",
+        status: "warning",
+        message,
+        errors: [message],
+        details: {
+          client_reference: clientReference,
+          parcel_numbers: candidateParcelNumbers,
+          attempted_recovery: attemptedRecovery,
+          needs_manual_cancel: true,
+        },
+        source: "admin",
+      })
+      const logEntries = Array.isArray(logEntry.log)
+        ? logEntry.log
+        : undefined
       const updatedShipment = {
-        ...(existingShipment ?? {}),
+        ...(currentShipment ?? {}),
         client_reference: clientReference,
+        ...(logEntries ? { log: logEntries } : {}),
       }
 
       await fulfillmentModuleService.updateFulfillment(fulfillment.id, {
@@ -988,6 +1037,7 @@ export async function DELETE(req: MedusaRequest, res: MedusaResponse) {
           [GLS_FULFILLMENT_METADATA_KEY]: updatedShipment,
         },
       })
+      currentShipment = updatedShipment
 
       await notifyGlsCancellationIssue(
         notificationModuleService,
@@ -1009,8 +1059,28 @@ export async function DELETE(req: MedusaRequest, res: MedusaResponse) {
     const shouldMarkCancelled =
       errors.length === 0 || isRecoverableCancellationError(errors)
     const responseErrors = shouldMarkCancelled ? [] : errors
+    const logEntry = appendGlsShipmentLog(currentShipment, {
+      action: "cancel_label",
+      status: responseErrors.length ? "warning" : "success",
+      message: responseErrors.length
+        ? "GLS cancellation returned errors."
+        : "GLS label cancelled.",
+      errors: responseErrors.length ? responseErrors : undefined,
+      request: cancelResult?.request,
+      response: cancelResult?.response,
+      details: {
+        client_reference: clientReference,
+        parcel_ids: resolvedParcelIds,
+        parcel_numbers: candidateParcelNumbers,
+        attempted_recovery: attemptedRecovery,
+      },
+      source: "admin",
+    })
+    const logEntries = Array.isArray(logEntry.log)
+      ? logEntry.log
+      : undefined
     const updatedShipment = {
-      ...(existingShipment ?? {}),
+      ...(currentShipment ?? {}),
       client_reference: clientReference,
       parcel_ids: resolvedParcelIds,
       ...(cancelResult
@@ -1022,6 +1092,7 @@ export async function DELETE(req: MedusaRequest, res: MedusaResponse) {
       ...(shouldMarkCancelled
         ? { cancelled_at: new Date().toISOString() }
         : {}),
+      ...(logEntries ? { log: logEntries } : {}),
     }
 
     await fulfillmentModuleService.updateFulfillment(fulfillment.id, {
@@ -1030,6 +1101,7 @@ export async function DELETE(req: MedusaRequest, res: MedusaResponse) {
         [GLS_FULFILLMENT_METADATA_KEY]: updatedShipment,
       },
     })
+    currentShipment = updatedShipment
 
     const email = fulfillment.order?.email?.trim()
     if (shouldMarkCancelled && email && notificationModuleService) {
@@ -1084,6 +1156,13 @@ export async function DELETE(req: MedusaRequest, res: MedusaResponse) {
       error instanceof Error && error.message
         ? error.message
         : "GLS cancellation failed."
+    await writeLogEntry({
+      action: "cancel_label",
+      status: "error",
+      message: "GLS cancellation failed.",
+      errors: [message],
+      source: "admin",
+    })
     await notifyGlsCancellationIssue(
       notificationModuleService,
       fulfillment.order,
@@ -1173,6 +1252,37 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     return
   }
 
+  const metadata = extractMetadata(fulfillment)
+  const existingShipment =
+    metadata[GLS_FULFILLMENT_METADATA_KEY] &&
+    typeof metadata[GLS_FULFILLMENT_METADATA_KEY] === "object"
+      ? (metadata[GLS_FULFILLMENT_METADATA_KEY] as Record<
+          string,
+          unknown
+        >)
+      : null
+  const writeLogEntry = async (
+    entry: Parameters<typeof appendGlsShipmentLog>[1]
+  ) => {
+    try {
+      const updatedShipment = appendGlsShipmentLog(
+        existingShipment,
+        entry
+      )
+      await fulfillmentModuleService.updateFulfillment(fulfillment.id, {
+        metadata: {
+          ...metadata,
+          [GLS_FULFILLMENT_METADATA_KEY]: updatedShipment,
+        },
+      })
+    } catch (error) {
+      logger?.warn?.(
+        `GLS: failed to update shipment log for ${fulfillment.id}`
+      )
+      logger?.error?.(error as Error)
+    }
+  }
+
   const glsPickup = readGlsPickupFromMetadata(order.metadata)
   const pickupHint =
     isPickupLike(shippingMethod?.name) ||
@@ -1180,6 +1290,15 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     isPickupLike(fulfillment.shipping_option?.type?.label) ||
     isPickupLike(fulfillment.shipping_option?.type?.description)
   if (!glsPickup && pickupHint) {
+    await writeLogEntry({
+      action: "create_shipment",
+      status: "error",
+      message: "Missing GLS pickup point for pickup delivery option.",
+      details: {
+        pickup_required: true,
+      },
+      source: "admin",
+    })
     res.status(400).json({
       message:
         "GLS pickup point is missing for a pickup delivery option.",
@@ -1187,7 +1306,6 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     return
   }
 
-  const metadata = extractMetadata(fulfillment)
   if (shouldSkipExistingShipment(metadata)) {
     res.status(409).json({
       message: "GLS shipment already created for this fulfillment.",
@@ -1197,6 +1315,15 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
 
   const { config, missing } = resolveGlsConfig()
   if (!config) {
+    await writeLogEntry({
+      action: "create_shipment",
+      status: "error",
+      message: "Missing GLS configuration.",
+      details: {
+        missing,
+      },
+      source: "admin",
+    })
     res.status(400).json({
       message: `Missing GLS configuration: ${missing.join(", ")}.`,
     })
@@ -1229,9 +1356,6 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     const glsErrors = extractGlsErrorDescriptions(result.response)
     const parcelNumbers = extractParcelNumbers(result.response)
     const clientReference = resolveOrderReference(order)
-    const existingShipment = metadata[
-      GLS_FULFILLMENT_METADATA_KEY
-    ] as Record<string, unknown> | null
     const previousParcelNumbers = mergeParcelNumbers(
       readPreviousParcelNumbers(existingShipment),
       readShipmentParcelNumbers(existingShipment)
@@ -1264,26 +1388,48 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
           ...labelsToAdd,
         ]
       : undefined
+    const shipmentMetadata = {
+      created_at: new Date().toISOString(),
+      request: result.request,
+      response: result.response,
+      client_reference: clientReference,
+      parcel_numbers: parcelNumbers,
+      ...(filteredPreviousNumbers.length
+        ? { previous_parcel_numbers: filteredPreviousNumbers }
+        : {}),
+      ...(result.parcelIds?.length
+        ? { parcel_ids: result.parcelIds }
+        : {}),
+      ...(result.labelBase64
+        ? { label_base64: result.labelBase64 }
+        : {}),
+    }
+    const logEntry = appendGlsShipmentLog(existingShipment, {
+      action: "create_shipment",
+      status: glsErrors.length ? "warning" : "success",
+      message: glsErrors.length
+        ? "GLS returned errors during shipment creation."
+        : "GLS shipment created.",
+      errors: glsErrors.length ? glsErrors : undefined,
+      request: result.request,
+      response: result.response,
+      details: {
+        parcel_numbers: parcelNumbers,
+        parcel_ids: result.parcelIds,
+      },
+      source: "admin",
+    })
+    const logEntries = Array.isArray(logEntry.log)
+      ? logEntry.log
+      : undefined
+    const shipmentPayload = logEntries
+      ? { ...shipmentMetadata, log: logEntries }
+      : shipmentMetadata
 
     await fulfillmentModuleService.updateFulfillment(fulfillment.id, {
       metadata: {
         ...metadata,
-        [GLS_FULFILLMENT_METADATA_KEY]: {
-          created_at: new Date().toISOString(),
-          request: result.request,
-          response: result.response,
-          client_reference: clientReference,
-          parcel_numbers: parcelNumbers,
-          ...(filteredPreviousNumbers.length
-            ? { previous_parcel_numbers: filteredPreviousNumbers }
-            : {}),
-          ...(result.parcelIds?.length
-            ? { parcel_ids: result.parcelIds }
-            : {}),
-          ...(result.labelBase64
-            ? { label_base64: result.labelBase64 }
-            : {}),
-        },
+        [GLS_FULFILLMENT_METADATA_KEY]: shipmentPayload,
       },
       ...(labelPayload ? { labels: labelPayload } : {}),
     })
@@ -1298,6 +1444,17 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
       `GLS: failed to create shipment for fulfillment ${fulfillment.id}`,
       error as Error
     )
+    await writeLogEntry({
+      action: "create_shipment",
+      status: "error",
+      message: "GLS shipment failed.",
+      errors: [
+        error instanceof Error && error.message
+          ? error.message
+          : "Unknown error",
+      ],
+      source: "admin",
+    })
     res.status(500).json({
       message:
         error instanceof Error && error.message
