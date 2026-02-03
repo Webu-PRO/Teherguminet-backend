@@ -1,11 +1,17 @@
 import {
+  createStep,
   createWorkflow,
   transform,
   when,
+  StepResponse,
   WorkflowResponse,
 } from "@medusajs/framework/workflows-sdk"
 import { useQueryGraphStep } from "@medusajs/medusa/core-flows"
 
+import {
+  getBillingoConfig,
+  getBillingoDocumentPdf,
+} from "../lib/billingo"
 import { sendNotificationStep } from "./steps/send-notification"
 
 type WorkflowInput = {
@@ -14,58 +20,64 @@ type WorkflowInput = {
 
 type ReceiptAttachment = {
   filename: string
-  path: string
+  content: string
 }
 
-const resolveReceiptPublicUrl = (
-  metadata?: Record<string, unknown> | null
-) => {
-  const candidates: Array<unknown> = [
-    metadata?.billingo_receipt,
-    metadata?.billingo_receipt_public_url,
-  ]
+const sleep = (ms: number) =>
+  new Promise((resolve) => setTimeout(resolve, ms))
 
-  for (const candidate of candidates) {
-    if (typeof candidate === "string") {
-      const trimmed = candidate.trim()
-      if (trimmed) {
-        return trimmed
-      }
+const fetchBillingoReceiptAttachmentStep = createStep(
+  "fetch-billingo-receipt-attachment",
+  async (
+    input: {
+      order?: {
+        id?: string
+        display_id?: number | string | null
+        metadata?: Record<string, unknown> | null
+      } | null
+    }
+  ) => {
+    const config = getBillingoConfig()
+    if (!config) {
+      return new StepResponse(null)
     }
 
-    if (candidate && typeof candidate === "object") {
-      const url = (candidate as { public_url?: unknown }).public_url
-      if (typeof url === "string") {
-        const trimmed = url.trim()
-        if (trimmed) {
-          return trimmed
+    const receiptMeta = input.order?.metadata?.billingo_receipt as
+      | { id?: number | null }
+      | null
+    const receiptId =
+      typeof receiptMeta?.id === "number" ? receiptMeta.id : null
+    if (!receiptId) {
+      return new StepResponse(null)
+    }
+
+    const ref = input.order?.display_id ?? input.order?.id ?? "order"
+    const safeRef = String(ref).replace(/[^a-zA-Z0-9_-]+/g, "-")
+    const filename = `nyugta-${safeRef}.pdf`
+
+    const maxAttempts = 3
+    let delayMs = 1200
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        const content = await getBillingoDocumentPdf(receiptId, config)
+        if (content) {
+          const attachment: ReceiptAttachment = { filename, content }
+          return new StepResponse(attachment)
         }
+      } catch {
+        // retry
+      }
+
+      if (attempt < maxAttempts) {
+        await sleep(delayMs)
+        delayMs += 1200
       }
     }
+
+    return new StepResponse(null)
   }
-
-  return ""
-}
-
-const resolveReceiptAttachments = (
-  order?: { id?: string; display_id?: number | string | null; metadata?: any }
-) => {
-  const url = resolveReceiptPublicUrl(order?.metadata ?? null)
-  if (!url) {
-    return undefined
-  }
-
-  const ref = order?.display_id ?? order?.id ?? "order"
-  const safeRef = String(ref).replace(/[^a-zA-Z0-9_-]+/g, "-")
-  const filename = `nyugta-${safeRef}.pdf`
-
-  const attachment: ReceiptAttachment = {
-    filename,
-    path: url,
-  }
-
-  return [attachment]
-}
+)
 
 export const sendPaymentReceiptWorkflow = createWorkflow(
   "send-payment-receipt",
@@ -109,6 +121,15 @@ export const sendPaymentReceiptWorkflow = createWorkflow(
       return { payment, order }
     })
 
+    const receiptAttachment = fetchBillingoReceiptAttachmentStep({
+      order: payload.order,
+    })
+    const attachments = transform(
+      { receiptAttachment },
+      ({ receiptAttachment }) =>
+        receiptAttachment ? [receiptAttachment] : undefined
+    )
+
     const notification = when({ payload }, ({ payload }) =>
       Boolean(payload?.order?.email)
     ).then(() => {
@@ -117,7 +138,6 @@ export const sendPaymentReceiptWorkflow = createWorkflow(
         return null
       }
 
-      const attachments = resolveReceiptAttachments(order)
       const idempotencyKey = transform({ payment }, ({ payment }) =>
         payment?.id ? `payment-receipt-${payment.id}` : undefined
       )
@@ -130,7 +150,7 @@ export const sendPaymentReceiptWorkflow = createWorkflow(
           data: {
             order,
             payment,
-            ...(attachments ? { attachments } : {}),
+            attachments,
           },
           resource_id: order.id,
           resource_type: "order",

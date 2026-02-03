@@ -613,3 +613,50 @@ export const getBillingoPublicUrl = async (
     }
   )
 }
+
+export const getBillingoDocumentPdf = async (
+  documentId: number,
+  config: BillingoConfig
+) => {
+  const controller = new AbortController()
+  const timeout = setTimeout(
+    () => controller.abort(),
+    config.timeoutMs
+  )
+
+  try {
+    const response = await fetch(
+      `${config.baseUrl}/documents/${documentId}/download`,
+      {
+        method: "GET",
+        headers: {
+          Accept: "application/pdf",
+          "X-API-KEY": config.apiKey,
+        },
+        signal: controller.signal,
+      }
+    )
+
+    if (!response.ok) {
+      let message = response.statusText
+      try {
+        const text = await response.text()
+        if (text) {
+          const data = JSON.parse(text)
+          if (typeof data?.error?.message === "string") {
+            message = data.error.message
+          }
+        }
+      } catch {
+        // ignore parse errors
+      }
+
+      throw new Error(`Billingo ${response.status}: ${message}`)
+    }
+
+    const buffer = Buffer.from(await response.arrayBuffer())
+    return buffer.toString("base64")
+  } finally {
+    clearTimeout(timeout)
+  }
+}
