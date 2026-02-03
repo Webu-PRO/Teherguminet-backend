@@ -186,8 +186,8 @@ const resolveAttachments = (notification: ProviderSendNotificationDTO) => {
 
   type ResendAttachment = NonNullable<CreateEmailOptions["attachments"]>[number];
 
-  const normalized = raw
-    .map((entry) => {
+  const normalized: Array<ResendAttachment | null> = raw
+    .map((entry): ResendAttachment | null => {
       if (!entry || typeof entry !== "object") {
         return null;
       }
@@ -198,7 +198,9 @@ const resolveAttachments = (notification: ProviderSendNotificationDTO) => {
       const path =
         typeof record.path === "string" ? record.path.trim() : "";
       const content =
-        typeof record.content === "string" ? record.content : undefined;
+        typeof record.content === "string" || Buffer.isBuffer(record.content)
+          ? record.content
+          : undefined;
       if (!filename || (!path && !content)) {
         return null;
       }
