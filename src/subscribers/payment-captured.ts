@@ -2,12 +2,29 @@ import type {
   SubscriberArgs,
   SubscriberConfig,
 } from "@medusajs/framework"
-import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
+import {
+  ContainerRegistrationKeys,
+  Modules,
+} from "@medusajs/framework/utils"
 import { createOrderFulfillmentWorkflow } from "@medusajs/medusa/core-flows"
 import { PaymentEvents } from "@medusajs/utils"
-import type { Logger, OrderShippingMethodDTO, Query } from "@medusajs/types"
+import type {
+  IOrderModuleService,
+  Logger,
+  OrderDTO,
+  OrderShippingMethodDTO,
+  Query,
+} from "@medusajs/types"
 
 import { isGlsShippingMethod } from "../lib/gls"
+import {
+  BILLINGO_METADATA_KEYS,
+  createBillingoReceipt,
+  getBillingoConfig,
+  getBillingoPublicUrl,
+  hasBillingoMetadata,
+  type BillingoDocumentMetadata,
+} from "../lib/billingo"
 import { sendPaymentReceiptWorkflow } from "../workflows/send-payment-receipt"
 
 type PaymentOrder = {
@@ -146,6 +163,113 @@ const maybeCreateGlsFulfillment = async (
   }
 }
 
+const fetchOrderForBillingo = async (
+  container: SubscriberArgs["container"],
+  paymentId: string
+) => {
+  const query = container.resolve<Query>(ContainerRegistrationKeys.QUERY)
+  const { data: payments } = await query.graph({
+    entity: "payment",
+    fields: ["id", "payment_collection.order.id"],
+    filters: {
+      id: paymentId,
+    },
+  })
+
+  const payment = payments?.[0] as PaymentRecord | undefined
+  const orderId = payment?.payment_collection?.order?.id
+  if (!orderId) {
+    return undefined
+  }
+
+  const { data: orders } = await query.graph({
+    entity: "order",
+    fields: [
+      "id",
+      "display_id",
+      "email",
+      "created_at",
+      "currency_code",
+      "metadata",
+      "shipping_total",
+      "items.*",
+      "items.tax_lines.*",
+      "shipping_methods.*",
+      "shipping_methods.tax_lines.*",
+      "billing_address.*",
+      "shipping_address.*",
+    ],
+    filters: {
+      id: orderId,
+    },
+  })
+
+  return orders?.[0] as OrderDTO | undefined
+}
+
+const maybeCreateBillingoReceipt = async (
+  container: SubscriberArgs["container"],
+  paymentId: string,
+  logger?: Logger
+) => {
+  const config = getBillingoConfig()
+  if (!config) {
+    return
+  }
+
+  try {
+    const order = await fetchOrderForBillingo(container, paymentId)
+    if (!order) {
+      return
+    }
+
+    if (hasBillingoMetadata(order.metadata, "receipt")) {
+      return
+    }
+
+    const receipt = await createBillingoReceipt(order, config)
+
+    let publicUrl: string | undefined
+    if (typeof receipt?.id === "number") {
+      try {
+        const publicData = await getBillingoPublicUrl(receipt.id, config)
+        publicUrl =
+          typeof publicData?.public_url === "string"
+            ? publicData.public_url
+            : undefined
+      } catch (error) {
+        logger?.warn?.(
+          `Billingo: failed to fetch public url for receipt ${receipt.id}`
+        )
+      }
+    }
+
+    const orderModuleService =
+      container.resolve<IOrderModuleService>(Modules.ORDER)
+    const metadata =
+      (order.metadata as Record<string, unknown> | null) ?? {}
+    const payload: BillingoDocumentMetadata = {
+      id: receipt.id,
+      invoice_number: receipt.invoice_number,
+      public_url: publicUrl,
+      created_at: new Date().toISOString(),
+    }
+
+    await orderModuleService.updateOrders(order.id, {
+      metadata: {
+        ...metadata,
+        [BILLINGO_METADATA_KEYS.receipt]: payload,
+      },
+    })
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Unknown error"
+    logger?.error?.(
+      `Billingo: failed to create receipt for payment ${paymentId} (${message})`
+    )
+  }
+}
+
 export default async function paymentCapturedHandler({
   event: { data },
   container,
@@ -155,6 +279,7 @@ export default async function paymentCapturedHandler({
   }
 
   await maybeCreateGlsFulfillment(container, data.id)
+  await maybeCreateBillingoReceipt(container, data.id, resolveLogger(container))
 
   await sendPaymentReceiptWorkflow(container).run({
     input: {

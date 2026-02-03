@@ -15,9 +15,12 @@ import type {
 
 import { sendOrderConfirmationWorkflow } from "../workflows/send-order-confirmation"
 import {
-  createBillingoReceipt,
+  createBillingoInvoice,
   getBillingoConfig,
   getBillingoPublicUrl,
+  BILLINGO_METADATA_KEYS,
+  hasBillingoMetadata,
+  type BillingoDocumentMetadata,
 } from "../lib/billingo"
 
 const resolveLogger = (container: SubscriberArgs["container"]) => {
@@ -81,24 +84,6 @@ const resolveItemThumbnail = (item: Record<string, unknown>) => {
   return undefined
 }
 
-const RECEIPT_METADATA_KEY = "billingo_receipt"
-
-type BillingoReceiptMetadata = {
-  id?: number
-  invoice_number?: string
-  public_url?: string
-  created_at?: string
-}
-
-const hasReceiptMetadata = (metadata?: Record<string, unknown> | null) => {
-  const record = metadata?.[RECEIPT_METADATA_KEY]
-  if (!record || typeof record !== "object") {
-    return false
-  }
-  const id = (record as BillingoReceiptMetadata).id
-  return typeof id === "number" && Number.isFinite(id)
-}
-
 const fetchOrderForBillingo = async (
   container: SubscriberArgs["container"],
   orderId: string
@@ -110,6 +95,7 @@ const fetchOrderForBillingo = async (
       "id",
       "display_id",
       "email",
+      "created_at",
       "currency_code",
       "metadata",
       "shipping_total",
@@ -128,13 +114,13 @@ const fetchOrderForBillingo = async (
   return orders?.[0] as OrderDTO | undefined
 }
 
-const maybeCreateBillingoReceipt = async (
+const maybeCreateBillingoInvoice = async (
   container: SubscriberArgs["container"],
   orderId: string,
   logger?: Logger
 ) => {
   const config = getBillingoConfig()
-  if (!config) {
+  if (!config?.invoiceBlockId) {
     return
   }
 
@@ -144,23 +130,23 @@ const maybeCreateBillingoReceipt = async (
       return
     }
 
-    if (hasReceiptMetadata(order.metadata)) {
+    if (hasBillingoMetadata(order.metadata, "invoice")) {
       return
     }
 
-    const receipt = await createBillingoReceipt(order, config)
+    const invoice = await createBillingoInvoice(order, config)
 
     let publicUrl: string | undefined
-    if (typeof receipt?.id === "number") {
+    if (typeof invoice?.id === "number") {
       try {
-        const publicData = await getBillingoPublicUrl(receipt.id, config)
+        const publicData = await getBillingoPublicUrl(invoice.id, config)
         publicUrl =
           typeof publicData?.public_url === "string"
             ? publicData.public_url
             : undefined
       } catch (error) {
         logger?.warn?.(
-          `Billingo: failed to fetch public url for receipt ${receipt.id}`
+          `Billingo: failed to fetch public url for invoice ${invoice.id}`
         )
       }
     }
@@ -169,9 +155,9 @@ const maybeCreateBillingoReceipt = async (
       container.resolve<IOrderModuleService>(Modules.ORDER)
     const metadata =
       (order.metadata as Record<string, unknown> | null) ?? {}
-    const payload: BillingoReceiptMetadata = {
-      id: receipt.id,
-      invoice_number: receipt.invoice_number,
+    const payload: BillingoDocumentMetadata = {
+      id: invoice.id,
+      invoice_number: invoice.invoice_number,
       public_url: publicUrl,
       created_at: new Date().toISOString(),
     }
@@ -179,14 +165,14 @@ const maybeCreateBillingoReceipt = async (
     await orderModuleService.updateOrders(order.id, {
       metadata: {
         ...metadata,
-        [RECEIPT_METADATA_KEY]: payload,
+        [BILLINGO_METADATA_KEYS.invoice]: payload,
       },
     })
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Unknown error"
     logger?.error?.(
-      `Billingo: failed to create receipt for order ${orderId} (${message})`
+      `Billingo: failed to create invoice for order ${orderId} (${message})`
     )
   }
 }
@@ -262,7 +248,7 @@ export default async function orderPlacedHandler({
   container,
 }: SubscriberArgs<{ id: string }>) {
   const logger = resolveLogger(container)
-  await maybeCreateBillingoReceipt(container, data.id, logger)
+  await maybeCreateBillingoInvoice(container, data.id, logger)
   await sendOrderConfirmationWorkflow(container).run({
     input: {
       id: data.id,

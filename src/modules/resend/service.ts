@@ -178,6 +178,40 @@ const resolveNotificationLanguage = (
   return "hu";
 };
 
+const resolveAttachments = (notification: ProviderSendNotificationDTO) => {
+  const raw = (notification.data as any)?.attachments;
+  if (!Array.isArray(raw)) {
+    return undefined;
+  }
+
+  const normalized = raw
+    .map((entry) => {
+      if (!entry || typeof entry !== "object") {
+        return null;
+      }
+
+      const record = entry as Record<string, unknown>;
+      const filename =
+        typeof record.filename === "string" ? record.filename.trim() : "";
+      const path =
+        typeof record.path === "string" ? record.path.trim() : "";
+      const content =
+        typeof record.content === "string" ? record.content : undefined;
+      if (!filename || (!path && !content)) {
+        return null;
+      }
+
+      return {
+        filename,
+        ...(path ? { path } : {}),
+        ...(content ? { content } : {}),
+      };
+    })
+    .filter(Boolean);
+
+  return normalized.length ? normalized : undefined;
+};
+
 class ResendNotificationProviderService extends AbstractNotificationProviderService {
   static identifier = "notification-resend";
 
@@ -399,6 +433,14 @@ class ResendNotificationProviderService extends AbstractNotificationProviderServ
       emailOptions = {
         ...commonOptions,
         react: template(notification.data),
+      };
+    }
+
+    const attachments = resolveAttachments(notification);
+    if (attachments?.length) {
+      emailOptions = {
+        ...emailOptions,
+        attachments,
       };
     }
 

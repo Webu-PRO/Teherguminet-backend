@@ -199,6 +199,38 @@ const baseStyles = {
   } as React.CSSProperties,
 };
 
+const resolveBillingoPublicUrl = (
+  metadata?: Record<string, unknown> | null
+) => {
+  const candidates: Array<unknown> = [
+    metadata?.billingo_invoice,
+    metadata?.billingo_invoice_public_url,
+    metadata?.billingo_receipt,
+    metadata?.billingo_receipt_public_url,
+  ]
+
+  for (const candidate of candidates) {
+    if (typeof candidate === "string") {
+      const trimmed = candidate.trim()
+      if (trimmed) {
+        return trimmed
+      }
+    }
+
+    if (candidate && typeof candidate === "object") {
+      const url = (candidate as { public_url?: unknown }).public_url
+      if (typeof url === "string") {
+        const trimmed = url.trim()
+        if (trimmed) {
+          return trimmed
+        }
+      }
+    }
+  }
+
+  return ""
+};
+
 export const OrderPlacedEmailComponent = ({ order }: OrderPlacedEmailProps) => {
   const currency = order.currency_code?.toUpperCase?.() || "EUR";
   const orderId = resolveOrderId(order);
@@ -334,16 +366,9 @@ export const OrderPlacedEmailComponent = ({ order }: OrderPlacedEmailProps) => {
 
   const orderUrl = buildOrderUrl(orderId, languageCode);
   const orderTotalDisplay = formatAmount(orderTotal, currency, lang.locale);
-  const receiptUrlRaw =
-    (order.metadata as Record<string, unknown> | null)?.billingo_receipt ??
-    (order.metadata as Record<string, unknown> | null)
-      ?.billingo_receipt_public_url
-  const receiptUrl =
-    typeof receiptUrlRaw === "string"
-      ? receiptUrlRaw
-      : typeof (receiptUrlRaw as any)?.public_url === "string"
-        ? (receiptUrlRaw as any).public_url
-        : ""
+  const receiptUrl = resolveBillingoPublicUrl(
+    order.metadata as Record<string, unknown> | null
+  )
 
   // Accent: keep your existing per-language accent (but on white)
   const accent =

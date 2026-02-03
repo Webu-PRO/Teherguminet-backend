@@ -1,12 +1,32 @@
 import type { OrderDTO } from "@medusajs/types"
 
-type BillingoConfig = {
+export type BillingoDocumentType = "receipt" | "invoice"
+
+export const BILLINGO_METADATA_KEYS = {
+  receipt: "billingo_receipt",
+  invoice: "billingo_invoice",
+} as const
+
+export type BillingoDocumentMetadata = {
+  id?: number
+  invoice_number?: string
+  public_url?: string
+  created_at?: string
+}
+
+export type BillingoConfig = {
   apiKey: string
   baseUrl: string
-  blockId: number
+  receiptBlockId: number
+  invoiceBlockId?: number
   paymentMethodDefault: string
   electronic: boolean
   timeoutMs: number
+  defaultDocumentType: BillingoDocumentType
+  invoiceLanguage: string
+  invoiceUnit: string
+  invoiceUnitPriceType: "gross" | "net"
+  invoiceBankAccountId?: number
 }
 
 type BillingoDocument = {
@@ -24,6 +44,16 @@ type BillingoReceiptItem = {
   vat: string
 }
 
+type BillingoInvoiceItem = {
+  name: string
+  unit_price: number
+  unit_price_type: "gross" | "net"
+  quantity: number
+  unit: string
+  vat: string
+  comment?: string
+}
+
 type BillingoReceiptPayload = {
   vendor_id?: string
   partner_id?: number
@@ -38,8 +68,35 @@ type BillingoReceiptPayload = {
   items: BillingoReceiptItem[]
 }
 
+type BillingoInvoicePayload = {
+  vendor_id?: string
+  partner_id?: number
+  name?: string
+  emails?: string[]
+  block_id: number
+  type: "invoice"
+  fulfillment_date: string
+  due_date: string
+  payment_method: string
+  language: string
+  currency: string
+  conversion_rate?: number
+  electronic?: boolean
+  paid?: boolean
+  bank_account_id?: number
+  comment?: string
+  settings?: Record<string, unknown>
+  items: BillingoInvoiceItem[]
+}
+
+type BillingoDocumentPayload = BillingoReceiptPayload | BillingoInvoicePayload
+
 const DEFAULT_BASE_URL = "https://api.billingo.hu/v3"
 const DEFAULT_TIMEOUT_MS = 15_000
+const DEFAULT_INVOICE_LANGUAGE = "hu"
+const DEFAULT_INVOICE_UNIT = "db"
+const DEFAULT_INVOICE_UNIT_PRICE_TYPE: BillingoConfig["invoiceUnitPriceType"] =
+  "gross"
 
 const resolveDecimals = (currency: string): number => {
   try {
@@ -118,6 +175,30 @@ const toNumber = (value: unknown) => {
   return null
 }
 
+const parsePositiveNumber = (value?: string | null) => {
+  if (!value) {
+    return null
+  }
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return null
+  }
+  return parsed
+}
+
+const toDateString = (value?: string | Date | null) => {
+  const date =
+    value instanceof Date
+      ? value
+      : typeof value === "string"
+        ? new Date(value)
+        : new Date()
+  if (Number.isNaN(date.getTime())) {
+    return new Date().toISOString().slice(0, 10)
+  }
+  return date.toISOString().slice(0, 10)
+}
+
 const resolveCustomerName = (order: OrderDTO) => {
   const billing = order.billing_address
   const shipping = order.shipping_address
@@ -173,18 +254,84 @@ const resolvePaymentMethod = (
   return fallback
 }
 
+export const resolveBillingoDocumentType = (
+  order: OrderDTO,
+  config: BillingoConfig
+): BillingoDocumentType => {
+  const metadata = (order.metadata as Record<string, unknown> | null) ?? {}
+  const direct =
+    typeof metadata.billingo_document_type === "string"
+      ? metadata.billingo_document_type.trim().toLowerCase()
+      : ""
+  if (direct === "invoice" || direct === "receipt") {
+    return direct
+  }
+  return config.defaultDocumentType
+}
+
+export const hasBillingoMetadata = (
+  metadata: Record<string, unknown> | null | undefined,
+  type: BillingoDocumentType
+) => {
+  const record = metadata?.[BILLINGO_METADATA_KEYS[type]]
+  if (!record || typeof record !== "object") {
+    return false
+  }
+  const id = (record as BillingoDocumentMetadata).id
+  return typeof id === "number" && Number.isFinite(id)
+}
+
+const resolveExtraPayload = (
+  order: OrderDTO,
+  type: BillingoDocumentType
+) => {
+  const metadata = (order.metadata as Record<string, unknown> | null) ?? {}
+  const generic = metadata.billingo_payload
+  const specific =
+    type === "invoice"
+      ? metadata.billingo_invoice_payload
+      : metadata.billingo_receipt_payload
+
+  const genericPayload =
+    generic && typeof generic === "object" && !Array.isArray(generic)
+      ? (generic as Record<string, unknown>)
+      : null
+  const specificPayload =
+    specific && typeof specific === "object" && !Array.isArray(specific)
+      ? (specific as Record<string, unknown>)
+      : null
+
+  if (!genericPayload && !specificPayload) {
+    return null
+  }
+
+  return {
+    ...(genericPayload ?? {}),
+    ...(specificPayload ?? {}),
+  }
+}
+
 export const getBillingoConfig = (): BillingoConfig | null => {
   const apiKey = process.env.BILLINGO_API_KEY?.trim()
-  const blockIdRaw = process.env.BILLINGO_BLOCK_ID?.trim()
-  if (!apiKey || !blockIdRaw) {
+  const receiptBlockIdRaw =
+    process.env.BILLINGO_RECEIPT_BLOCK_ID?.trim() ??
+    process.env.BILLINGO_BLOCK_ID?.trim()
+  if (!apiKey || !receiptBlockIdRaw) {
     return null
   }
 
-  const blockId = Number(blockIdRaw)
-  if (!Number.isFinite(blockId) || blockId <= 0) {
+  const receiptBlockId = parsePositiveNumber(receiptBlockIdRaw)
+  if (!receiptBlockId) {
     return null
   }
 
+  const invoiceBlockId = parsePositiveNumber(
+    process.env.BILLINGO_INVOICE_BLOCK_ID?.trim()
+  )
+  const defaultDocumentType =
+    process.env.BILLINGO_DOCUMENT_TYPE?.trim().toLowerCase() === "invoice"
+      ? "invoice"
+      : "receipt"
   const paymentMethodDefault =
     process.env.BILLINGO_PAYMENT_METHOD?.trim() || "other"
   const electronic =
@@ -192,16 +339,33 @@ export const getBillingoConfig = (): BillingoConfig | null => {
       .toString()
       .trim()
       .toLowerCase() === "true"
+  const invoiceLanguage =
+    process.env.BILLINGO_INVOICE_LANGUAGE?.trim() || DEFAULT_INVOICE_LANGUAGE
+  const invoiceUnit =
+    process.env.BILLINGO_INVOICE_UNIT?.trim() || DEFAULT_INVOICE_UNIT
+  const invoiceUnitPriceType =
+    process.env.BILLINGO_INVOICE_UNIT_PRICE_TYPE?.trim().toLowerCase() === "net"
+      ? "net"
+      : DEFAULT_INVOICE_UNIT_PRICE_TYPE
+  const invoiceBankAccountId = parsePositiveNumber(
+    process.env.BILLINGO_INVOICE_BANK_ACCOUNT_ID?.trim()
+  )
   const timeoutMsRaw = process.env.BILLINGO_TIMEOUT_MS?.trim()
   const timeoutMs = timeoutMsRaw ? Number(timeoutMsRaw) : DEFAULT_TIMEOUT_MS
 
   return {
     apiKey,
     baseUrl: process.env.BILLINGO_BASE_URL?.trim() || DEFAULT_BASE_URL,
-    blockId,
+    receiptBlockId,
+    invoiceBlockId: invoiceBlockId ?? undefined,
     paymentMethodDefault,
     electronic,
     timeoutMs: Number.isFinite(timeoutMs) ? timeoutMs : DEFAULT_TIMEOUT_MS,
+    defaultDocumentType,
+    invoiceLanguage,
+    invoiceUnit,
+    invoiceUnitPriceType,
+    invoiceBankAccountId: invoiceBankAccountId ?? undefined,
   }
 }
 
@@ -245,13 +409,50 @@ const billingoRequest = async <T>(
   }
 }
 
-export const createBillingoReceipt = async (
+const applyPayloadOverrides = (
+  payload: BillingoDocumentPayload,
+  extra?: Record<string, unknown> | null
+) => {
+  if (!extra) {
+    return payload
+  }
+
+  const merged: Record<string, unknown> = { ...payload }
+  for (const [key, value] of Object.entries(extra)) {
+    if (key === "type" || key === "block_id") {
+      continue
+    }
+    if (key === "items") {
+      if (Array.isArray(value)) {
+        merged.items = value
+      }
+      continue
+    }
+    merged[key] = value
+  }
+
+  return merged as BillingoDocumentPayload
+}
+
+export const createBillingoDocument = async (
   order: OrderDTO,
-  config: BillingoConfig
+  config: BillingoConfig,
+  type?: BillingoDocumentType
 ) => {
   const currency = order.currency_code?.toUpperCase() || "EUR"
+  const documentType = type ?? resolveBillingoDocumentType(order, config)
+  const decimals = resolveDecimals(currency)
+  const extraPayload = resolveExtraPayload(order, documentType)
+  const paymentMethod = resolvePaymentMethod(
+    order,
+    config.paymentMethodDefault
+  )
 
-  const items: BillingoReceiptItem[] = (order.items ?? [])
+  if (documentType === "invoice" && !config.invoiceBlockId) {
+    throw new Error("Billingo: invoice block id is missing")
+  }
+
+  const baseItems = (order.items ?? [])
     .filter((item) => item && typeof item.quantity === "number")
     .map((item) => {
       const quantity = Math.max(item.quantity ?? 1, 1)
@@ -261,58 +462,144 @@ export const createBillingoReceipt = async (
         toNumber(item.subtotal) ??
         (toNumber(item.unit_price) ?? 0) * quantity
 
-      const decimals = resolveDecimals(currency)
-      const unitPrice = roundTo(toMajor(lineTotal, currency), decimals)
-      const name = `${item.title ?? "Item"}${quantity > 1 ? ` x${quantity}` : ""}`
       return {
-        name,
-        unit_price: unitPrice,
+        title: item.title ?? "Item",
+        quantity,
+        lineTotal,
         vat: resolveItemVat(item.tax_lines ?? null),
+      }
+    })
+
+  const shippingTotal = toNumber(order.shipping_total) ?? 0
+  const shippingMethod = order.shipping_methods?.[0]
+
+  if (documentType === "receipt") {
+    const items: BillingoReceiptItem[] = baseItems
+      .map((item) => {
+        const unitPrice = roundTo(
+          toMajor(item.lineTotal, currency),
+          decimals
+        )
+        const name =
+          item.quantity > 1
+            ? `${item.title} x${item.quantity}`
+            : item.title
+        return {
+          name,
+          unit_price: unitPrice,
+          vat: item.vat,
+        }
+      })
+      .filter((item) => item.unit_price > 0)
+
+    if (shippingTotal > 0) {
+      items.push({
+        name: "Shipping",
+        unit_price: roundTo(toMajor(shippingTotal, currency), decimals),
+        vat: resolveItemVat(shippingMethod?.tax_lines ?? null),
+      })
+    }
+
+    if (!items.length) {
+      throw new Error("Billingo: no receipt items available")
+    }
+
+    const basePayload: BillingoReceiptPayload = {
+      vendor_id: order.id,
+      name: resolveCustomerName(order),
+      emails: order.email ? [order.email] : undefined,
+      block_id: config.receiptBlockId,
+      type: "receipt",
+      payment_method: paymentMethod,
+      currency,
+      electronic: config.electronic,
+      items,
+    }
+
+    const payload = applyPayloadOverrides(basePayload, extraPayload)
+
+    return billingoRequest<BillingoDocument>(
+      config,
+      "/documents/receipt",
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }
+    )
+  }
+
+  const items: BillingoInvoiceItem[] = baseItems
+    .map((item) => {
+      const unitPrice = roundTo(
+        toMajor(item.lineTotal / item.quantity, currency),
+        decimals
+      )
+      return {
+        name: item.title,
+        unit_price: unitPrice,
+        unit_price_type: config.invoiceUnitPriceType,
+        quantity: item.quantity,
+        unit: config.invoiceUnit,
+        vat: item.vat,
       }
     })
     .filter((item) => item.unit_price > 0)
 
-  const shippingTotal = toNumber(order.shipping_total) ?? 0
   if (shippingTotal > 0) {
-    const decimals = resolveDecimals(currency)
-    const shippingMethod = order.shipping_methods?.[0]
     items.push({
       name: "Shipping",
       unit_price: roundTo(toMajor(shippingTotal, currency), decimals),
+      unit_price_type: config.invoiceUnitPriceType,
+      quantity: 1,
+      unit: config.invoiceUnit,
       vat: resolveItemVat(shippingMethod?.tax_lines ?? null),
     })
   }
 
   if (!items.length) {
-    throw new Error("Billingo: no receipt items available")
+    throw new Error("Billingo: no invoice items available")
   }
 
-  const payload: BillingoReceiptPayload = {
+  const documentDate = toDateString(
+    (order as OrderDTO & { created_at?: string | Date }).created_at
+  )
+
+  const basePayload: BillingoInvoicePayload = {
     vendor_id: order.id,
     name: resolveCustomerName(order),
     emails: order.email ? [order.email] : undefined,
-    block_id: config.blockId,
-    type: "receipt",
-    payment_method: resolvePaymentMethod(
-      order,
-      config.paymentMethodDefault
-    ),
+    block_id: config.invoiceBlockId!,
+    type: "invoice",
+    fulfillment_date: documentDate,
+    due_date: documentDate,
+    payment_method: paymentMethod,
+    language: config.invoiceLanguage,
     currency,
     electronic: config.electronic,
     items,
   }
 
-  const document = await billingoRequest<BillingoDocument>(
-    config,
-    "/documents/receipt",
-    {
-      method: "POST",
-      body: JSON.stringify(payload),
-    }
-  )
+  if (config.invoiceBankAccountId) {
+    basePayload.bank_account_id = config.invoiceBankAccountId
+  }
 
-  return document
+  const payload = applyPayloadOverrides(basePayload, extraPayload)
+
+  return billingoRequest<BillingoDocument>(config, "/documents", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  })
 }
+
+export const createBillingoReceipt = async (
+  order: OrderDTO,
+  config: BillingoConfig
+) => createBillingoDocument(order, config, "receipt")
+
+export const createBillingoInvoice = async (
+  order: OrderDTO,
+  config: BillingoConfig
+) => createBillingoDocument(order, config, "invoice")
 
 export const getBillingoPublicUrl = async (
   documentId: number,

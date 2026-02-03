@@ -1,6 +1,7 @@
 import * as React from "react";
 import {
   Body,
+  Button,
   Container,
   Head,
   Heading,
@@ -193,6 +194,38 @@ const styles = {
     color: "#111111",
     fontFamily: FONT_STACK,
   } as React.CSSProperties,
+  receiptCard: {
+    marginTop: "18px",
+    borderRadius: "16px",
+    border: "1px solid #E5E7EB",
+    backgroundColor: "#F9FAFB",
+    padding: "18px",
+  } as React.CSSProperties,
+  receiptTitle: {
+    margin: "0 0 8px",
+    fontSize: "12px",
+    textTransform: "uppercase",
+    letterSpacing: "0.16em",
+    fontWeight: 800,
+    color: "#111111",
+    fontFamily: FONT_STACK,
+  } as React.CSSProperties,
+  receiptCta: {
+    display: "inline-block",
+    backgroundColor: "#111111",
+    color: "#ffffff",
+    textDecoration: "none",
+    padding: "10px 18px",
+    borderRadius: "999px",
+    fontSize: "13px",
+    fontWeight: 700,
+    fontFamily: FONT_STACK,
+  } as React.CSSProperties,
+  receiptLink: {
+    color: "#111111",
+    fontWeight: 700,
+    textDecoration: "underline",
+  } as React.CSSProperties,
   closing: {
     margin: "12px 0 0",
     fontSize: "14px",
@@ -308,6 +341,9 @@ type LanguageBlock = {
     shipping: string;
     total: string;
   };
+  receiptTitle: string;
+  receiptCopy: string;
+  receiptCta: string;
   note: string;
   closingLines: string[];
   orderFallback: string;
@@ -341,6 +377,9 @@ const languageBlocks: Record<LanguageCode, LanguageBlock> = {
       shipping: "Szállítás",
       total: "Fizetendő",
     },
+    receiptTitle: "Nyugta",
+    receiptCopy: "A nyugtát az alábbi gombbal tudod letölteni.",
+    receiptCta: "Nyugta letöltése",
     note: "A bizonylatot e-mailben őrizd meg. Ha ÁFA-s számlára van szükség, jelezd nekünk válasz e-mailben, és elkészítjük.",
     closingLines: ["Üdvözlettel,", `A ${BRAND} csapata`],
     orderFallback: "Rendelés",
@@ -371,12 +410,47 @@ const languageBlocks: Record<LanguageCode, LanguageBlock> = {
       shipping: "Doprava",
       total: "Celková suma",
     },
+    receiptTitle: "Doklad",
+    receiptCopy: "Doklad si môžeš stiahnuť pomocou tlačidla nižšie.",
+    receiptCta: "Stiahnuť doklad",
     note: "Potvrdenie si, prosím, uchovajte. Ak potrebujete faktúru s DPH, odpovedzte na tento e-mail a pripravíme ju.",
     closingLines: ["S pozdravom,", `Tím ${BRAND}`],
     orderFallback: "Objednávka",
     dateFallback: "Práve spracované",
     accent: "#3F8DFF",
   },
+};
+
+const resolveBillingoPublicUrl = (
+  metadata?: Record<string, unknown> | null
+) => {
+  const candidates: Array<unknown> = [
+    metadata?.billingo_receipt,
+    metadata?.billingo_receipt_public_url,
+    metadata?.billingo_invoice,
+    metadata?.billingo_invoice_public_url,
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === "string") {
+      const trimmed = candidate.trim();
+      if (trimmed) {
+        return trimmed;
+      }
+    }
+
+    if (candidate && typeof candidate === "object") {
+      const url = (candidate as { public_url?: unknown }).public_url;
+      if (typeof url === "string") {
+        const trimmed = url.trim();
+        if (trimmed) {
+          return trimmed;
+        }
+      }
+    }
+  }
+
+  return "";
 };
 
 const SummaryRow = ({
@@ -464,6 +538,9 @@ export const PaymentReceiptEmail = ({
         ? order.total
         : paymentAmount,
   };
+  const receiptUrl = resolveBillingoPublicUrl(
+    order?.metadata as Record<string, unknown> | null
+  );
 
   return (
     <Html>
@@ -607,6 +684,28 @@ export const PaymentReceiptEmail = ({
                   accentColor={lang.accent}
                 />
               </Section>
+
+              {receiptUrl ? (
+                <Section style={styles.receiptCard}>
+                  <Text style={styles.receiptTitle}>{lang.receiptTitle}</Text>
+                  <Text style={{ ...styles.note, margin: 0 }}>
+                    {lang.receiptCopy}
+                  </Text>
+                  <Section style={{ marginTop: "12px" }}>
+                    <Button href={receiptUrl} style={styles.receiptCta}>
+                      {lang.receiptCta}
+                    </Button>
+                    <Text style={{ ...styles.muted, marginTop: "10px" }}>
+                      {lang.code === "hu"
+                        ? "Ha a gomb nem mukodik, nyisd meg ezt:"
+                        : "Ak tlacidlo nefunguje, otvorte tento odkaz:"}{" "}
+                      <Link href={receiptUrl} style={styles.receiptLink}>
+                        {receiptUrl}
+                      </Link>
+                    </Text>
+                  </Section>
+                </Section>
+              ) : null}
 
               {/* Note + Closing */}
               <Text style={styles.note}>{lang.note}</Text>

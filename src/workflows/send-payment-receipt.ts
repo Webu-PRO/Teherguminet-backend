@@ -12,6 +12,61 @@ type WorkflowInput = {
   paymentId: string
 }
 
+type ReceiptAttachment = {
+  filename: string
+  path: string
+}
+
+const resolveReceiptPublicUrl = (
+  metadata?: Record<string, unknown> | null
+) => {
+  const candidates: Array<unknown> = [
+    metadata?.billingo_receipt,
+    metadata?.billingo_receipt_public_url,
+  ]
+
+  for (const candidate of candidates) {
+    if (typeof candidate === "string") {
+      const trimmed = candidate.trim()
+      if (trimmed) {
+        return trimmed
+      }
+    }
+
+    if (candidate && typeof candidate === "object") {
+      const url = (candidate as { public_url?: unknown }).public_url
+      if (typeof url === "string") {
+        const trimmed = url.trim()
+        if (trimmed) {
+          return trimmed
+        }
+      }
+    }
+  }
+
+  return ""
+}
+
+const resolveReceiptAttachments = (
+  order?: { id?: string; display_id?: number | string | null; metadata?: any }
+) => {
+  const url = resolveReceiptPublicUrl(order?.metadata ?? null)
+  if (!url) {
+    return undefined
+  }
+
+  const ref = order?.display_id ?? order?.id ?? "order"
+  const safeRef = String(ref).replace(/[^a-zA-Z0-9_-]+/g, "-")
+  const filename = `nyugta-${safeRef}.pdf`
+
+  const attachment: ReceiptAttachment = {
+    filename,
+    path: url,
+  }
+
+  return [attachment]
+}
+
 export const sendPaymentReceiptWorkflow = createWorkflow(
   "send-payment-receipt",
   ({ paymentId }: WorkflowInput) => {
@@ -62,6 +117,7 @@ export const sendPaymentReceiptWorkflow = createWorkflow(
         return null
       }
 
+      const attachments = resolveReceiptAttachments(order)
       const idempotencyKey = transform({ payment }, ({ payment }) =>
         payment?.id ? `payment-receipt-${payment.id}` : undefined
       )
@@ -74,6 +130,7 @@ export const sendPaymentReceiptWorkflow = createWorkflow(
           data: {
             order,
             payment,
+            ...(attachments ? { attachments } : {}),
           },
           resource_id: order.id,
           resource_type: "order",
