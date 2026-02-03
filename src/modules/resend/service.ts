@@ -184,6 +184,8 @@ const resolveAttachments = (notification: ProviderSendNotificationDTO) => {
     return undefined;
   }
 
+  type ResendAttachment = NonNullable<CreateEmailOptions["attachments"]>[number];
+
   const normalized = raw
     .map((entry) => {
       if (!entry || typeof entry !== "object") {
@@ -207,7 +209,7 @@ const resolveAttachments = (notification: ProviderSendNotificationDTO) => {
         ...(content ? { content } : {}),
       };
     })
-    .filter(Boolean);
+    .filter((entry): entry is ResendAttachment => Boolean(entry));
 
   return normalized.length ? normalized : undefined;
 };
