@@ -186,7 +186,7 @@ const resolveAttachments = (notification: ProviderSendNotificationDTO) => {
 
   type ResendAttachment = NonNullable<CreateEmailOptions["attachments"]>[number];
 
-  const normalized: Array<ResendAttachment | null> = raw
+  const normalized = raw
     .map((entry): ResendAttachment | null => {
       if (!entry || typeof entry !== "object") {
         return null;
