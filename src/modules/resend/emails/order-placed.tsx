@@ -45,6 +45,9 @@ type LanguageBlock = {
   };
   statusTitle: string;
   statusCopy: string;
+  receiptTitle: string;
+  receiptCopy: string;
+  receiptCta: string;
   ctaLabel: string;
   contactCopy: React.ReactNode;
   closingLines: string[];
@@ -151,6 +154,22 @@ const baseStyles = {
     margin: "0 0 10px",
     fontFamily: FONT_STACK,
   } as React.CSSProperties,
+  receiptCard: {
+    marginTop: "18px",
+    padding: "16px",
+    borderRadius: "16px",
+    backgroundColor: "#F9FAFB",
+    border: "1px solid #E5E7EB",
+  } as React.CSSProperties,
+  receiptTitle: {
+    fontSize: "12px",
+    textTransform: "uppercase",
+    letterSpacing: "0.16em",
+    fontWeight: 800,
+    margin: "0 0 10px",
+    color: "#111111",
+    fontFamily: FONT_STACK,
+  } as React.CSSProperties,
   ctaWrap: {
     marginTop: "18px",
     textAlign: "left",
@@ -213,6 +232,10 @@ export const OrderPlacedEmailComponent = ({ order }: OrderPlacedEmailProps) => {
       statusTitle: "Rendelési állapot",
       statusCopy:
         "A rendelés aktuális állapotát bármikor ellenőrizheted az alábbi gombra kattintva:",
+      receiptTitle: "Nyugta",
+      receiptCopy:
+        "A rendelésedhez elkészült a nyugta. Az alábbi gombra kattintva letöltheted a PDF-et:",
+      receiptCta: "Nyugta letöltése",
       ctaLabel: "Rendelés megtekintése",
       contactCopy: (
         <>
@@ -267,6 +290,10 @@ export const OrderPlacedEmailComponent = ({ order }: OrderPlacedEmailProps) => {
       statusTitle: "Stav objednávky",
       statusCopy:
         "Aktuálny stav objednávky si môžete kedykoľvek pozrieť kliknutím na tlačidlo nižšie:",
+      receiptTitle: "Pokladnicny doklad",
+      receiptCopy:
+        "K objednavke bol vystaveny doklad. PDF si mozete stiahnut kliknutim na tlacidlo:",
+      receiptCta: "Stiahnut doklad",
       ctaLabel: "Zobraziť objednávku",
       contactCopy: (
         <>
@@ -307,6 +334,16 @@ export const OrderPlacedEmailComponent = ({ order }: OrderPlacedEmailProps) => {
 
   const orderUrl = buildOrderUrl(orderId, languageCode);
   const orderTotalDisplay = formatAmount(orderTotal, currency, lang.locale);
+  const receiptUrlRaw =
+    (order.metadata as Record<string, unknown> | null)?.billingo_receipt ??
+    (order.metadata as Record<string, unknown> | null)
+      ?.billingo_receipt_public_url
+  const receiptUrl =
+    typeof receiptUrlRaw === "string"
+      ? receiptUrlRaw
+      : typeof (receiptUrlRaw as any)?.public_url === "string"
+        ? (receiptUrlRaw as any).public_url
+        : ""
 
   // Accent: keep your existing per-language accent (but on white)
   const accent =
@@ -394,6 +431,39 @@ export const OrderPlacedEmailComponent = ({ order }: OrderPlacedEmailProps) => {
                   {lang.statusCopy}
                 </Text>
               </Section>
+
+              {receiptUrl ? (
+                <Section style={baseStyles.receiptCard}>
+                  <Text style={baseStyles.receiptTitle}>
+                    {lang.receiptTitle}
+                  </Text>
+                  <Text style={{ ...baseStyles.p, margin: 0 }}>
+                    {lang.receiptCopy}
+                  </Text>
+                  <Section style={{ marginTop: "12px" }}>
+                    <Button
+                      href={receiptUrl}
+                      style={{
+                        ...baseStyles.cta,
+                        backgroundColor: "#111111",
+                      }}
+                    >
+                      {lang.receiptCta}
+                    </Button>
+                    <Text style={{ ...baseStyles.muted, marginTop: "10px" }}>
+                      {lang.code === "hu"
+                        ? "Ha a gomb nem mukodik, nyisd meg ezt:"
+                        : "Ak tlacidlo nefunguje, otvorte tento odkaz:"}{" "}
+                      <Link
+                        href={receiptUrl}
+                        style={baseStyles.secondaryLink}
+                      >
+                        {receiptUrl}
+                      </Link>
+                    </Text>
+                  </Section>
+                </Section>
+              ) : null}
 
               {/* CTA */}
               <Section style={baseStyles.ctaWrap}>

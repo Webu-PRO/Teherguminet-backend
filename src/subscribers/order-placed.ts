@@ -14,6 +14,11 @@ import type {
 } from "@medusajs/types"
 
 import { sendOrderConfirmationWorkflow } from "../workflows/send-order-confirmation"
+import {
+  createBillingoReceipt,
+  getBillingoConfig,
+  getBillingoPublicUrl,
+} from "../lib/billingo"
 
 const resolveLogger = (container: SubscriberArgs["container"]) => {
   try {
@@ -74,6 +79,116 @@ const resolveItemThumbnail = (item: Record<string, unknown>) => {
   }
 
   return undefined
+}
+
+const RECEIPT_METADATA_KEY = "billingo_receipt"
+
+type BillingoReceiptMetadata = {
+  id?: number
+  invoice_number?: string
+  public_url?: string
+  created_at?: string
+}
+
+const hasReceiptMetadata = (metadata?: Record<string, unknown> | null) => {
+  const record = metadata?.[RECEIPT_METADATA_KEY]
+  if (!record || typeof record !== "object") {
+    return false
+  }
+  const id = (record as BillingoReceiptMetadata).id
+  return typeof id === "number" && Number.isFinite(id)
+}
+
+const fetchOrderForBillingo = async (
+  container: SubscriberArgs["container"],
+  orderId: string
+) => {
+  const query = container.resolve<Query>(ContainerRegistrationKeys.QUERY)
+  const { data: orders } = await query.graph({
+    entity: "order",
+    fields: [
+      "id",
+      "display_id",
+      "email",
+      "currency_code",
+      "metadata",
+      "shipping_total",
+      "items.*",
+      "items.tax_lines.*",
+      "shipping_methods.*",
+      "shipping_methods.tax_lines.*",
+      "billing_address.*",
+      "shipping_address.*",
+    ],
+    filters: {
+      id: orderId,
+    },
+  })
+
+  return orders?.[0] as OrderDTO | undefined
+}
+
+const maybeCreateBillingoReceipt = async (
+  container: SubscriberArgs["container"],
+  orderId: string,
+  logger?: Logger
+) => {
+  const config = getBillingoConfig()
+  if (!config) {
+    return
+  }
+
+  try {
+    const order = await fetchOrderForBillingo(container, orderId)
+    if (!order) {
+      return
+    }
+
+    if (hasReceiptMetadata(order.metadata)) {
+      return
+    }
+
+    const receipt = await createBillingoReceipt(order, config)
+
+    let publicUrl: string | undefined
+    if (typeof receipt?.id === "number") {
+      try {
+        const publicData = await getBillingoPublicUrl(receipt.id, config)
+        publicUrl =
+          typeof publicData?.public_url === "string"
+            ? publicData.public_url
+            : undefined
+      } catch (error) {
+        logger?.warn?.(
+          `Billingo: failed to fetch public url for receipt ${receipt.id}`
+        )
+      }
+    }
+
+    const orderModuleService =
+      container.resolve<IOrderModuleService>(Modules.ORDER)
+    const metadata =
+      (order.metadata as Record<string, unknown> | null) ?? {}
+    const payload: BillingoReceiptMetadata = {
+      id: receipt.id,
+      invoice_number: receipt.invoice_number,
+      public_url: publicUrl,
+      created_at: new Date().toISOString(),
+    }
+
+    await orderModuleService.updateOrders(order.id, {
+      metadata: {
+        ...metadata,
+        [RECEIPT_METADATA_KEY]: payload,
+      },
+    })
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Unknown error"
+    logger?.error?.(
+      `Billingo: failed to create receipt for order ${orderId} (${message})`
+    )
+  }
 }
 
 const updateOrderItemThumbnails = async (
@@ -147,6 +262,7 @@ export default async function orderPlacedHandler({
   container,
 }: SubscriberArgs<{ id: string }>) {
   const logger = resolveLogger(container)
+  await maybeCreateBillingoReceipt(container, data.id, logger)
   await sendOrderConfirmationWorkflow(container).run({
     input: {
       id: data.id,
