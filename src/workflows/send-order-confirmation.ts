@@ -1,16 +1,79 @@
 import {
+  createStep,
   createWorkflow,
   transform,
   when,
+  StepResponse,
   WorkflowResponse,
 } from "@medusajs/framework/workflows-sdk"
 import { useQueryGraphStep } from "@medusajs/medusa/core-flows"
 
+import { getBillingoConfig, getBillingoDocumentPdf } from "../lib/billingo"
 import { sendNotificationStep } from "./steps/send-notification"
 
 type WorkflowInput = {
   id: string
 }
+
+type InvoiceAttachment = {
+  filename: string
+  content: string
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+const fetchBillingoInvoiceAttachmentStep = createStep(
+  "fetch-billingo-invoice-attachment",
+  async (
+    input: {
+      order?: {
+        id?: string
+        display_id?: number | string | null
+        metadata?: Record<string, unknown> | null
+      } | null
+    }
+  ) => {
+    const config = getBillingoConfig()
+    if (!config) {
+      return new StepResponse(null)
+    }
+
+    const invoiceMeta = input.order?.metadata?.billingo_invoice as
+      | { id?: number | null }
+      | null
+    const invoiceId =
+      typeof invoiceMeta?.id === "number" ? invoiceMeta.id : null
+    if (!invoiceId) {
+      return new StepResponse(null)
+    }
+
+    const ref = input.order?.display_id ?? input.order?.id ?? "order"
+    const safeRef = String(ref).replace(/[^a-zA-Z0-9_-]+/g, "-")
+    const filename = `szamla-${safeRef}.pdf`
+
+    const maxAttempts = 3
+    let delayMs = 1200
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        const content = await getBillingoDocumentPdf(invoiceId, config)
+        if (content) {
+          const attachment: InvoiceAttachment = { filename, content }
+          return new StepResponse(attachment)
+        }
+      } catch {
+        // retry
+      }
+
+      if (attempt < maxAttempts) {
+        await sleep(delayMs)
+        delayMs += 1200
+      }
+    }
+
+    return new StepResponse(null)
+  }
+)
 
 export const sendOrderConfirmationWorkflow = createWorkflow(
   "send-order-confirmation",
@@ -45,44 +108,64 @@ export const sendOrderConfirmationWorkflow = createWorkflow(
       },
     })
 
-    const notification = when({ orders }, (data) => !!data.orders[0]?.email).then(
-      () => {
-        const order = orders[0]
-        const confirmationKey = transform({ order }, ({ order }) =>
-          order?.id ? `order-placed-${order.id}` : undefined
-        )
-        const thanksKey = transform({ order }, ({ order }) =>
-          order?.id ? `order-thanks-${order.id}` : undefined
-        )
+    const payload = transform({ orders }, ({ orders }) => ({
+      order: orders?.[0],
+    }))
 
-        return sendNotificationStep([
-          {
-            to: order.email!,
-            channel: "email",
-            template: "order-placed",
-            data: {
-              order,
-            },
-            resource_id: order.id,
-            resource_type: "order",
-            trigger_type: "order.placed",
-            idempotency_key: confirmationKey,
-          },
-          {
-            to: order.email!,
-            channel: "email",
-            template: "order-thanks",
-            data: {
-              order,
-            },
-            resource_id: order.id,
-            resource_type: "order",
-            trigger_type: "order.placed",
-            idempotency_key: thanksKey,
-          },
-        ])
-      }
+    const invoiceAttachment = fetchBillingoInvoiceAttachmentStep({
+      order: payload.order,
+    })
+    const attachments = transform(
+      { invoiceAttachment },
+      ({ invoiceAttachment }) =>
+        invoiceAttachment ? [invoiceAttachment] : undefined
     )
+
+    const notification = when(
+      { payload },
+      ({ payload }) => !!payload.order?.email
+    ).then(() => {
+      const { order } = payload
+      if (!order?.email) {
+        return null
+      }
+
+      const confirmationKey = transform({ order }, ({ order }) =>
+        order?.id ? `order-placed-${order.id}` : undefined
+      )
+      const thanksKey = transform({ order }, ({ order }) =>
+        order?.id ? `order-thanks-${order.id}` : undefined
+      )
+
+      return sendNotificationStep([
+        {
+          to: order.email,
+          channel: "email",
+          template: "order-placed",
+          data: {
+            order,
+            attachments,
+          },
+          resource_id: order.id,
+          resource_type: "order",
+          trigger_type: "order.placed",
+          idempotency_key: confirmationKey,
+        },
+        {
+          to: order.email,
+          channel: "email",
+          template: "order-thanks",
+          data: {
+            order,
+            attachments,
+          },
+          resource_id: order.id,
+          resource_type: "order",
+          trigger_type: "order.placed",
+          idempotency_key: thanksKey,
+        },
+      ])
+    })
 
     return new WorkflowResponse({
       notification,

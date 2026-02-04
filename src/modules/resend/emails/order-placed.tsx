@@ -477,8 +477,8 @@ export const OrderPlacedEmailComponent = ({ order }: OrderPlacedEmailProps) => {
                     </Button>
                     <Text style={{ ...baseStyles.muted, marginTop: "10px" }}>
                       {lang.code === "hu"
-                        ? "Ha a gomb nem mukodik, nyisd meg ezt:"
-                        : "Ak tlacidlo nefunguje, otvorte tento odkaz:"}{" "}
+                        ? "Ha a gomb nem működik, nyisd meg ezt:"
+                        : "Ak tlačidlo nefunguje, otvorte tento odkaz:"}{" "}
                       <Link
                         href={receiptUrl}
                         style={baseStyles.secondaryLink}
@@ -504,7 +504,9 @@ export const OrderPlacedEmailComponent = ({ order }: OrderPlacedEmailProps) => {
                 </Button>
 
                 <Text style={{ ...baseStyles.muted, marginTop: "10px" }}>
-                  Ha a gomb nem működik, nyisd meg ezt:{" "}
+                  {lang.code === "hu"
+                    ? "Ha a gomb nem működik, nyisd meg ezt:"
+                    : "Ak tlačidlo nefunguje, otvorte tento odkaz:"}{" "}
                   <Link href={orderUrl} style={baseStyles.secondaryLink}>
                     {orderUrl}
                   </Link>

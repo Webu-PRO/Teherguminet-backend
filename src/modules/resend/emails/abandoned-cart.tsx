@@ -133,7 +133,7 @@ export const AbandonedCartEmail = ({
   language,
   countryCode,
   storefrontUrl,
-  supportEmail = "hello@teherguminet.hu",
+  supportEmail = "info@teherguminet.hu",
   supportPhone = "+36 1 234 5678",
   items = [],
 }: AbandonedCartEmailProps) => {
@@ -201,7 +201,9 @@ export const AbandonedCartEmail = ({
               </Button>
 
               <Text className="mt-3 text-[12px] leading-5 text-[#6B7280]">
-                Ha a gomb nem működik, nyisd meg ezt:{" "}
+                {lang.code === "hu"
+                  ? "Ha a gomb nem működik, nyisd meg ezt:"
+                  : "Ak tlačidlo nefunguje, otvorte tento odkaz:"}{" "}
                 <Link href={recoverUrl} className="text-[#111111] underline">
                   {recoverUrl}
                 </Link>

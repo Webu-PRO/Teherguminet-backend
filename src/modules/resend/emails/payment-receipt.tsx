@@ -697,8 +697,8 @@ export const PaymentReceiptEmail = ({
                     </Button>
                     <Text style={{ ...styles.muted, marginTop: "10px" }}>
                       {lang.code === "hu"
-                        ? "Ha a gomb nem mukodik, nyisd meg ezt:"
-                        : "Ak tlacidlo nefunguje, otvorte tento odkaz:"}{" "}
+                        ? "Ha a gomb nem működik, nyisd meg ezt:"
+                        : "Ak tlačidlo nefunguje, otvorte tento odkaz:"}{" "}
                       <Link href={receiptUrl} style={styles.receiptLink}>
                         {receiptUrl}
                       </Link>

@@ -535,8 +535,8 @@ export const OrderThanksEmailComponent = ({ order }: OrderThanksEmailProps) => {
 
                 <Text style={{ ...styles.muted, marginTop: "10px" }}>
                   {lang.code === "hu"
-                    ? "Ha a gomb nem működik:"
-                    : "Ak tlačidlo nefunguje:"}{" "}
+                    ? "Ha a gomb nem működik, nyisd meg ezt:"
+                    : "Ak tlačidlo nefunguje, otvorte tento odkaz:"}{" "}
                   <Link href={orderUrl} style={styles.link}>
                     {orderUrl}
                   </Link>
