@@ -44,6 +44,14 @@ const SUPPORT_EMAIL = process.env.SUPPORT_EMAIL || "info@teherguminet.hu";
 const SUPPORT_PHONE = process.env.SUPPORT_PHONE || "+36 1 234 5678";
 const TEMPLATE_NAME = "abandoned-cart";
 
+const normalizeStorefrontUrl = (raw?: string | null) => {
+  const trimmed = raw?.trim() ?? "";
+  if (!trimmed) {
+    return "https://teherguminet.hu";
+  }
+  return trimmed.replace(/therguminet\.hu/gi, "teherguminet.hu");
+};
+
 const prepareCartItems = (cart: AbandonedCart) =>
   (cart.items ?? []).map((item, index) => ({
     id: item.id || `${cart.id}-item-${index}`,
@@ -60,8 +68,9 @@ export const sendAbandonedNotificationsStep = createStep(
       return new StepResponse({ notifications: [] });
     }
 
-    const storefrontUrl =
-      process.env.STOREFRONT_URL?.trim() || "https://teherguminet.hu";
+    const storefrontUrl = normalizeStorefrontUrl(
+      process.env.STOREFRONT_URL
+    );
 
     const notificationModuleService = container.resolve(Modules.NOTIFICATION);
 

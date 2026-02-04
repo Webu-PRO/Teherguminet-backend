@@ -21,6 +21,7 @@ type WorkflowInput = {
 type ReceiptAttachment = {
   filename: string
   content: string
+  content_type?: string
 }
 
 const sleep = (ms: number) =>
@@ -55,14 +56,18 @@ const fetchBillingoReceiptAttachmentStep = createStep(
     const safeRef = String(ref).replace(/[^a-zA-Z0-9_-]+/g, "-")
     const filename = `nyugta-${safeRef}.pdf`
 
-    const maxAttempts = 3
+    const maxAttempts = 5
     let delayMs = 1200
 
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       try {
         const content = await getBillingoDocumentPdf(receiptId, config)
         if (content) {
-          const attachment: ReceiptAttachment = { filename, content }
+          const attachment: ReceiptAttachment = {
+            filename,
+            content,
+            content_type: "application/pdf",
+          }
           return new StepResponse(attachment)
         }
       } catch {
@@ -150,8 +155,8 @@ export const sendPaymentReceiptWorkflow = createWorkflow(
           data: {
             order,
             payment,
-            attachments,
           },
+          attachments,
           resource_id: order.id,
           resource_type: "order",
           trigger_type: "payment.captured",

@@ -85,7 +85,7 @@ const normalizeBaseUrl = (raw?: string | null) => {
     return DEFAULT_STOREFRONT_URL;
   }
 
-  const trimmed = raw.trim();
+  const trimmed = raw.trim().replace(/therguminet\.hu/gi, "teherguminet.hu");
 
   if (!trimmed) {
     return DEFAULT_STOREFRONT_URL;

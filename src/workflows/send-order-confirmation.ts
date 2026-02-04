@@ -18,6 +18,7 @@ type WorkflowInput = {
 type InvoiceAttachment = {
   filename: string
   content: string
+  content_type?: string
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -51,14 +52,18 @@ const fetchBillingoInvoiceAttachmentStep = createStep(
     const safeRef = String(ref).replace(/[^a-zA-Z0-9_-]+/g, "-")
     const filename = `szamla-${safeRef}.pdf`
 
-    const maxAttempts = 3
+    const maxAttempts = 5
     let delayMs = 1200
 
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       try {
         const content = await getBillingoDocumentPdf(invoiceId, config)
         if (content) {
-          const attachment: InvoiceAttachment = { filename, content }
+          const attachment: InvoiceAttachment = {
+            filename,
+            content,
+            content_type: "application/pdf",
+          }
           return new StepResponse(attachment)
         }
       } catch {
@@ -144,8 +149,8 @@ export const sendOrderConfirmationWorkflow = createWorkflow(
           template: "order-placed",
           data: {
             order,
-            attachments,
           },
+          attachments,
           resource_id: order.id,
           resource_type: "order",
           trigger_type: "order.placed",
@@ -157,8 +162,8 @@ export const sendOrderConfirmationWorkflow = createWorkflow(
           template: "order-thanks",
           data: {
             order,
-            attachments,
           },
+          attachments,
           resource_id: order.id,
           resource_type: "order",
           trigger_type: "order.placed",

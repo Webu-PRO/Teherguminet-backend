@@ -179,7 +179,9 @@ const resolveNotificationLanguage = (
 };
 
 const resolveAttachments = (notification: ProviderSendNotificationDTO) => {
-  const raw = (notification.data as any)?.attachments;
+  const raw =
+    (notification as any)?.attachments ??
+    (notification.data as any)?.attachments;
   if (!Array.isArray(raw)) {
     return undefined;
   }
@@ -201,6 +203,20 @@ const resolveAttachments = (notification: ProviderSendNotificationDTO) => {
         typeof record.content === "string" || Buffer.isBuffer(record.content)
           ? record.content
           : undefined;
+      const contentType =
+        typeof record.contentType === "string"
+          ? record.contentType.trim()
+          : typeof record.content_type === "string"
+            ? record.content_type.trim()
+            : "";
+      const contentId =
+        typeof record.contentId === "string"
+          ? record.contentId.trim()
+          : typeof record.content_id === "string"
+            ? record.content_id.trim()
+            : typeof record.id === "string"
+              ? record.id.trim()
+              : "";
       if (!filename || (!path && !content)) {
         return null;
       }
@@ -209,6 +225,8 @@ const resolveAttachments = (notification: ProviderSendNotificationDTO) => {
         filename,
         ...(path ? { path } : {}),
         ...(content ? { content } : {}),
+        ...(contentType ? { contentType } : {}),
+        ...(contentId ? { contentId } : {}),
       };
     })
     .filter((entry): entry is ResendAttachment => Boolean(entry));

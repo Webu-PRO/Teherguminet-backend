@@ -18,7 +18,16 @@ type FulfillmentSummary = {
 
 type OrderSummary = {
   id: string
+  display_id?: number | string | null
+  metadata?: Record<string, unknown> | null
   fulfillments?: FulfillmentSummary[] | null
+}
+
+type BillingoDocumentSummary = {
+  id: number
+  invoice_number?: string | null
+  public_url?: string | null
+  created_at?: string | null
 }
 
 type ParcelStatusSummary = {
@@ -82,6 +91,46 @@ const isRecord = (
   value: unknown
 ): value is Record<string, unknown> =>
   Boolean(value) && typeof value === "object" && !Array.isArray(value)
+
+const readBillingoDocument = (
+  metadata: Record<string, unknown> | null | undefined,
+  type: "invoice" | "receipt"
+): BillingoDocumentSummary | null => {
+  if (!metadata || !isRecord(metadata)) {
+    return null
+  }
+
+  const key =
+    type === "invoice" ? "billingo_invoice" : "billingo_receipt"
+  const value = metadata[key]
+  if (!isRecord(value)) {
+    return null
+  }
+
+  const id =
+    typeof value.id === "number" && Number.isFinite(value.id)
+      ? value.id
+      : null
+  if (!id) {
+    return null
+  }
+
+  const invoiceNumber =
+    typeof value.invoice_number === "string"
+      ? value.invoice_number.trim()
+      : null
+  const publicUrl =
+    typeof value.public_url === "string" ? value.public_url.trim() : null
+  const createdAt =
+    typeof value.created_at === "string" ? value.created_at.trim() : null
+
+  return {
+    id,
+    invoice_number: invoiceNumber || undefined,
+    public_url: publicUrl || undefined,
+    created_at: createdAt || undefined,
+  }
+}
 
 const normalizeLogStatus = (
   value: unknown
@@ -437,7 +486,7 @@ const safeStringify = (value: unknown) => {
 
 const fetchOrder = async (orderId: string) => {
   const params = new URLSearchParams({
-    fields: "id,fulfillments.*",
+    fields: "id,display_id,metadata,fulfillments.*",
   })
 
   const response = await fetch(
@@ -461,9 +510,11 @@ const fetchOrder = async (orderId: string) => {
 
 const OrderGlsShipmentWidget = () => {
   const [orderId, setOrderId] = useState<string | null>(null)
+  const [order, setOrder] = useState<OrderSummary | null>(null)
   const [fulfillment, setFulfillment] =
     useState<FulfillmentSummary | null>(null)
   const [loading, setLoading] = useState(false)
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [downloading, setDownloading] = useState(false)
   const [canceling, setCanceling] = useState(false)
@@ -473,37 +524,50 @@ const OrderGlsShipmentWidget = () => {
   const [parcelStatuses, setParcelStatuses] = useState<
     ParcelStatusSummary[]
   >([])
+  const [autoCreateAttempted, setAutoCreateAttempted] = useState(false)
   const [logOpen, setLogOpen] = useState(false)
+  const [billingoDownloading, setBillingoDownloading] = useState<
+    "invoice" | "receipt" | null
+  >(null)
   const prompt = usePrompt()
 
   useEffect(() => {
     setOrderId(resolveOrderId())
   }, [])
 
-  const loadOrder = useCallback(async () => {
+  const loadOrder = useCallback(async (options?: { silent?: boolean }) => {
     if (!orderId) {
       return
     }
 
-    setLoading(true)
+    if (!options?.silent) {
+      setLoading(true)
+    }
     try {
       const order = await fetchOrder(orderId)
+      setOrder(order)
       setFulfillment(pickGlsFulfillment(order.fulfillments) ?? null)
+      return order
     } catch (error) {
       const message =
         error instanceof Error
           ? error.message
           : "Failed to load order."
-      toast.error("GLS shipment", {
-        description: message,
-        action: {
-          label: "Copy",
-          altText: "Copy GLS error",
-          onClick: () => void copyToClipboard(message),
-        },
-      })
+      if (!options?.silent) {
+        toast.error("GLS shipment", {
+          description: message,
+          action: {
+            label: "Copy",
+            altText: "Copy GLS error",
+            onClick: () => void copyToClipboard(message),
+          },
+        })
+      }
     } finally {
-      setLoading(false)
+      if (!options?.silent) {
+        setLoading(false)
+      }
+      setHasLoadedOnce(true)
     }
   }, [orderId])
 
@@ -511,10 +575,34 @@ const OrderGlsShipmentWidget = () => {
     void loadOrder()
   }, [loadOrder])
 
+  const billingoInvoice = useMemo(
+    () => readBillingoDocument(order?.metadata, "invoice"),
+    [order?.metadata]
+  )
+  const billingoReceipt = useMemo(
+    () => readBillingoDocument(order?.metadata, "receipt"),
+    [order?.metadata]
+  )
+
   const shipment = useMemo(
     () => readGlsShipment(fulfillment?.metadata),
     [fulfillment]
   )
+  const shouldPoll = Boolean(orderId) && (!fulfillment || !shipment)
+
+  useEffect(() => {
+    if (!shouldPoll) {
+      return
+    }
+
+    const interval = window.setInterval(() => {
+      void loadOrder({ silent: true })
+    }, 4000)
+
+    return () => {
+      window.clearInterval(interval)
+    }
+  }, [loadOrder, shouldPoll])
   const logEntries = useMemo(
     () => parseGlsLogEntries(shipment),
     [shipment]
@@ -645,6 +733,10 @@ const OrderGlsShipmentWidget = () => {
     statusLoading,
   ])
 
+  useEffect(() => {
+    setAutoCreateAttempted(false)
+  }, [fulfillment?.id])
+
   const loadParcelStatuses = useCallback(async () => {
     if (!fulfillment || !parcelNumbers.length || isCancelled) {
       setParcelStatuses([])
@@ -693,7 +785,7 @@ const OrderGlsShipmentWidget = () => {
     void loadParcelStatuses()
   }, [loadParcelStatuses])
 
-  const handleCreate = useCallback(async () => {
+  const handleCreate = useCallback(async (options?: { silent?: boolean }) => {
     if (!fulfillment) {
       return
     }
@@ -707,6 +799,10 @@ const OrderGlsShipmentWidget = () => {
           credentials: "include",
         }
       )
+
+      if (response.status === 409) {
+        return
+      }
 
       const payload = await response.json().catch(() => ({}))
       const errors = Array.isArray(payload?.errors)
@@ -735,7 +831,7 @@ const OrderGlsShipmentWidget = () => {
             onClick: () => void copyToClipboard(errorText),
           },
         })
-      } else {
+      } else if (!options?.silent) {
         toast.success("GLS shipment created", {
           description: numbers ? `Parcel: ${numbers}` : undefined,
         })
@@ -755,9 +851,52 @@ const OrderGlsShipmentWidget = () => {
       })
     } finally {
       setSubmitting(false)
-      await loadOrder()
+      await loadOrder({ silent: true })
     }
   }, [fulfillment, loadOrder])
+
+  useEffect(() => {
+    if (
+      !fulfillment ||
+      hasShipment ||
+      isCancelled ||
+      autoCreateAttempted ||
+      submitting
+    ) {
+      return
+    }
+
+    const timer = window.setTimeout(() => {
+      setAutoCreateAttempted(true)
+      void (async () => {
+        const order = await loadOrder({ silent: true })
+        const latestFulfillment = order
+          ? pickGlsFulfillment(order.fulfillments)
+          : null
+        const latestShipment = readGlsShipment(
+          latestFulfillment?.metadata
+        )
+
+        if (latestShipment) {
+          return
+        }
+
+        await handleCreate({ silent: true })
+      })()
+    }, 2000)
+
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [
+    autoCreateAttempted,
+    fulfillment,
+    handleCreate,
+    hasShipment,
+    isCancelled,
+    loadOrder,
+    submitting,
+  ])
 
   const handleDownload = useCallback(async () => {
     if (!fulfillment) {
@@ -1004,159 +1143,323 @@ const OrderGlsShipmentWidget = () => {
     loadOrder,
   ])
 
-  if (!orderId || loading || !fulfillment) {
+  const handleBillingoDownload = useCallback(
+    async (type: "invoice" | "receipt") => {
+      if (!orderId) {
+        return
+      }
+
+      setBillingoDownloading(type)
+      try {
+        const response = await fetch(
+          `/admin/billingo/orders/${orderId}/documents/${type}`,
+          {
+            credentials: "include",
+          }
+        )
+
+        if (!response.ok) {
+          const payload = await response.json().catch(() => ({}))
+          const message =
+            payload?.message ??
+            "Failed to download the Billingo document."
+          throw new Error(message)
+        }
+
+        const blob = await response.blob()
+        const url = URL.createObjectURL(blob)
+        const link = document.createElement("a")
+        const fallbackName = `${
+          type === "invoice" ? "szamla" : "nyugta"
+        }-${order?.display_id ?? orderId}.pdf`
+        const contentDisposition =
+          response.headers.get("Content-Disposition")
+        const match = contentDisposition?.match(
+          /filename=\"?([^\";]+)\"?/i
+        )
+
+        link.href = url
+        link.download = match?.[1] ?? fallbackName
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
+        URL.revokeObjectURL(url)
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Failed to download the Billingo document."
+        toast.error("Billingo", {
+          description: message,
+          action: {
+            label: "Copy",
+            altText: "Copy Billingo error",
+            onClick: () => void copyToClipboard(message),
+          },
+        })
+      } finally {
+        setBillingoDownloading(null)
+      }
+    },
+    [order?.display_id, orderId]
+  )
+
+  const handleOpenBillingoUrl = useCallback((url?: string | null) => {
+    if (!url) {
+      return
+    }
+
+    window.open(url, "_blank", "noopener,noreferrer")
+  }, [])
+
+  if (!orderId || (!hasLoadedOnce && loading)) {
     return null
   }
 
-  return (
-    <div className="rounded-lg border border-ui-border-base bg-ui-bg-base p-4 shadow-card-rest">
-      <div className="flex items-center justify-between">
-        <Text size="small" weight="plus">
-          GLS
-        </Text>
-        <div className="flex items-center gap-x-2">
-          {parcelStatusBadge ? (
-            <StatusBadge color={parcelStatusBadge.color}>
-              {parcelStatusBadge.label}
-            </StatusBadge>
-          ) : null}
+  const renderBillingoCard = (
+    label: string,
+    type: "invoice" | "receipt",
+    document: BillingoDocumentSummary | null
+  ) => {
+    const isAvailable = Boolean(document?.id)
+    const statusLabel = isAvailable ? "Elkészült" : "Nincs"
+    const statusColor = isAvailable ? "green" : "grey"
+
+    return (
+      <div className="rounded-md border border-ui-border-base bg-ui-bg-base p-3">
+        <div className="flex items-center justify-between">
+          <Text size="xsmall" weight="plus">
+            {label}
+          </Text>
           <StatusBadge color={statusColor}>{statusLabel}</StatusBadge>
         </div>
-      </div>
-      <div className="mt-3 flex flex-col gap-y-2">
-        <Button
-          size="small"
-          variant="secondary"
-          className="w-full"
-          onClick={handleCreate}
-          isLoading={submitting}
-          disabled={isLocked}
-        >
-          {isLocked ? "GLS shipment created" : "Create GLS shipment"}
-        </Button>
-        <Button
-          size="small"
-          variant="secondary"
-          className="w-full"
-          onClick={handleDownload}
-          isLoading={downloading}
-          disabled={!hasLabel || downloading}
-        >
-          Download GLS label
-        </Button>
-        <Button
-          size="small"
-          variant="secondary"
-          className="w-full"
-          onClick={handleCancel}
-          isLoading={canceling}
-          disabled={!canCancel}
-        >
-          Cancel GLS label
-        </Button>
-        <Button
-          size="small"
-          variant="secondary"
-          className="w-full"
-          onClick={handleRecreate}
-          isLoading={recreating}
-          disabled={!canRecreate}
-        >
-          Recreate GLS label
-        </Button>
-        {parcelNumbers.length ? (
-          <Text size="xsmall" className="text-ui-fg-subtle">
-            {isCancelled ? "Parcel (cancelled):" : "Parcel:"}{" "}
-            {parcelNumbers.join(", ")}
+        {isAvailable ? (
+          <div className="mt-2 flex flex-col gap-y-2">
+            {document?.invoice_number ? (
+              <Text size="xsmall" className="text-ui-fg-subtle">
+                Azonosító: {document.invoice_number}
+              </Text>
+            ) : null}
+            {document?.created_at ? (
+              <Text size="xsmall" className="text-ui-fg-subtle">
+                Létrehozva: {formatLogTimestamp(document.created_at)}
+              </Text>
+            ) : null}
+            <Button
+              size="small"
+              variant="secondary"
+              className="w-full"
+              onClick={() => void handleBillingoDownload(type)}
+              isLoading={billingoDownloading === type}
+              disabled={billingoDownloading === type}
+            >
+              PDF letöltése
+            </Button>
+            {document?.public_url ? (
+              <Button
+                size="small"
+                variant="secondary"
+                className="w-full"
+                onClick={() => handleOpenBillingoUrl(document.public_url)}
+              >
+                Megnyitás
+              </Button>
+            ) : null}
+          </div>
+        ) : (
+          <Text size="xsmall" className="mt-2 text-ui-fg-subtle">
+            A Billingo dokumentum még nem elérhető.
           </Text>
-        ) : null}
-        {previousParcelNumbers.length ? (
-          <Text size="xsmall" className="text-ui-fg-subtle">
-            Previous parcel(s): {previousParcelNumbers.join(", ")}
-          </Text>
-        ) : null}
+        )}
       </div>
-      <div className="mt-4 border-t border-ui-border-base pt-3">
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-y-4">
+      <div className="rounded-lg border border-ui-border-base bg-ui-bg-base p-4 shadow-card-rest">
         <div className="flex items-center justify-between">
           <Text size="small" weight="plus">
-            GLS log
+            Billingo
           </Text>
-          <Button
-            size="small"
-            variant="secondary"
-            onClick={() => setLogOpen((prev) => !prev)}
-            disabled={!logEntries.length}
-          >
-            {logOpen ? "Hide log" : "View log"}
-          </Button>
+          <div className="flex items-center gap-x-2">
+            {billingoInvoice ? (
+              <StatusBadge color="green">Számla</StatusBadge>
+            ) : null}
+            {billingoReceipt ? (
+              <StatusBadge color="green">Nyugta</StatusBadge>
+            ) : null}
+            {!billingoInvoice && !billingoReceipt ? (
+              <StatusBadge color="grey">Nincs dokumentum</StatusBadge>
+            ) : null}
+            <Button
+              size="small"
+              variant="secondary"
+              onClick={() => void loadOrder({ silent: false })}
+              isLoading={loading}
+              disabled={loading}
+            >
+              Frissítés
+            </Button>
+          </div>
         </div>
-        {!logEntries.length ? (
-          <Text size="xsmall" className="mt-2 text-ui-fg-subtle">
-            No GLS log entries yet.
-          </Text>
-        ) : null}
-        {logOpen ? (
+        <div className="mt-3 flex flex-col gap-y-3">
+          {renderBillingoCard("Számla", "invoice", billingoInvoice)}
+          {renderBillingoCard("Nyugta", "receipt", billingoReceipt)}
+        </div>
+      </div>
+
+      {fulfillment ? (
+        <div className="rounded-lg border border-ui-border-base bg-ui-bg-base p-4 shadow-card-rest">
+          <div className="flex items-center justify-between">
+            <Text size="small" weight="plus">
+              GLS
+            </Text>
+            <div className="flex items-center gap-x-2">
+              {parcelStatusBadge ? (
+                <StatusBadge color={parcelStatusBadge.color}>
+                  {parcelStatusBadge.label}
+                </StatusBadge>
+              ) : null}
+              <StatusBadge color={statusColor}>{statusLabel}</StatusBadge>
+            </div>
+          </div>
           <div className="mt-3 flex flex-col gap-y-2">
-            {logEntries.map((entry, index) => (
-              <div
-                key={`${entry.timestamp ?? "unknown"}-${index}`}
-                className="rounded-md border border-ui-border-base bg-ui-bg-base p-3"
+            <Button
+              size="small"
+              variant="secondary"
+              className="w-full"
+              onClick={handleCreate}
+              isLoading={submitting}
+              disabled={isLocked}
+            >
+              {isLocked ? "GLS shipment created" : "Create GLS shipment"}
+            </Button>
+            <Button
+              size="small"
+              variant="secondary"
+              className="w-full"
+              onClick={handleDownload}
+              isLoading={downloading}
+              disabled={!hasLabel || downloading}
+            >
+              Download GLS label
+            </Button>
+            <Button
+              size="small"
+              variant="secondary"
+              className="w-full"
+              onClick={handleCancel}
+              isLoading={canceling}
+              disabled={!canCancel}
+            >
+              Cancel GLS label
+            </Button>
+            <Button
+              size="small"
+              variant="secondary"
+              className="w-full"
+              onClick={handleRecreate}
+              isLoading={recreating}
+              disabled={!canRecreate}
+            >
+              Recreate GLS label
+            </Button>
+            {parcelNumbers.length ? (
+              <Text size="xsmall" className="text-ui-fg-subtle">
+                {isCancelled ? "Parcel (cancelled):" : "Parcel:"}{" "}
+                {parcelNumbers.join(", ")}
+              </Text>
+            ) : null}
+            {previousParcelNumbers.length ? (
+              <Text size="xsmall" className="text-ui-fg-subtle">
+                Previous parcel(s): {previousParcelNumbers.join(", ")}
+              </Text>
+            ) : null}
+          </div>
+          <div className="mt-4 border-t border-ui-border-base pt-3">
+            <div className="flex items-center justify-between">
+              <Text size="small" weight="plus">
+                GLS log
+              </Text>
+              <Button
+                size="small"
+                variant="secondary"
+                onClick={() => setLogOpen((prev) => !prev)}
+                disabled={!logEntries.length}
               >
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <Text size="xsmall" weight="plus">
-                    {formatLogTimestamp(entry.timestamp)}
-                    {entry.action ? ` - ${entry.action}` : ""}
-                  </Text>
-                  <div className="flex items-center gap-x-2">
-                    {entry.source ? (
+                {logOpen ? "Hide log" : "View log"}
+              </Button>
+            </div>
+            {!logEntries.length ? (
+              <Text size="xsmall" className="mt-2 text-ui-fg-subtle">
+                No GLS log entries yet.
+              </Text>
+            ) : null}
+            {logOpen ? (
+              <div className="mt-3 flex flex-col gap-y-2">
+                {logEntries.map((entry, index) => (
+                  <div
+                    key={`${entry.timestamp ?? "unknown"}-${index}`}
+                    className="rounded-md border border-ui-border-base bg-ui-bg-base p-3"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <Text size="xsmall" weight="plus">
+                        {formatLogTimestamp(entry.timestamp)}
+                        {entry.action ? ` - ${entry.action}` : ""}
+                      </Text>
+                      <div className="flex items-center gap-x-2">
+                        {entry.source ? (
+                          <Text
+                            size="xsmall"
+                            className="text-ui-fg-subtle"
+                          >
+                            {entry.source}
+                          </Text>
+                        ) : null}
+                        <StatusBadge
+                          color={resolveLogStatusColor(entry.status)}
+                        >
+                          {entry.status}
+                        </StatusBadge>
+                      </div>
+                    </div>
+                    {entry.message ? (
                       <Text
                         size="xsmall"
-                        className="text-ui-fg-subtle"
+                        className="mt-1 text-ui-fg-subtle"
                       >
-                        {entry.source}
+                        {entry.message}
                       </Text>
                     ) : null}
-                    <StatusBadge
-                      color={resolveLogStatusColor(entry.status)}
-                    >
-                      {entry.status}
-                    </StatusBadge>
+                    {entry.errors?.length ? (
+                      <Text
+                        size="xsmall"
+                        className="mt-1 text-ui-fg-subtle"
+                      >
+                        Errors: {entry.errors.join("; ")}
+                      </Text>
+                    ) : null}
+                    {entry.details ? (
+                      <pre className="mt-2 max-h-48 overflow-auto rounded bg-ui-bg-base p-2 text-[11px] text-ui-fg-subtle">
+                        {safeStringify(entry.details)}
+                      </pre>
+                    ) : null}
+                    {entry.request || entry.response ? (
+                      <pre className="mt-2 max-h-64 overflow-auto rounded bg-ui-bg-base p-2 text-[11px] text-ui-fg-subtle">
+                        {safeStringify({
+                          request: entry.request ?? null,
+                          response: entry.response ?? null,
+                        })}
+                      </pre>
+                    ) : null}
                   </div>
-                </div>
-                {entry.message ? (
-                  <Text
-                    size="xsmall"
-                    className="mt-1 text-ui-fg-subtle"
-                  >
-                    {entry.message}
-                  </Text>
-                ) : null}
-                {entry.errors?.length ? (
-                  <Text
-                    size="xsmall"
-                    className="mt-1 text-ui-fg-subtle"
-                  >
-                    Errors: {entry.errors.join("; ")}
-                  </Text>
-                ) : null}
-                {entry.details ? (
-                  <pre className="mt-2 max-h-48 overflow-auto rounded bg-ui-bg-base p-2 text-[11px] text-ui-fg-subtle">
-                    {safeStringify(entry.details)}
-                  </pre>
-                ) : null}
-                {entry.request || entry.response ? (
-                  <pre className="mt-2 max-h-64 overflow-auto rounded bg-ui-bg-base p-2 text-[11px] text-ui-fg-subtle">
-                    {safeStringify({
-                      request: entry.request ?? null,
-                      response: entry.response ?? null,
-                    })}
-                  </pre>
-                ) : null}
+                ))}
               </div>
-            ))}
+            ) : null}
           </div>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
     </div>
   )
 }
