@@ -858,19 +858,25 @@ export const createBillingoDocument = async (
       orderRecord.raw_item_total,
       orderRecord.original_item_total
     ) ?? null
-  let shippingTotal =
+  const shippingSubtotal =
+    readNumber(
+      orderRecord.shipping_subtotal,
+      orderRecord.raw_shipping_subtotal,
+      orderRecord.original_shipping_subtotal
+    ) ?? 0
+  let shippingGross =
     readNumber(
       orderRecord.shipping_total,
       orderRecord.raw_shipping_total,
       orderRecord.original_shipping_total
     ) ?? 0
   if (
-    (!shippingTotal || shippingTotal <= 0) &&
+    (!shippingGross || shippingGross <= 0) &&
     totalGross &&
     itemGross &&
     totalGross > itemGross
   ) {
-    shippingTotal = totalGross - itemGross
+    shippingGross = totalGross - itemGross
   }
   let shippingTaxTotal =
     readNumber(
@@ -878,6 +884,15 @@ export const createBillingoDocument = async (
       orderRecord.raw_shipping_tax_total,
       orderRecord.original_shipping_tax_total
     ) ?? null
+  if (
+    shippingSubtotal > 0 &&
+    shippingTaxTotal !== null &&
+    Number.isFinite(shippingTaxTotal)
+  ) {
+    shippingGross = shippingSubtotal + shippingTaxTotal
+  } else if (!shippingGross || shippingGross <= 0) {
+    shippingGross = shippingSubtotal
+  }
   if (!shippingTaxTotal || shippingTaxTotal <= 0) {
     const taxTotal = readNumber(
       orderRecord.tax_total,
@@ -894,7 +909,7 @@ export const createBillingoDocument = async (
     }
   }
   const shippingVatFallback = resolveVatFromTotals(
-    shippingTotal,
+    shippingGross,
     shippingTaxTotal
   )
   const shippingVatFromLines = resolveItemVat(
@@ -983,8 +998,8 @@ export const createBillingoDocument = async (
       ) ?? 0
     if (orderTotal > 0) {
       const fallbackTotal =
-        shippingTotal > 0
-          ? Math.max(orderTotal - shippingTotal, 0)
+        shippingGross > 0
+          ? Math.max(orderTotal - shippingGross, 0)
           : orderTotal
       if (fallbackTotal > 0) {
         baseItems = [
@@ -1018,10 +1033,10 @@ export const createBillingoDocument = async (
       })
       .filter((item) => item.unit_price > 0)
 
-    if (shippingTotal > 0) {
+    if (shippingGross > 0) {
       items.push({
         name: "Shipping",
-        unit_price: roundTo(toMajor(shippingTotal, currency), decimals),
+        unit_price: roundTo(toMajor(shippingGross, currency), decimals),
         vat: shippingVat,
       })
     }
@@ -1071,10 +1086,10 @@ export const createBillingoDocument = async (
     })
     .filter((item) => item.unit_price > 0)
 
-  if (shippingTotal > 0) {
+  if (shippingGross > 0) {
     items.push({
       name: "Shipping",
-      unit_price: roundTo(toMajor(shippingTotal, currency), decimals),
+      unit_price: roundTo(toMajor(shippingGross, currency), decimals),
       unit_price_type: config.invoiceUnitPriceType,
       quantity: 1,
       unit: config.invoiceUnit,
