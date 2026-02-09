@@ -192,7 +192,7 @@ const normalizeNumericString = (raw: string) => {
   return normalized
 }
 
-const toNumber = (value: unknown) => {
+const toNumber = (value: unknown): number | null => {
   if (typeof value === "number") {
     return Number.isFinite(value) ? value : null
   }
@@ -203,6 +203,22 @@ const toNumber = (value: unknown) => {
     }
     const parsed = Number(normalized)
     return Number.isFinite(parsed) ? parsed : null
+  }
+  if (value && typeof value === "object") {
+    const record = value as { value?: unknown }
+    if ("value" in record) {
+      return toNumber(record.value)
+    }
+  }
+  return null
+}
+
+const readNumber = (...values: unknown[]) => {
+  for (const value of values) {
+    const parsed = toNumber(value)
+    if (typeof parsed === "number") {
+      return parsed
+    }
   }
   return null
 }
@@ -493,17 +509,33 @@ export const createBillingoDocument = async (
         return null
       }
 
-      const quantityValue = toNumber(item.quantity) ?? 0
+      const record = item as Record<string, unknown>
+      const detail =
+        (record.detail as Record<string, unknown> | null) ?? null
+      const quantityValue =
+        readNumber(
+          record.quantity,
+          record.raw_quantity,
+          detail?.quantity,
+          detail?.raw_quantity
+        ) ?? 0
       if (!Number.isFinite(quantityValue) || quantityValue <= 0) {
         return null
       }
 
       const quantity = Math.max(quantityValue, 1)
+      const unitPrice =
+        readNumber(record.unit_price, record.raw_unit_price) ?? 0
       const lineTotal =
-        toNumber(item.total) ??
-        toNumber(item.item_total) ??
-        toNumber(item.subtotal) ??
-        (toNumber(item.unit_price) ?? 0) * quantity
+        readNumber(
+          record.total,
+          record.item_total,
+          record.subtotal,
+          record.raw_total,
+          record.raw_item_total,
+          record.raw_subtotal
+        ) ??
+        unitPrice * quantity
 
       return {
         title: item.title ?? "Item",
@@ -525,10 +557,14 @@ export const createBillingoDocument = async (
 
   if (!baseItems.length) {
     const orderTotal =
-      toNumber(order.total) ??
-      toNumber(order.subtotal) ??
-      toNumber(order.item_total) ??
-      0
+      readNumber(
+        (order as Record<string, unknown>).total,
+        (order as Record<string, unknown>).subtotal,
+        (order as Record<string, unknown>).item_total,
+        (order as Record<string, unknown>).raw_total,
+        (order as Record<string, unknown>).raw_subtotal,
+        (order as Record<string, unknown>).raw_item_total
+      ) ?? 0
     if (orderTotal > 0) {
       const fallbackTotal =
         shippingTotal > 0
