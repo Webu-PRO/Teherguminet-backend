@@ -304,6 +304,19 @@ const resolveVatFromTotals = (
   return normalizeBillingoVat(formatVat(rate))
 }
 
+const resolveVatRateFromTotals = (
+  total: number,
+  taxTotal: number | null
+) => {
+  if (!taxTotal || !Number.isFinite(taxTotal)) {
+    return null
+  }
+  if (taxTotal <= 0 || total <= taxTotal) {
+    return null
+  }
+  return (taxTotal / (total - taxTotal)) * 100
+}
+
 const normalizeNumericString = (raw: string) => {
   const trimmed = raw.trim()
   if (!trimmed) {
@@ -858,6 +871,28 @@ export const createBillingoDocument = async (
       orderRecord.raw_item_total,
       orderRecord.original_item_total
     ) ?? null
+  const taxTotal =
+    readNumber(
+      orderRecord.tax_total,
+      orderRecord.raw_tax_total,
+      orderRecord.original_tax_total
+    ) ?? null
+  const itemTaxTotal =
+    readNumber(
+      orderRecord.item_tax_total,
+      orderRecord.raw_item_tax_total,
+      orderRecord.original_item_tax_total
+    ) ?? null
+  const globalVatRate =
+    itemGross && itemTaxTotal
+      ? resolveVatRateFromTotals(itemGross, itemTaxTotal)
+      : totalGross && taxTotal
+        ? resolveVatRateFromTotals(totalGross, taxTotal)
+        : null
+  const globalVat =
+    typeof globalVatRate === "number"
+      ? normalizeBillingoVat(formatVat(globalVatRate))
+      : null
   const shippingSubtotal =
     readNumber(
       orderRecord.shipping_subtotal,
@@ -890,20 +925,16 @@ export const createBillingoDocument = async (
     Number.isFinite(shippingTaxTotal)
   ) {
     shippingGross = shippingSubtotal + shippingTaxTotal
+  } else if (
+    (!shippingGross || shippingGross <= 0) &&
+    shippingSubtotal > 0 &&
+    typeof globalVatRate === "number"
+  ) {
+    shippingGross = shippingSubtotal * (1 + globalVatRate / 100)
   } else if (!shippingGross || shippingGross <= 0) {
     shippingGross = shippingSubtotal
   }
   if (!shippingTaxTotal || shippingTaxTotal <= 0) {
-    const taxTotal = readNumber(
-      orderRecord.tax_total,
-      orderRecord.raw_tax_total,
-      orderRecord.original_tax_total
-    )
-    const itemTaxTotal = readNumber(
-      orderRecord.item_tax_total,
-      orderRecord.raw_item_tax_total,
-      orderRecord.original_item_tax_total
-    )
     if (taxTotal && itemTaxTotal && taxTotal > itemTaxTotal) {
       shippingTaxTotal = taxTotal - itemTaxTotal
     }
@@ -917,7 +948,7 @@ export const createBillingoDocument = async (
   )
   const shippingVat =
     shippingVatFromLines === "0%"
-      ? shippingVatFallback ?? shippingVatFromLines
+      ? shippingVatFallback ?? globalVat ?? shippingVatFromLines
       : shippingVatFromLines
 
   let baseItems = (order.items ?? [])
@@ -943,16 +974,28 @@ export const createBillingoDocument = async (
       const quantity = Math.max(quantityValue, 1)
       const unitPrice =
         readNumber(record.unit_price, record.raw_unit_price) ?? 0
+      const subtotal =
+        readNumber(
+          record.subtotal,
+          record.raw_subtotal,
+          record.original_subtotal,
+          record.raw_original_subtotal
+        ) ?? unitPrice * quantity
+      const discount =
+        readNumber(
+          record.discount_total,
+          record.raw_discount_total,
+          record.discount_subtotal,
+          record.raw_discount_subtotal
+        ) ?? 0
       const lineTotal =
         readNumber(
           record.total,
           record.item_total,
-          record.subtotal,
           record.raw_total,
           record.raw_item_total,
           record.raw_subtotal
-        ) ??
-        unitPrice * quantity
+        ) ?? Math.max(subtotal - discount, 0)
       const taxTotal =
         readNumber(
           record.tax_total,
