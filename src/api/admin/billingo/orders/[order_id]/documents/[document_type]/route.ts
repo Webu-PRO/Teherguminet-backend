@@ -1,10 +1,23 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
-import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
-import type { OrderDTO, Query } from "@medusajs/types"
+import {
+  ContainerRegistrationKeys,
+  Modules,
+} from "@medusajs/framework/utils"
+import type {
+  IOrderModuleService,
+  OrderDTO,
+  Query,
+} from "@medusajs/types"
 
 import {
+  BILLINGO_METADATA_KEYS,
+  createBillingoInvoice,
+  createBillingoReceipt,
   getBillingoConfig,
   getBillingoDocumentPdf,
+  getBillingoPublicUrl,
+  hasBillingoMetadata,
+  type BillingoDocumentMetadata,
 } from "../../../../../../../lib/billingo"
 
 const resolveDocumentType = (value?: string | null) => {
@@ -36,6 +49,38 @@ const readBillingoDocumentId = (
   }
 
   return null
+}
+
+const fetchOrderForBillingo = async (
+  req: MedusaRequest,
+  orderId: string
+) => {
+  const query = req.scope.resolve<Query>(
+    ContainerRegistrationKeys.QUERY
+  )
+  const { data: orders } = await query.graph({
+    entity: "order",
+    fields: [
+      "id",
+      "display_id",
+      "email",
+      "created_at",
+      "currency_code",
+      "metadata",
+      "shipping_total",
+      "items.*",
+      "items.tax_lines.*",
+      "shipping_methods.*",
+      "shipping_methods.tax_lines.*",
+      "billing_address.*",
+      "shipping_address.*",
+    ],
+    filters: {
+      id: orderId,
+    },
+  })
+
+  return orders?.[0] as OrderDTO | undefined
 }
 
 export async function GET(req: MedusaRequest, res: MedusaResponse) {
@@ -141,6 +186,109 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
       error instanceof Error
         ? error.message
         : "Failed to download Billingo document."
+    res.status(500).json({ message })
+  }
+}
+
+export async function POST(req: MedusaRequest, res: MedusaResponse) {
+  const { order_id: orderId, document_type: documentType } =
+    req.params
+
+  console.info("[Billingo] create request", {
+    orderId,
+    documentType,
+  })
+
+  if (!orderId) {
+    console.warn("[Billingo] missing order id")
+    res.status(400).json({ message: "Missing order id." })
+    return
+  }
+
+  const resolvedType = resolveDocumentType(documentType)
+  if (!resolvedType) {
+    console.warn("[Billingo] invalid document type", { documentType })
+    res.status(400).json({ message: "Invalid Billingo document type." })
+    return
+  }
+
+  const config = getBillingoConfig()
+  if (!config) {
+    console.warn("[Billingo] config missing")
+    res.status(400).json({ message: "Billingo is not configured." })
+    return
+  }
+
+  try {
+    const order = await fetchOrderForBillingo(req, orderId)
+    if (!order) {
+      console.warn("[Billingo] order not found", { orderId })
+      res.status(404).json({ message: "Order not found." })
+      return
+    }
+
+    const metadata =
+      (order.metadata as Record<string, unknown> | null) ?? {}
+    if (hasBillingoMetadata(metadata, resolvedType)) {
+      res.status(409).json({
+        message: "Billingo document already exists for this order.",
+        document: metadata[BILLINGO_METADATA_KEYS[resolvedType]],
+      })
+      return
+    }
+
+    const document =
+      resolvedType === "invoice"
+        ? await createBillingoInvoice(order, config)
+        : await createBillingoReceipt(order, config)
+
+    let publicUrl: string | undefined
+    if (typeof document?.id === "number") {
+      try {
+        const publicData = await getBillingoPublicUrl(
+          document.id,
+          config
+        )
+        publicUrl =
+          typeof publicData?.public_url === "string"
+            ? publicData.public_url
+            : undefined
+      } catch (error) {
+        console.warn("[Billingo] public url fetch failed", {
+          orderId,
+          documentType: resolvedType,
+          documentId: document?.id,
+        })
+      }
+    }
+
+    const orderModuleService =
+      req.scope.resolve<IOrderModuleService>(Modules.ORDER)
+    const payload: BillingoDocumentMetadata = {
+      id: document.id,
+      invoice_number: document.invoice_number,
+      public_url: publicUrl,
+      created_at: new Date().toISOString(),
+    }
+
+    await orderModuleService.updateOrders(order.id, {
+      metadata: {
+        ...metadata,
+        [BILLINGO_METADATA_KEYS[resolvedType]]: payload,
+      },
+    })
+
+    res.status(201).json({ document: payload })
+  } catch (error) {
+    console.error("[Billingo] create failed", {
+      orderId,
+      documentType,
+      error,
+    })
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Failed to create Billingo document."
     res.status(500).json({ message })
   }
 }

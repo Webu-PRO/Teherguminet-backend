@@ -529,6 +529,9 @@ const OrderGlsShipmentWidget = () => {
   const [billingoDownloading, setBillingoDownloading] = useState<
     "invoice" | "receipt" | null
   >(null)
+  const [billingoCreating, setBillingoCreating] = useState<
+    "invoice" | "receipt" | null
+  >(null)
   const prompt = usePrompt()
 
   useEffect(() => {
@@ -1204,6 +1207,64 @@ const OrderGlsShipmentWidget = () => {
     [order?.display_id, orderId]
   )
 
+  const handleBillingoCreate = useCallback(
+    async (type: "invoice" | "receipt") => {
+      if (!orderId) {
+        return
+      }
+
+      setBillingoCreating(type)
+      try {
+        const response = await fetch(
+          `/admin/billingo/orders/${orderId}/documents/${type}`,
+          {
+            method: "POST",
+            credentials: "include",
+          }
+        )
+
+        if (response.status === 409) {
+          toast.warning("Billingo", {
+            description: "A dokumentum már létezik ehhez a rendeléshez.",
+          })
+          return
+        }
+
+        const payload = await response.json().catch(() => ({}))
+        if (!response.ok) {
+          const message =
+            payload?.message ??
+            "Failed to create the Billingo document."
+          throw new Error(message)
+        }
+
+        toast.success("Billingo", {
+          description:
+            type === "invoice"
+              ? "Számla létrehozva."
+              : "Nyugta létrehozva.",
+        })
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Failed to create the Billingo document."
+        toast.error("Billingo", {
+          description: message,
+          action: {
+            label: "Copy",
+            altText: "Copy Billingo error",
+            onClick: () => void copyToClipboard(message),
+          },
+        })
+      } finally {
+        setBillingoCreating(null)
+        await loadOrder({ silent: true })
+      }
+    },
+    [orderId, loadOrder]
+  )
+
   const handleOpenBillingoUrl = useCallback((url?: string | null) => {
     if (!url) {
       return
@@ -1267,9 +1328,21 @@ const OrderGlsShipmentWidget = () => {
             ) : null}
           </div>
         ) : (
-          <Text size="xsmall" className="mt-2 text-ui-fg-subtle">
-            A Billingo dokumentum még nem elérhető.
-          </Text>
+          <div className="mt-2 flex flex-col gap-y-2">
+            <Text size="xsmall" className="text-ui-fg-subtle">
+              A Billingo dokumentum még nem elérhető.
+            </Text>
+            <Button
+              size="small"
+              variant="secondary"
+              className="w-full"
+              onClick={() => void handleBillingoCreate(type)}
+              isLoading={billingoCreating === type}
+              disabled={billingoCreating === type}
+            >
+              Létrehozás
+            </Button>
+          </div>
         )}
       </div>
     )
