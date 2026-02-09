@@ -103,6 +103,10 @@ type BillingoInvoicePayload = {
   bank_account_id?: number
   comment?: string
   settings?: Record<string, unknown>
+  discount?: {
+    type: "percent"
+    value: number
+  }
   items: BillingoInvoiceItem[]
 }
 
@@ -883,13 +887,13 @@ export const createBillingoDocument = async (
       orderRecord.raw_item_tax_total,
       orderRecord.original_item_tax_total
     ) ?? null
-  const globalVatRate =
+  let globalVatRate =
     itemGross && itemTaxTotal
       ? resolveVatRateFromTotals(itemGross, itemTaxTotal)
       : totalGross && taxTotal
         ? resolveVatRateFromTotals(totalGross, taxTotal)
         : null
-  const globalVat =
+  let globalVat =
     typeof globalVatRate === "number"
       ? normalizeBillingoVat(formatVat(globalVatRate))
       : null
@@ -899,6 +903,11 @@ export const createBillingoDocument = async (
       orderRecord.raw_shipping_subtotal,
       orderRecord.original_shipping_subtotal
     ) ?? 0
+  const shippingOriginalGross =
+    readNumber(
+      orderRecord.original_shipping_total,
+      orderRecord.raw_original_shipping_total
+    ) ?? null
   let shippingGross =
     readNumber(
       orderRecord.shipping_total,
@@ -913,6 +922,11 @@ export const createBillingoDocument = async (
   ) {
     shippingGross = totalGross - itemGross
   }
+  const shippingTaxTotalOriginal =
+    readNumber(
+      orderRecord.original_shipping_tax_total,
+      orderRecord.raw_original_shipping_tax_total
+    ) ?? null
   let shippingTaxTotal =
     readNumber(
       orderRecord.shipping_tax_total,
@@ -939,16 +953,100 @@ export const createBillingoDocument = async (
       shippingTaxTotal = taxTotal - itemTaxTotal
     }
   }
+  const summaryRecord =
+    orderRecord.summary &&
+    typeof orderRecord.summary === "object" &&
+    !Array.isArray(orderRecord.summary)
+      ? (orderRecord.summary as Record<string, unknown>)
+      : null
+  const summaryTotal =
+    summaryRecord
+      ? readNumber(
+          summaryRecord.paid_total,
+          summaryRecord.raw_paid_total,
+          summaryRecord.current_order_total,
+          summaryRecord.raw_current_order_total
+        )
+      : null
+  const orderTotal =
+    readNumber(orderRecord.total, orderRecord.raw_total) ?? null
+  const targetTotal =
+    typeof orderTotal === "number" ? orderTotal : summaryTotal
+  const targetTotalRounded =
+    typeof targetTotal === "number"
+      ? roundTo(targetTotal, decimals)
+      : null
+  const originalOrderTotal =
+    readNumber(
+      orderRecord.original_total,
+      orderRecord.raw_original_total
+    ) ?? null
+  const discountGross =
+    typeof originalOrderTotal === "number" &&
+    typeof orderTotal === "number"
+      ? Math.max(originalOrderTotal - orderTotal, 0)
+      : readNumber(
+          orderRecord.discount_total,
+          orderRecord.raw_discount_total,
+          orderRecord.item_discount_total,
+          orderRecord.raw_item_discount_total,
+          orderRecord.shipping_discount_total,
+          orderRecord.raw_shipping_discount_total
+        ) ?? 0
+  const discountPercentRaw =
+    typeof originalOrderTotal === "number" &&
+    originalOrderTotal > 0 &&
+    Number.isFinite(discountGross) &&
+    discountGross > 0
+      ? (discountGross / originalOrderTotal) * 100
+      : null
+  const discountPercent =
+    typeof discountPercentRaw === "number" &&
+    Number.isFinite(discountPercentRaw)
+      ? Math.min(
+          Math.max(roundTo(discountPercentRaw, 2), 0),
+          100
+        )
+      : null
+  const usePercentDiscount =
+    documentType === "invoice" &&
+    typeof discountPercent === "number" &&
+    discountPercent > 0
+  const shippingLineGross =
+    usePercentDiscount &&
+    typeof shippingOriginalGross === "number" &&
+    shippingOriginalGross > 0
+      ? shippingOriginalGross
+      : shippingGross
+  const shippingLineTaxTotal =
+    usePercentDiscount && typeof shippingTaxTotalOriginal === "number"
+      ? shippingTaxTotalOriginal
+      : shippingTaxTotal
+  if (
+    globalVatRate === null &&
+    typeof targetTotalRounded === "number"
+  ) {
+    const derivedVatRate = resolveVatRateFromTotals(
+      targetTotalRounded,
+      taxTotal
+    )
+    if (typeof derivedVatRate === "number") {
+      globalVatRate = derivedVatRate
+      globalVat = normalizeBillingoVat(formatVat(derivedVatRate))
+    }
+  }
   const shippingVatFallback = resolveVatFromTotals(
-    shippingGross,
-    shippingTaxTotal
+    shippingLineGross,
+    shippingLineTaxTotal
   )
   const shippingVatFromLines = resolveItemVat(
     shippingMethod?.tax_lines ?? null
   )
   const shippingVat =
     shippingVatFromLines === "0%"
-      ? shippingVatFallback ?? globalVat ?? shippingVatFromLines
+      ? usePercentDiscount
+        ? globalVat ?? shippingVatFallback ?? shippingVatFromLines
+        : shippingVatFallback ?? globalVat ?? shippingVatFromLines
       : shippingVatFromLines
 
   let baseItems = (order.items ?? [])
@@ -995,7 +1093,18 @@ export const createBillingoDocument = async (
           record.discount_subtotal,
           record.raw_discount_subtotal
         ) ?? 0
-      const lineTotal =
+      const lineTotalOriginal =
+        readNumber(
+          record.original_total,
+          record.raw_original_total,
+          record.subtotal,
+          record.raw_subtotal,
+          record.total,
+          record.item_total,
+          record.raw_total,
+          record.raw_item_total
+        ) ?? unitPrice * quantity
+      const lineTotalDiscounted =
         readNumber(
           record.total,
           record.item_total,
@@ -1005,6 +1114,9 @@ export const createBillingoDocument = async (
         ) ??
         Math.max(originalTotal - discount, 0) ??
         Math.max(subtotal - discount, 0)
+      const lineTotal = usePercentDiscount
+        ? lineTotalOriginal
+        : lineTotalDiscounted
       const taxTotal =
         readNumber(
           record.tax_total,
@@ -1015,11 +1127,12 @@ export const createBillingoDocument = async (
           detail?.raw_tax_total
         ) ?? null
       const vatFromLines = resolveItemVat(item.tax_lines ?? null)
+      const derivedVat = usePercentDiscount
+        ? globalVat ?? resolveVatFromTotals(lineTotal, taxTotal)
+        : resolveVatFromTotals(lineTotal, taxTotal) ?? globalVat
       const vat =
         vatFromLines === "0%"
-          ? resolveVatFromTotals(lineTotal, taxTotal) ??
-            globalVat ??
-            vatFromLines
+          ? derivedVat ?? vatFromLines
           : vatFromLines
 
       return {
@@ -1040,47 +1153,23 @@ export const createBillingoDocument = async (
       } => Boolean(item)
     )
 
-  if (shippingGross > 0) {
+  if (shippingLineGross > 0) {
     baseItems.push({
       title: "Shipping",
       quantity: 1,
-      lineTotal: shippingGross,
+      lineTotal: shippingLineGross,
       vat: shippingVat,
     })
   }
 
-  const summaryRecord =
-    orderRecord.summary &&
-    typeof orderRecord.summary === "object" &&
-    !Array.isArray(orderRecord.summary)
-      ? (orderRecord.summary as Record<string, unknown>)
+  const scalingTarget = usePercentDiscount
+    ? typeof originalOrderTotal === "number"
+      ? roundTo(originalOrderTotal, decimals)
       : null
-  const summaryTotal =
-    summaryRecord
-      ? readNumber(
-          summaryRecord.transaction_total,
-          summaryRecord.raw_transaction_total,
-          summaryRecord.current_order_total,
-          summaryRecord.raw_current_order_total,
-          summaryRecord.paid_total,
-          summaryRecord.raw_paid_total
-        )
-      : null
-  const orderTotal =
-    readNumber(
-      orderRecord.total,
-      orderRecord.raw_total,
-      orderRecord.original_total
-    ) ?? null
-  const targetTotal =
-    typeof summaryTotal === "number" ? summaryTotal : orderTotal
-  const targetTotalRounded =
-    typeof targetTotal === "number"
-      ? roundTo(targetTotal, decimals)
-      : null
+    : targetTotalRounded
 
   if (
-    typeof targetTotalRounded === "number" &&
+    typeof scalingTarget === "number" &&
     baseItems.length > 0
   ) {
     const sumGross = baseItems.reduce(
@@ -1091,15 +1180,15 @@ export const createBillingoDocument = async (
     if (
       Number.isFinite(sumGross) &&
       sumGross > 0 &&
-      Math.abs(sumGross - targetTotalRounded) >= tolerance
+      Math.abs(sumGross - scalingTarget) >= tolerance
     ) {
-      const ratio = targetTotalRounded / sumGross
+      const ratio = scalingTarget / sumGross
       if (Number.isFinite(ratio) && ratio > 0) {
         let running = 0
         baseItems = baseItems.map((item, index) => {
           if (index === baseItems.length - 1) {
             const adjusted = roundTo(
-              targetTotalRounded - running,
+              scalingTarget - running,
               decimals
             )
             return {
@@ -1135,8 +1224,8 @@ export const createBillingoDocument = async (
           ) ?? 0
     if (fallbackTotal > 0) {
       const fallbackItemTotal =
-        shippingGross > 0
-          ? Math.max(fallbackTotal - shippingGross, 0)
+        shippingLineGross > 0
+          ? Math.max(fallbackTotal - shippingLineGross, 0)
           : fallbackTotal
       if (fallbackItemTotal > 0) {
         baseItems = [
@@ -1168,7 +1257,10 @@ export const createBillingoDocument = async (
           vat: item.vat,
         }
       })
-      .filter((item) => item.unit_price > 0)
+      .filter(
+        (item) =>
+          Number.isFinite(item.unit_price) && item.unit_price >= 0
+      )
 
     if (!items.length) {
       throw new Error("Billingo: no receipt items available")
@@ -1213,7 +1305,10 @@ export const createBillingoDocument = async (
         vat: item.vat,
       }
     })
-    .filter((item) => item.unit_price > 0)
+    .filter(
+      (item) =>
+        Number.isFinite(item.unit_price) && item.unit_price >= 0
+    )
 
   if (!items.length) {
     throw new Error("Billingo: no invoice items available")
@@ -1236,6 +1331,13 @@ export const createBillingoDocument = async (
     currency,
     electronic: config.electronic,
     items,
+  }
+
+  if (usePercentDiscount) {
+    basePayload.discount = {
+      type: "percent",
+      value: discountPercent!,
+    }
   }
 
   if (config.invoiceBankAccountId) {
