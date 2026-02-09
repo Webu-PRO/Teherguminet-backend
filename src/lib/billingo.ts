@@ -509,7 +509,7 @@ export const createBillingoDocument = async (
         return null
       }
 
-      const record = item as Record<string, unknown>
+      const record = item as unknown as Record<string, unknown>
       const detail =
         (record.detail as Record<string, unknown> | null) ?? null
       const quantityValue =
