@@ -458,9 +458,25 @@ const billingoRequest = async <T>(
           : typeof (data as { message?: unknown })?.message === "string"
             ? (data as { message?: string }).message!
             : response.statusText
+      const errorRecord = data as {
+        message?: unknown
+        errors?: unknown
+      }
       console.error("[Billingo] request failed", {
         status: response.status,
         statusText: response.statusText,
+        message:
+          typeof errorRecord?.message === "string"
+            ? errorRecord.message
+            : undefined,
+        errors: errorRecord?.errors,
+        errors_json: (() => {
+          try {
+            return JSON.stringify(errorRecord?.errors ?? null)
+          } catch {
+            return null
+          }
+        })(),
         data,
       })
       throw new Error(`Billingo ${response.status}: ${message}`)
