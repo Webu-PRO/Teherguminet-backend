@@ -4,6 +4,7 @@ import {
   Modules,
 } from "@medusajs/framework/utils"
 import type {
+  ICustomerModuleService,
   IOrderModuleService,
   OrderDTO,
   Query,
@@ -11,12 +12,15 @@ import type {
 
 import {
   BILLINGO_METADATA_KEYS,
+  applyBillingoPartnerMetadata,
+  createBillingoPartner,
   createBillingoInvoice,
   createBillingoReceipt,
   getBillingoConfig,
   getBillingoDocumentPdf,
   getBillingoPublicUrl,
   hasBillingoMetadata,
+  resolveBillingoPartnerId,
   type BillingoDocumentMetadata,
 } from "../../../../../../../lib/billingo"
 
@@ -237,10 +241,44 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
       return
     }
 
+    let partnerId = resolveBillingoPartnerId(metadata)
+    let customerMetadata: Record<string, unknown> | null = null
+    let customerService: ICustomerModuleService | null = null
+    if (!partnerId && order.customer_id) {
+      try {
+        customerService =
+          req.scope.resolve<ICustomerModuleService>(Modules.CUSTOMER)
+        const customer = await customerService.retrieveCustomer(
+          order.customer_id,
+          { select: ["id", "metadata"] }
+        )
+        customerMetadata =
+          (customer.metadata as Record<string, unknown> | null) ?? {}
+        partnerId = resolveBillingoPartnerId(customerMetadata)
+      } catch (error) {
+        console.warn("[Billingo] customer fetch failed", {
+          orderId,
+          documentType: resolvedType,
+        })
+      }
+    }
+
+    if (!partnerId) {
+      const partner = await createBillingoPartner(order, config)
+      partnerId = partner.id
+    }
+
+    const mergedMetadata = partnerId
+      ? applyBillingoPartnerMetadata(metadata, partnerId)
+      : metadata
+    const orderForBillingo = partnerId
+      ? { ...order, metadata: mergedMetadata }
+      : order
+
     const document =
       resolvedType === "invoice"
-        ? await createBillingoInvoice(order, config)
-        : await createBillingoReceipt(order, config)
+        ? await createBillingoInvoice(orderForBillingo, config)
+        : await createBillingoReceipt(orderForBillingo, config)
 
     let publicUrl: string | undefined
     if (typeof document?.id === "number") {
@@ -271,9 +309,30 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
       created_at: new Date().toISOString(),
     }
 
+    if (partnerId && order.customer_id) {
+      try {
+        const service =
+          customerService ??
+          req.scope.resolve<ICustomerModuleService>(Modules.CUSTOMER)
+        const metadataForCustomer = customerMetadata ?? {}
+        await service.updateCustomers(order.customer_id, {
+          metadata: {
+            ...metadataForCustomer,
+            billingo_partner_id: partnerId,
+          },
+        })
+      } catch (error) {
+        console.warn("[Billingo] customer metadata update failed", {
+          orderId,
+          documentType: resolvedType,
+          partnerId,
+        })
+      }
+    }
+
     await orderModuleService.updateOrders(order.id, {
       metadata: {
-        ...metadata,
+        ...mergedMetadata,
         [BILLINGO_METADATA_KEYS[resolvedType]]: payload,
       },
     })

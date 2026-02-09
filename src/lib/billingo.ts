@@ -91,6 +91,25 @@ type BillingoInvoicePayload = {
 
 type BillingoDocumentPayload = BillingoReceiptPayload | BillingoInvoicePayload
 
+type BillingoPartnerAddress = {
+  country_code: string
+  post_code: string
+  city: string
+  address: string
+}
+
+type BillingoPartnerPayload = {
+  name: string
+  address: BillingoPartnerAddress
+  emails?: string[]
+  taxcode?: string
+  phone?: string
+}
+
+type BillingoPartner = {
+  id: number
+}
+
 const DEFAULT_BASE_URL = "https://api.billingo.hu/v3"
 const DEFAULT_TIMEOUT_MS = 15_000
 const DEFAULT_INVOICE_LANGUAGE = "hu"
@@ -300,6 +319,168 @@ const resolvePaymentMethod = (
   }
 
   return fallback
+}
+
+const resolveMetadataRecord = (
+  value: unknown
+): Record<string, unknown> | null => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null
+  }
+  return value as Record<string, unknown>
+}
+
+const resolvePartnerIdFromPayload = (payload: unknown) => {
+  const record = resolveMetadataRecord(payload)
+  if (!record) {
+    return null
+  }
+  const parsed = readNumber(record.partner_id)
+  if (!parsed || parsed <= 0) {
+    return null
+  }
+  return parsed
+}
+
+export const resolveBillingoPartnerId = (
+  metadata?: Record<string, unknown> | null
+) => {
+  if (!metadata) {
+    return null
+  }
+  const direct = readNumber(metadata.billingo_partner_id)
+  if (direct && direct > 0) {
+    return direct
+  }
+  return (
+    resolvePartnerIdFromPayload(metadata.billingo_payload) ??
+    resolvePartnerIdFromPayload(metadata.billingo_invoice_payload) ??
+    resolvePartnerIdFromPayload(metadata.billingo_receipt_payload)
+  )
+}
+
+const resolvePartnerTaxcode = (order: OrderDTO) => {
+  const metadata =
+    (order.metadata as Record<string, unknown> | null) ?? {}
+  const candidates: Array<unknown> = [
+    metadata.billingo_taxcode,
+    metadata.taxcode,
+    metadata.tax_code,
+    metadata.vat_number,
+    metadata.vat,
+  ]
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.trim()) {
+      return candidate.trim()
+    }
+  }
+  return null
+}
+
+const resolvePartnerPayload = (
+  order: OrderDTO
+): BillingoPartnerPayload | null => {
+  const billing = resolveMetadataRecord(order.billing_address)
+  const shipping = resolveMetadataRecord(order.shipping_address)
+  const address = billing ?? shipping
+  if (!address) {
+    return null
+  }
+
+  const company =
+    (typeof address.company === "string" ? address.company : "")?.trim() ?? ""
+  const first =
+    (typeof address.first_name === "string"
+      ? address.first_name
+      : ""
+    )?.trim() ?? ""
+  const last =
+    (typeof address.last_name === "string"
+      ? address.last_name
+      : ""
+    )?.trim() ?? ""
+  const fullName = `${first} ${last}`.trim()
+  const name = company || fullName || "Customer"
+
+  const addressLine = [
+    typeof address.address_1 === "string" ? address.address_1 : "",
+    typeof address.address_2 === "string" ? address.address_2 : "",
+  ]
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .join(" ")
+  const city =
+    typeof address.city === "string" ? address.city.trim() : ""
+  const postCode =
+    typeof address.postal_code === "string"
+      ? address.postal_code.trim()
+      : ""
+  const countryCodeRaw =
+    typeof address.country_code === "string"
+      ? address.country_code.trim()
+      : ""
+  const countryCode = countryCodeRaw.toUpperCase()
+
+  if (!addressLine || !city || !postCode || !countryCode) {
+    return null
+  }
+
+  const emails =
+    typeof order.email === "string" && order.email.trim()
+      ? [order.email.trim()]
+      : undefined
+  const phone =
+    typeof address.phone === "string" && address.phone.trim()
+      ? address.phone.trim()
+      : undefined
+  const taxcode = resolvePartnerTaxcode(order) ?? undefined
+
+  return {
+    name,
+    address: {
+      country_code: countryCode,
+      post_code: postCode,
+      city,
+      address: addressLine,
+    },
+    emails,
+    phone,
+    taxcode,
+  }
+}
+
+export const applyBillingoPartnerMetadata = (
+  metadata: Record<string, unknown>,
+  partnerId: number
+) => {
+  const existingPayload = resolveMetadataRecord(metadata.billingo_payload)
+  const payload = {
+    ...(existingPayload ?? {}),
+    partner_id: partnerId,
+  }
+
+  return {
+    ...metadata,
+    billingo_partner_id: partnerId,
+    billingo_payload: payload,
+  }
+}
+
+export const createBillingoPartner = async (
+  order: OrderDTO,
+  config: BillingoConfig
+) => {
+  const payload = resolvePartnerPayload(order)
+  if (!payload) {
+    throw new Error(
+      "Billingo: partner data missing (address, city, postal code, country code)"
+    )
+  }
+
+  return billingoRequest<BillingoPartner>(config, "/partners", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  })
 }
 
 export const resolveBillingoDocumentType = (
