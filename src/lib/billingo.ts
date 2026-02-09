@@ -846,17 +846,64 @@ export const createBillingoDocument = async (
 
   const shippingMethod = order.shipping_methods?.[0]
   const orderRecord = order as unknown as Record<string, unknown>
-  const shippingTotal = toNumber(order.shipping_total) ?? 0
-  const shippingTaxTotal =
+  const totalGross =
+    readNumber(
+      orderRecord.total,
+      orderRecord.raw_total,
+      orderRecord.original_total
+    ) ?? null
+  const itemGross =
+    readNumber(
+      orderRecord.item_total,
+      orderRecord.raw_item_total,
+      orderRecord.original_item_total
+    ) ?? null
+  let shippingTotal =
+    readNumber(
+      orderRecord.shipping_total,
+      orderRecord.raw_shipping_total,
+      orderRecord.original_shipping_total
+    ) ?? 0
+  if (
+    (!shippingTotal || shippingTotal <= 0) &&
+    totalGross &&
+    itemGross &&
+    totalGross > itemGross
+  ) {
+    shippingTotal = totalGross - itemGross
+  }
+  let shippingTaxTotal =
     readNumber(
       orderRecord.shipping_tax_total,
       orderRecord.raw_shipping_tax_total,
       orderRecord.original_shipping_tax_total
     ) ?? null
+  if (!shippingTaxTotal || shippingTaxTotal <= 0) {
+    const taxTotal = readNumber(
+      orderRecord.tax_total,
+      orderRecord.raw_tax_total,
+      orderRecord.original_tax_total
+    )
+    const itemTaxTotal = readNumber(
+      orderRecord.item_tax_total,
+      orderRecord.raw_item_tax_total,
+      orderRecord.original_item_tax_total
+    )
+    if (taxTotal && itemTaxTotal && taxTotal > itemTaxTotal) {
+      shippingTaxTotal = taxTotal - itemTaxTotal
+    }
+  }
   const shippingVatFallback = resolveVatFromTotals(
     shippingTotal,
     shippingTaxTotal
   )
+  const shippingVatFromLines = resolveItemVat(
+    shippingMethod?.tax_lines ?? null
+  )
+  const shippingVat =
+    shippingVatFromLines === "0%"
+      ? shippingVatFallback ?? shippingVatFromLines
+      : shippingVatFromLines
 
   let baseItems = (order.items ?? [])
     .map((item) => {
@@ -975,7 +1022,7 @@ export const createBillingoDocument = async (
       items.push({
         name: "Shipping",
         unit_price: roundTo(toMajor(shippingTotal, currency), decimals),
-        vat: resolveItemVat(shippingMethod?.tax_lines ?? null),
+        vat: shippingVat,
       })
     }
 
@@ -1031,7 +1078,7 @@ export const createBillingoDocument = async (
       unit_price_type: config.invoiceUnitPriceType,
       quantity: 1,
       unit: config.invoiceUnit,
-      vat: resolveItemVat(shippingMethod?.tax_lines ?? null),
+      vat: shippingVat,
     })
   }
 
