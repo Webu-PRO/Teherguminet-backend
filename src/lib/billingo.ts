@@ -556,14 +556,15 @@ export const createBillingoDocument = async (
     )
 
   if (!baseItems.length) {
+    const orderRecord = order as unknown as Record<string, unknown>
     const orderTotal =
       readNumber(
-        (order as Record<string, unknown>).total,
-        (order as Record<string, unknown>).subtotal,
-        (order as Record<string, unknown>).item_total,
-        (order as Record<string, unknown>).raw_total,
-        (order as Record<string, unknown>).raw_subtotal,
-        (order as Record<string, unknown>).raw_item_total
+        orderRecord.total,
+        orderRecord.subtotal,
+        orderRecord.item_total,
+        orderRecord.raw_total,
+        orderRecord.raw_subtotal,
+        orderRecord.raw_item_total
       ) ?? 0
     if (orderTotal > 0) {
       const fallbackTotal =
