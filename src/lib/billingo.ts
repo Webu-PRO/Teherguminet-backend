@@ -442,6 +442,17 @@ const resolvePaymentMethod = (
   return fallback
 }
 
+const resolveVendorId = (
+  order: OrderDTO,
+  type: BillingoDocumentType
+) => {
+  const id = typeof order.id === "string" ? order.id.trim() : ""
+  if (!id) {
+    return undefined
+  }
+  return `${id}-${type}`
+}
+
 const resolveMetadataRecord = (
   value: unknown
 ): Record<string, unknown> | null => {
@@ -973,7 +984,7 @@ export const createBillingoDocument = async (
     }
 
     const basePayload: BillingoReceiptPayload = {
-      vendor_id: order.id,
+      vendor_id: resolveVendorId(order, "receipt"),
       name: resolveCustomerName(order),
       emails: order.email ? [order.email] : undefined,
       block_id: config.receiptBlockId,
@@ -1033,7 +1044,7 @@ export const createBillingoDocument = async (
   )
 
   const basePayload: BillingoInvoicePayload = {
-    vendor_id: order.id,
+    vendor_id: resolveVendorId(order, "invoice"),
     name: resolveCustomerName(order),
     emails: order.email ? [order.email] : undefined,
     block_id: config.invoiceBlockId!,
