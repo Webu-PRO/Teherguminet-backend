@@ -42,19 +42,27 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
   const { order_id: orderId, document_type: documentType } =
     req.params
 
+  console.info("[Billingo] download request", {
+    orderId,
+    documentType,
+  })
+
   if (!orderId) {
+    console.warn("[Billingo] missing order id")
     res.status(400).json({ message: "Missing order id." })
     return
   }
 
   const resolvedType = resolveDocumentType(documentType)
   if (!resolvedType) {
+    console.warn("[Billingo] invalid document type", { documentType })
     res.status(400).json({ message: "Invalid Billingo document type." })
     return
   }
 
   const config = getBillingoConfig()
   if (!config) {
+    console.warn("[Billingo] config missing")
     res.status(400).json({ message: "Billingo is not configured." })
     return
   }
@@ -73,18 +81,27 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
 
     const order = orders?.[0] as OrderDTO | undefined
     if (!order) {
+      console.warn("[Billingo] order not found", { orderId })
       res.status(404).json({ message: "Order not found." })
       return
     }
 
     const metadata =
       (order.metadata as Record<string, unknown> | null) ?? null
+    const metadataKeys = metadata ? Object.keys(metadata) : []
     const documentId = readBillingoDocumentId(
       metadata,
       resolvedType
     )
 
     if (!documentId) {
+      console.warn("[Billingo] document id missing", {
+        orderId,
+        resolvedType,
+        metadataKeys,
+        hasInvoiceMeta: Boolean(metadata?.billingo_invoice),
+        hasReceiptMeta: Boolean(metadata?.billingo_receipt),
+      })
       res.status(404).json({
         message: "Billingo document not found for this order.",
       })
@@ -93,6 +110,11 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
 
     const content = await getBillingoDocumentPdf(documentId, config)
     if (!content) {
+      console.warn("[Billingo] document content missing", {
+        orderId,
+        resolvedType,
+        documentId,
+      })
       res.status(404).json({
         message: "Billingo document is not available yet.",
       })
@@ -110,6 +132,11 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
     )
     res.status(200).send(buffer)
   } catch (error) {
+    console.error("[Billingo] download failed", {
+      orderId,
+      documentType,
+      error,
+    })
     const message =
       error instanceof Error
         ? error.message
