@@ -441,13 +441,28 @@ const billingoRequest = async <T>(
     })
 
     const text = await response.text()
-    const data = text ? JSON.parse(text) : null
+    let data: unknown = null
+    if (text) {
+      try {
+        data = JSON.parse(text)
+      } catch {
+        data = text
+      }
+    }
 
     if (!response.ok) {
       const message =
-        typeof data?.error?.message === "string"
-          ? data.error.message
-          : response.statusText
+        typeof (data as { error?: { message?: unknown } })?.error?.message ===
+        "string"
+          ? (data as { error?: { message?: string } }).error!.message!
+          : typeof (data as { message?: unknown })?.message === "string"
+            ? (data as { message?: string }).message!
+            : response.statusText
+      console.error("[Billingo] request failed", {
+        status: response.status,
+        statusText: response.statusText,
+        data,
+      })
       throw new Error(`Billingo ${response.status}: ${message}`)
     }
 
