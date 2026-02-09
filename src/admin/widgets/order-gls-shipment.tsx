@@ -19,6 +19,7 @@ type FulfillmentSummary = {
 type OrderSummary = {
   id: string
   display_id?: number | string | null
+  email?: string | null
   metadata?: Record<string, unknown> | null
   fulfillments?: FulfillmentSummary[] | null
 }
@@ -486,7 +487,7 @@ const safeStringify = (value: unknown) => {
 
 const fetchOrder = async (orderId: string) => {
   const params = new URLSearchParams({
-    fields: "id,display_id,metadata,fulfillments.*",
+    fields: "id,display_id,email,metadata,fulfillments.*",
   })
 
   const response = await fetch(
@@ -532,6 +533,7 @@ const OrderGlsShipmentWidget = () => {
   const [billingoCreating, setBillingoCreating] = useState<
     "invoice" | "receipt" | null
   >(null)
+  const [billingoEmailing, setBillingoEmailing] = useState(false)
   const prompt = usePrompt()
 
   useEffect(() => {
@@ -1265,6 +1267,51 @@ const OrderGlsShipmentWidget = () => {
     [orderId, loadOrder]
   )
 
+  const handleBillingoEmail = useCallback(async () => {
+    if (!orderId) {
+      return
+    }
+
+    setBillingoEmailing(true)
+    try {
+      const response = await fetch(
+        `/admin/billingo/orders/${orderId}/documents/invoice/email`,
+        {
+          method: "POST",
+          credentials: "include",
+        }
+      )
+
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        const message =
+          payload?.message ??
+          "Failed to send the Billingo invoice email."
+        throw new Error(message)
+      }
+
+      toast.success("Billingo", {
+        description: "A számla e-mail elküldve.",
+      })
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to send the Billingo invoice email."
+      toast.error("Billingo", {
+        description: message,
+        action: {
+          label: "Copy",
+          altText: "Copy Billingo error",
+          onClick: () => void copyToClipboard(message),
+        },
+      })
+    } finally {
+      setBillingoEmailing(false)
+      await loadOrder({ silent: true })
+    }
+  }, [orderId, loadOrder])
+
   const handleOpenBillingoUrl = useCallback((url?: string | null) => {
     if (!url) {
       return
@@ -1316,6 +1363,18 @@ const OrderGlsShipmentWidget = () => {
             >
               PDF letöltése
             </Button>
+            {type === "invoice" ? (
+              <Button
+                size="small"
+                variant="secondary"
+                className="w-full"
+                onClick={() => void handleBillingoEmail()}
+                isLoading={billingoEmailing}
+                disabled={billingoEmailing || !order?.email}
+              >
+                E-mail küldése
+              </Button>
+            ) : null}
             {document?.public_url ? (
               <Button
                 size="small"
@@ -1342,6 +1401,18 @@ const OrderGlsShipmentWidget = () => {
             >
               Létrehozás
             </Button>
+            {type === "invoice" ? (
+              <Button
+                size="small"
+                variant="secondary"
+                className="w-full"
+                onClick={() => void handleBillingoEmail()}
+                isLoading={billingoEmailing}
+                disabled={billingoEmailing || !order?.email}
+              >
+                E-mail küldése
+              </Button>
+            ) : null}
           </div>
         )}
       </div>
