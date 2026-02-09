@@ -17,13 +17,17 @@ import type {
 import { sendOrderConfirmationWorkflow } from "../workflows/send-order-confirmation"
 import {
   applyBillingoPartnerMetadata,
+  BILLINGO_ERROR_KEYS,
   createBillingoPartner,
   createBillingoInvoice,
   getBillingoConfig,
   getBillingoPublicUrl,
   BILLINGO_METADATA_KEYS,
+  BILLINGO_STATUS_KEYS,
   hasBillingoMetadata,
   resolveBillingoPartnerId,
+  type BillingoDocumentError,
+  type BillingoDocumentStatus,
   type BillingoDocumentMetadata,
 } from "../lib/billingo"
 
@@ -128,6 +132,7 @@ const maybeCreateBillingoInvoice = async (
     return
   }
 
+  let metadataSnapshot: Record<string, unknown> | null = null
   try {
     const order = await fetchOrderForBillingo(container, orderId)
     if (!order) {
@@ -140,6 +145,7 @@ const maybeCreateBillingoInvoice = async (
 
     const metadata =
       (order.metadata as Record<string, unknown> | null) ?? {}
+    metadataSnapshot = metadata
     let partnerId = resolveBillingoPartnerId(metadata)
     let customerMetadata: Record<string, unknown> | null = null
     let customerService: ICustomerModuleService | null = null
@@ -169,9 +175,32 @@ const maybeCreateBillingoInvoice = async (
     const mergedMetadata = partnerId
       ? applyBillingoPartnerMetadata(metadata, partnerId)
       : metadata
+    metadataSnapshot = mergedMetadata
     const orderForBillingo = partnerId
       ? { ...order, metadata: mergedMetadata }
       : order
+
+    const orderModuleService =
+      container.resolve<IOrderModuleService>(Modules.ORDER)
+    const statusKey = BILLINGO_STATUS_KEYS.invoice
+    const errorKey = BILLINGO_ERROR_KEYS.invoice
+
+    const updateBillingoStatus = async (
+      status: BillingoDocumentStatus,
+      error?: BillingoDocumentError | null,
+      extra?: Record<string, unknown>
+    ) => {
+      await orderModuleService.updateOrders(order.id, {
+        metadata: {
+          ...mergedMetadata,
+          [statusKey]: status,
+          [errorKey]: error ?? null,
+          ...(extra ?? {}),
+        },
+      })
+    }
+
+    await updateBillingoStatus("pending")
 
     const invoice = await createBillingoInvoice(orderForBillingo, config)
 
@@ -190,8 +219,6 @@ const maybeCreateBillingoInvoice = async (
       }
     }
 
-    const orderModuleService =
-      container.resolve<IOrderModuleService>(Modules.ORDER)
     const payload: BillingoDocumentMetadata = {
       id: invoice.id,
       invoice_number: invoice.invoice_number,
@@ -218,15 +245,28 @@ const maybeCreateBillingoInvoice = async (
       }
     }
 
-    await orderModuleService.updateOrders(order.id, {
-      metadata: {
-        ...mergedMetadata,
-        [BILLINGO_METADATA_KEYS.invoice]: payload,
-      },
+    await updateBillingoStatus("success", null, {
+      [BILLINGO_METADATA_KEYS.invoice]: payload,
     })
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Unknown error"
+    try {
+      const orderModuleService =
+        container.resolve<IOrderModuleService>(Modules.ORDER)
+      await orderModuleService.updateOrders(orderId, {
+        metadata: {
+          ...(metadataSnapshot ?? {}),
+          [BILLINGO_STATUS_KEYS.invoice]: "failed",
+          [BILLINGO_ERROR_KEYS.invoice]: {
+            message,
+            at: new Date().toISOString(),
+          },
+        },
+      })
+    } catch {
+      // ignore metadata update errors
+    }
     logger?.error?.(
       `Billingo: failed to create invoice for order ${orderId} (${message})`
     )

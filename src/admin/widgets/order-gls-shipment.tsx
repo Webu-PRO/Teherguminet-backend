@@ -19,6 +19,7 @@ type FulfillmentSummary = {
 type OrderSummary = {
   id: string
   display_id?: number | string | null
+  created_at?: string | null
   email?: string | null
   metadata?: Record<string, unknown> | null
   fulfillments?: FulfillmentSummary[] | null
@@ -29,6 +30,12 @@ type BillingoDocumentSummary = {
   invoice_number?: string | null
   public_url?: string | null
   created_at?: string | null
+}
+
+type BillingoStatusSummary = {
+  status?: "pending" | "success" | "failed" | null
+  errorMessage?: string | null
+  errorAt?: string | null
 }
 
 type ParcelStatusSummary = {
@@ -132,6 +139,49 @@ const readBillingoDocument = (
     created_at: createdAt || undefined,
   }
 }
+
+const readBillingoStatus = (
+  metadata: Record<string, unknown> | null | undefined,
+  type: "invoice" | "receipt"
+): BillingoStatusSummary => {
+  if (!metadata || !isRecord(metadata)) {
+    return {}
+  }
+
+  const statusKey =
+    type === "invoice"
+      ? "billingo_invoice_status"
+      : "billingo_receipt_status"
+  const errorKey =
+    type === "invoice"
+      ? "billingo_invoice_error"
+      : "billingo_receipt_error"
+
+  const rawStatus = metadata[statusKey]
+  const status =
+    rawStatus === "pending" ||
+    rawStatus === "success" ||
+    rawStatus === "failed"
+      ? rawStatus
+      : null
+
+  const rawError = metadata[errorKey]
+  if (typeof rawError === "string") {
+    return { status, errorMessage: rawError }
+  }
+  if (isRecord(rawError)) {
+    return {
+      status,
+      errorMessage:
+        typeof rawError.message === "string" ? rawError.message : null,
+      errorAt: typeof rawError.at === "string" ? rawError.at : null,
+    }
+  }
+
+  return { status }
+}
+
+const AUTO_BILLINGO_GRACE_MS = 5 * 60 * 1000
 
 const normalizeLogStatus = (
   value: unknown
@@ -487,7 +537,7 @@ const safeStringify = (value: unknown) => {
 
 const fetchOrder = async (orderId: string) => {
   const params = new URLSearchParams({
-    fields: "id,display_id,email,metadata,fulfillments.*",
+    fields: "id,display_id,created_at,email,metadata,fulfillments.*",
   })
 
   const response = await fetch(
@@ -1340,6 +1390,20 @@ const OrderGlsShipmentWidget = () => {
     const isAvailable = Boolean(document?.id)
     const statusLabel = isAvailable ? "Elkészült" : "Nincs"
     const statusColor = isAvailable ? "green" : "grey"
+    const billingoStatus = readBillingoStatus(order?.metadata, type)
+    const createdAtMs = order?.created_at
+      ? Date.parse(order.created_at)
+      : Number.NaN
+    const legacyWindowElapsed =
+      Number.isNaN(createdAtMs) ||
+      Date.now() - createdAtMs > AUTO_BILLINGO_GRACE_MS
+    const autoFailed =
+      billingoStatus.status === "failed" ||
+      Boolean(billingoStatus.errorMessage)
+    const autoPending = billingoStatus.status === "pending"
+    const autoSuccessMissing = billingoStatus.status === "success"
+    const showManualActions =
+      !isAvailable && (autoFailed || autoSuccessMissing || legacyWindowElapsed)
 
     return (
       <div className="rounded-md border border-ui-border-base bg-ui-bg-base p-3">
@@ -1397,26 +1461,52 @@ const OrderGlsShipmentWidget = () => {
             <Text size="xsmall" className="text-ui-fg-subtle">
               A Billingo dokumentum még nem elérhető.
             </Text>
-            <Button
-              size="small"
-              variant="secondary"
-              className="w-full"
-              onClick={() => void handleBillingoCreate(type)}
-              isLoading={billingoCreating === type}
-              disabled={billingoCreating === type}
-            >
-              Létrehozás
-            </Button>
-            <Button
-              size="small"
-              variant="secondary"
-              className="w-full"
-              onClick={() => void handleBillingoEmail(type)}
-              isLoading={billingoEmailing === type}
-              disabled={billingoEmailing === type || !order?.email}
-            >
-              {type === "invoice" ? "Számla e-mail" : "Nyugta e-mail"}
-            </Button>
+            {showManualActions ? (
+              <>
+                {billingoStatus.errorMessage ? (
+                  <Text size="xsmall" className="text-ui-fg-subtle">
+                    Hiba: {billingoStatus.errorMessage}
+                    {billingoStatus.errorAt
+                      ? ` (${formatLogTimestamp(billingoStatus.errorAt)})`
+                      : ""}
+                  </Text>
+                ) : null}
+                <Button
+                  size="small"
+                  variant="secondary"
+                  className="w-full"
+                  onClick={() => void handleBillingoCreate(type)}
+                  isLoading={billingoCreating === type}
+                  disabled={billingoCreating === type}
+                >
+                  Létrehozás
+                </Button>
+                <Button
+                  size="small"
+                  variant="secondary"
+                  className="w-full"
+                  onClick={() => void handleBillingoEmail(type)}
+                  isLoading={billingoEmailing === type}
+                  disabled={billingoEmailing === type || !order?.email}
+                >
+                  {type === "invoice"
+                    ? "Számla e-mail"
+                    : "Nyugta e-mail"}
+                </Button>
+              </>
+            ) : (
+              <>
+                {autoPending ? (
+                  <Text size="xsmall" className="text-ui-fg-subtle">
+                    Automatikus létrehozás folyamatban. Kérlek frissíts.
+                  </Text>
+                ) : (
+                  <Text size="xsmall" className="text-ui-fg-subtle">
+                    Automatikus létrehozás folyamatban. Kérlek frissíts.
+                  </Text>
+                )}
+              </>
+            )}
           </div>
         )}
       </div>

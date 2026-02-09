@@ -7,6 +7,23 @@ export const BILLINGO_METADATA_KEYS = {
   invoice: "billingo_invoice",
 } as const
 
+export const BILLINGO_STATUS_KEYS = {
+  receipt: "billingo_receipt_status",
+  invoice: "billingo_invoice_status",
+} as const
+
+export const BILLINGO_ERROR_KEYS = {
+  receipt: "billingo_receipt_error",
+  invoice: "billingo_invoice_error",
+} as const
+
+export type BillingoDocumentStatus = "pending" | "success" | "failed"
+
+export type BillingoDocumentError = {
+  message: string
+  at: string
+}
+
 export type BillingoDocumentMetadata = {
   id?: number
   invoice_number?: string
@@ -116,12 +133,51 @@ const DEFAULT_INVOICE_LANGUAGE = "hu"
 const DEFAULT_INVOICE_UNIT = "db"
 const DEFAULT_INVOICE_UNIT_PRICE_TYPE: BillingoConfig["invoiceUnitPriceType"] =
   "gross"
+const DEFAULT_CURRENCY_DECIMALS: Record<string, number> = {
+  HUF: 0,
+}
+
+const parseCurrencyDecimals = (value?: string | null) => {
+  const overrides: Record<string, number> = { ...DEFAULT_CURRENCY_DECIMALS }
+  if (!value) {
+    return overrides
+  }
+
+  for (const entry of value.split(",")) {
+    const trimmed = entry.trim()
+    if (!trimmed) {
+      continue
+    }
+    const [currencyRaw, decimalsRaw] = trimmed.split(":")
+    if (!currencyRaw || !decimalsRaw) {
+      continue
+    }
+    const currency = currencyRaw.trim().toUpperCase()
+    const parsed = Number(decimalsRaw.trim())
+    if (!currency || !Number.isFinite(parsed) || parsed < 0) {
+      continue
+    }
+    overrides[currency] = Math.floor(parsed)
+  }
+
+  return overrides
+}
+
+const CURRENCY_DECIMALS = parseCurrencyDecimals(
+  process.env.BILLINGO_CURRENCY_DECIMALS
+)
 
 const resolveDecimals = (currency: string): number => {
+  const normalized = currency.toUpperCase()
+  const override = CURRENCY_DECIMALS[normalized]
+  if (typeof override === "number" && Number.isFinite(override)) {
+    return override
+  }
+
   try {
     const decimals = new Intl.NumberFormat("en-US", {
       style: "currency",
-      currency,
+      currency: normalized,
     }).resolvedOptions().maximumFractionDigits
     if (typeof decimals === "number" && Number.isFinite(decimals)) {
       return decimals
@@ -146,14 +202,35 @@ const toMajor = (amount: number, currency: string) => {
   return divisor ? amount / divisor : amount
 }
 
-const normalizeVatRate = (rate?: number | null) => {
-  if (typeof rate !== "number" || !Number.isFinite(rate)) {
+const DEFAULT_VAT_RATES = [0, 5, 18, 27]
+
+const parseVatRates = (value?: string | null) => {
+  if (!value) {
+    return DEFAULT_VAT_RATES
+  }
+  const rates = value
+    .split(",")
+    .map((entry) => toNumber(entry))
+    .filter((rate): rate is number => typeof rate === "number")
+    .map((rate) => (rate <= 1 ? rate * 100 : rate))
+    .filter((rate) => Number.isFinite(rate) && rate >= 0)
+
+  return rates.length ? rates : DEFAULT_VAT_RATES
+}
+
+const BILLINGO_VAT_RATES = parseVatRates(
+  process.env.BILLINGO_VAT_RATES
+)
+
+const normalizeVatRate = (rate?: unknown) => {
+  const parsed = toNumber(rate)
+  if (parsed === null) {
     return 0
   }
-  if (rate <= 1) {
-    return rate * 100
+  if (parsed <= 1) {
+    return parsed * 100
   }
-  return rate
+  return parsed
 }
 
 const formatVat = (rate: number) => {
@@ -170,6 +247,36 @@ const formatVat = (rate: number) => {
 
 type TaxLine = { rate?: number | null }
 
+const normalizeBillingoVat = (value: string) => {
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return "0%"
+  }
+  const upper = trimmed.toUpperCase()
+  if (/[A-Z]/.test(upper) && !/[0-9]/.test(upper)) {
+    return upper
+  }
+
+  const parsed = toNumber(trimmed)
+  if (parsed === null) {
+    return trimmed
+  }
+  const rate = parsed <= 1 ? parsed * 100 : parsed
+  if (BILLINGO_VAT_RATES.length) {
+    let closest = BILLINGO_VAT_RATES[0]
+    let minDiff = Math.abs(rate - closest)
+    for (const candidate of BILLINGO_VAT_RATES) {
+      const diff = Math.abs(rate - candidate)
+      if (diff < minDiff) {
+        minDiff = diff
+        closest = candidate
+      }
+    }
+    return `${closest}%`
+  }
+  return formatVat(rate)
+}
+
 const resolveItemVat = (taxLines?: TaxLine[] | null) => {
   if (!Array.isArray(taxLines) || taxLines.length === 0) {
     return "0%"
@@ -180,7 +287,21 @@ const resolveItemVat = (taxLines?: TaxLine[] | null) => {
   if (!rates.length) {
     return "0%"
   }
-  return formatVat(Math.max(...rates))
+  return normalizeBillingoVat(formatVat(Math.max(...rates)))
+}
+
+const resolveVatFromTotals = (
+  total: number,
+  taxTotal: number | null
+) => {
+  if (!taxTotal || !Number.isFinite(taxTotal)) {
+    return null
+  }
+  if (taxTotal <= 0 || total <= taxTotal) {
+    return null
+  }
+  const rate = (taxTotal / (total - taxTotal)) * 100
+  return normalizeBillingoVat(formatVat(rate))
 }
 
 const normalizeNumericString = (raw: string) => {
@@ -713,7 +834,18 @@ export const createBillingoDocument = async (
   }
 
   const shippingMethod = order.shipping_methods?.[0]
+  const orderRecord = order as unknown as Record<string, unknown>
   const shippingTotal = toNumber(order.shipping_total) ?? 0
+  const shippingTaxTotal =
+    readNumber(
+      orderRecord.shipping_tax_total,
+      orderRecord.raw_shipping_tax_total,
+      orderRecord.original_shipping_tax_total
+    ) ?? null
+  const shippingVatFallback = resolveVatFromTotals(
+    shippingTotal,
+    shippingTaxTotal
+  )
 
   let baseItems = (order.items ?? [])
     .map((item) => {
@@ -748,12 +880,26 @@ export const createBillingoDocument = async (
           record.raw_subtotal
         ) ??
         unitPrice * quantity
+      const taxTotal =
+        readNumber(
+          record.tax_total,
+          record.item_tax_total,
+          record.raw_tax_total,
+          record.raw_item_tax_total,
+          detail?.tax_total,
+          detail?.raw_tax_total
+        ) ?? null
+      const vatFromLines = resolveItemVat(item.tax_lines ?? null)
+      const vat =
+        vatFromLines === "0%"
+          ? resolveVatFromTotals(lineTotal, taxTotal) ?? vatFromLines
+          : vatFromLines
 
       return {
         title: item.title ?? "Item",
         quantity,
         lineTotal,
-        vat: resolveItemVat(item.tax_lines ?? null),
+        vat,
       }
     })
     .filter(
@@ -768,7 +914,6 @@ export const createBillingoDocument = async (
     )
 
   if (!baseItems.length) {
-    const orderRecord = order as unknown as Record<string, unknown>
     const orderTotal =
       readNumber(
         orderRecord.total,
