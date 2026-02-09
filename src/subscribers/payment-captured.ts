@@ -210,6 +210,7 @@ const fetchOrderForBillingo = async (
       "original_item_total",
       "original_tax_total",
       "original_shipping_tax_total",
+      "summary.*",
       "items.*",
       "items.tax_lines.*",
       "shipping_methods.*",

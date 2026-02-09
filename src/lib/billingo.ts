@@ -974,6 +974,13 @@ export const createBillingoDocument = async (
       const quantity = Math.max(quantityValue, 1)
       const unitPrice =
         readNumber(record.unit_price, record.raw_unit_price) ?? 0
+      const originalTotal =
+        readNumber(
+          record.original_total,
+          record.raw_original_total,
+          record.total,
+          record.item_total
+        ) ?? unitPrice * quantity
       const subtotal =
         readNumber(
           record.subtotal,
@@ -995,7 +1002,9 @@ export const createBillingoDocument = async (
           record.raw_total,
           record.raw_item_total,
           record.raw_subtotal
-        ) ?? Math.max(subtotal - discount, 0)
+        ) ??
+        Math.max(originalTotal - discount, 0) ??
+        Math.max(subtotal - discount, 0)
       const taxTotal =
         readNumber(
           record.tax_total,
@@ -1008,7 +1017,9 @@ export const createBillingoDocument = async (
       const vatFromLines = resolveItemVat(item.tax_lines ?? null)
       const vat =
         vatFromLines === "0%"
-          ? resolveVatFromTotals(lineTotal, taxTotal) ?? vatFromLines
+          ? resolveVatFromTotals(lineTotal, taxTotal) ??
+            globalVat ??
+            vatFromLines
           : vatFromLines
 
       return {
@@ -1029,27 +1040,110 @@ export const createBillingoDocument = async (
       } => Boolean(item)
     )
 
+  if (shippingGross > 0) {
+    baseItems.push({
+      title: "Shipping",
+      quantity: 1,
+      lineTotal: shippingGross,
+      vat: shippingVat,
+    })
+  }
+
+  const summaryRecord =
+    orderRecord.summary &&
+    typeof orderRecord.summary === "object" &&
+    !Array.isArray(orderRecord.summary)
+      ? (orderRecord.summary as Record<string, unknown>)
+      : null
+  const summaryTotal =
+    summaryRecord
+      ? readNumber(
+          summaryRecord.transaction_total,
+          summaryRecord.raw_transaction_total,
+          summaryRecord.current_order_total,
+          summaryRecord.raw_current_order_total,
+          summaryRecord.paid_total,
+          summaryRecord.raw_paid_total
+        )
+      : null
+  const orderTotal =
+    readNumber(
+      orderRecord.total,
+      orderRecord.raw_total,
+      orderRecord.original_total
+    ) ?? null
+  const targetTotal =
+    typeof summaryTotal === "number" ? summaryTotal : orderTotal
+  const targetTotalRounded =
+    typeof targetTotal === "number"
+      ? roundTo(targetTotal, decimals)
+      : null
+
+  if (
+    typeof targetTotalRounded === "number" &&
+    baseItems.length > 0
+  ) {
+    const sumGross = baseItems.reduce(
+      (sum, item) => sum + item.lineTotal,
+      0
+    )
+    const tolerance = Math.pow(10, -decimals)
+    if (
+      Number.isFinite(sumGross) &&
+      sumGross > 0 &&
+      Math.abs(sumGross - targetTotalRounded) >= tolerance
+    ) {
+      const ratio = targetTotalRounded / sumGross
+      if (Number.isFinite(ratio) && ratio > 0) {
+        let running = 0
+        baseItems = baseItems.map((item, index) => {
+          if (index === baseItems.length - 1) {
+            const adjusted = roundTo(
+              targetTotalRounded - running,
+              decimals
+            )
+            return {
+              ...item,
+              lineTotal: Math.max(adjusted, 0),
+            }
+          }
+          const adjusted = roundTo(
+            item.lineTotal * ratio,
+            decimals
+          )
+          running += adjusted
+          return {
+            ...item,
+            lineTotal: Math.max(adjusted, 0),
+          }
+        })
+      }
+    }
+  }
+
   if (!baseItems.length) {
-    const orderTotal =
-      readNumber(
-        orderRecord.total,
-        orderRecord.subtotal,
-        orderRecord.item_total,
-        orderRecord.raw_total,
-        orderRecord.raw_subtotal,
-        orderRecord.raw_item_total
-      ) ?? 0
-    if (orderTotal > 0) {
-      const fallbackTotal =
+    const fallbackTotal =
+      typeof targetTotalRounded === "number"
+        ? targetTotalRounded
+        : readNumber(
+            orderRecord.total,
+            orderRecord.subtotal,
+            orderRecord.item_total,
+            orderRecord.raw_total,
+            orderRecord.raw_subtotal,
+            orderRecord.raw_item_total
+          ) ?? 0
+    if (fallbackTotal > 0) {
+      const fallbackItemTotal =
         shippingGross > 0
-          ? Math.max(orderTotal - shippingGross, 0)
-          : orderTotal
-      if (fallbackTotal > 0) {
+          ? Math.max(fallbackTotal - shippingGross, 0)
+          : fallbackTotal
+      if (fallbackItemTotal > 0) {
         baseItems = [
           {
             title: "Order total",
             quantity: 1,
-            lineTotal: fallbackTotal,
+            lineTotal: fallbackItemTotal,
             vat: resolveItemVat(shippingMethod?.tax_lines ?? null),
           },
         ]
@@ -1075,14 +1169,6 @@ export const createBillingoDocument = async (
         }
       })
       .filter((item) => item.unit_price > 0)
-
-    if (shippingGross > 0) {
-      items.push({
-        name: "Shipping",
-        unit_price: roundTo(toMajor(shippingGross, currency), decimals),
-        vat: shippingVat,
-      })
-    }
 
     if (!items.length) {
       throw new Error("Billingo: no receipt items available")
@@ -1128,17 +1214,6 @@ export const createBillingoDocument = async (
       }
     })
     .filter((item) => item.unit_price > 0)
-
-  if (shippingGross > 0) {
-    items.push({
-      name: "Shipping",
-      unit_price: roundTo(toMajor(shippingGross, currency), decimals),
-      unit_price_type: config.invoiceUnitPriceType,
-      quantity: 1,
-      unit: config.invoiceUnit,
-      vat: shippingVat,
-    })
-  }
 
   if (!items.length) {
     throw new Error("Billingo: no invoice items available")
