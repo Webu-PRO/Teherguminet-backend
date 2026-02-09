@@ -14,6 +14,7 @@ import type {
 import {
   BILLINGO_METADATA_KEYS,
   createBillingoInvoice,
+  createBillingoReceipt,
   getBillingoConfig,
   getBillingoDocumentPdf,
   getBillingoPublicUrl,
@@ -127,13 +128,6 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     return
   }
 
-  if (resolvedType !== "invoice") {
-    res.status(400).json({
-      message: "Email sending is only supported for invoices.",
-    })
-    return
-  }
-
   const config = getBillingoConfig()
   if (!config) {
     res.status(400).json({ message: "Billingo is not configured." })
@@ -161,25 +155,28 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
       (order.metadata as Record<string, unknown> | null) ?? {}
 
     let documentMeta: BillingoDocumentMetadata | null = null
+    const key = BILLINGO_METADATA_KEYS[resolvedType]
 
-    if (hasBillingoMetadata(metadata, "invoice")) {
-      documentMeta = metadata[
-        BILLINGO_METADATA_KEYS.invoice
-      ] as BillingoDocumentMetadata
+    if (hasBillingoMetadata(metadata, resolvedType)) {
+      documentMeta = metadata[key] as BillingoDocumentMetadata
     } else {
-      if (!config.invoiceBlockId) {
+      if (resolvedType === "invoice" && !config.invoiceBlockId) {
         res.status(400).json({
           message: "Billingo invoice block id is missing.",
         })
         return
       }
 
-      const invoice = await createBillingoInvoice(order, config)
+      const document =
+        resolvedType === "invoice"
+          ? await createBillingoInvoice(order, config)
+          : await createBillingoReceipt(order, config)
+
       let publicUrl: string | undefined
-      if (typeof invoice?.id === "number") {
+      if (typeof document?.id === "number") {
         try {
           const publicData = await getBillingoPublicUrl(
-            invoice.id,
+            document.id,
             config
           )
           publicUrl =
@@ -192,8 +189,8 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
       }
 
       documentMeta = {
-        id: invoice.id,
-        invoice_number: invoice.invoice_number,
+        id: document.id,
+        invoice_number: document.invoice_number,
         public_url: publicUrl,
         created_at: new Date().toISOString(),
       }
@@ -201,7 +198,7 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
       await orderModuleService.updateOrders(order.id, {
         metadata: {
           ...metadata,
-          [BILLINGO_METADATA_KEYS.invoice]: documentMeta,
+          [key]: documentMeta,
         },
       })
     }
@@ -223,19 +220,41 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
 
     const ref = order.display_id ?? order.id ?? "order"
     const safeRef = String(ref).replace(/[^a-zA-Z0-9_-]+/g, "-")
-    const filename = `szamla-${safeRef}.pdf`
+    const filename =
+      resolvedType === "invoice"
+        ? `szamla-${safeRef}.pdf`
+        : `nyugta-${safeRef}.pdf`
 
     const notificationModuleService =
       req.scope.resolve(Modules.NOTIFICATION)
     const logger = resolveLogger(req)
 
+    const paymentProvider =
+      typeof metadata.payment_provider === "string"
+        ? metadata.payment_provider
+        : typeof metadata.payment_provider_id === "string"
+          ? metadata.payment_provider_id
+          : typeof metadata.payment_method_id === "string"
+            ? metadata.payment_method_id
+            : undefined
+
     const notification: CreateNotificationDTO = {
       to: email,
       channel: "email",
-      template: "order-placed",
-      data: {
-        order,
-      },
+      template:
+        resolvedType === "invoice" ? "order-placed" : "payment-receipt",
+      data:
+        resolvedType === "invoice"
+          ? { order }
+          : {
+              order,
+              payment: {
+                amount: order.total ?? undefined,
+                currency_code: order.currency_code ?? undefined,
+                provider_id: paymentProvider,
+                captured_at: order.created_at ?? undefined,
+              },
+            },
       attachments: [
         {
           filename,
@@ -243,7 +262,10 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
           content_type: "application/pdf",
         },
       ],
-      trigger_type: "billingo.invoice_email",
+      trigger_type:
+        resolvedType === "invoice"
+          ? "billingo.invoice_email"
+          : "billingo.receipt_email",
       resource_id: order.id,
       resource_type: "order",
     }

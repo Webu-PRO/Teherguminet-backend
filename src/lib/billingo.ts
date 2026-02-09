@@ -164,12 +164,44 @@ const resolveItemVat = (taxLines?: TaxLine[] | null) => {
   return formatVat(Math.max(...rates))
 }
 
+const normalizeNumericString = (raw: string) => {
+  const trimmed = raw.trim()
+  if (!trimmed) {
+    return null
+  }
+
+  let normalized = trimmed.replace(/\s+/g, "")
+  const hasComma = normalized.includes(",")
+  const hasDot = normalized.includes(".")
+
+  if (hasComma && hasDot) {
+    if (normalized.lastIndexOf(",") > normalized.lastIndexOf(".")) {
+      normalized = normalized.replace(/\./g, "").replace(",", ".")
+    } else {
+      normalized = normalized.replace(/,/g, "")
+    }
+  } else if (hasComma && !hasDot) {
+    normalized = normalized.replace(",", ".")
+  }
+
+  normalized = normalized.replace(/[^0-9.-]/g, "")
+  if (!normalized || normalized === "-" || normalized === ".") {
+    return null
+  }
+
+  return normalized
+}
+
 const toNumber = (value: unknown) => {
   if (typeof value === "number") {
     return Number.isFinite(value) ? value : null
   }
   if (typeof value === "string") {
-    const parsed = Number(value)
+    const normalized = normalizeNumericString(value)
+    if (!normalized) {
+      return null
+    }
+    const parsed = Number(normalized)
     return Number.isFinite(parsed) ? parsed : null
   }
   return null
@@ -452,10 +484,21 @@ export const createBillingoDocument = async (
     throw new Error("Billingo: invoice block id is missing")
   }
 
-  const baseItems = (order.items ?? [])
-    .filter((item) => item && typeof item.quantity === "number")
+  const shippingMethod = order.shipping_methods?.[0]
+  const shippingTotal = toNumber(order.shipping_total) ?? 0
+
+  let baseItems = (order.items ?? [])
     .map((item) => {
-      const quantity = Math.max(item.quantity ?? 1, 1)
+      if (!item) {
+        return null
+      }
+
+      const quantityValue = toNumber(item.quantity) ?? 0
+      if (!Number.isFinite(quantityValue) || quantityValue <= 0) {
+        return null
+      }
+
+      const quantity = Math.max(quantityValue, 1)
       const lineTotal =
         toNumber(item.total) ??
         toNumber(item.item_total) ??
@@ -469,9 +512,40 @@ export const createBillingoDocument = async (
         vat: resolveItemVat(item.tax_lines ?? null),
       }
     })
+    .filter(
+      (
+        item
+      ): item is {
+        title: string
+        quantity: number
+        lineTotal: number
+        vat: string
+      } => Boolean(item)
+    )
 
-  const shippingTotal = toNumber(order.shipping_total) ?? 0
-  const shippingMethod = order.shipping_methods?.[0]
+  if (!baseItems.length) {
+    const orderTotal =
+      toNumber(order.total) ??
+      toNumber(order.subtotal) ??
+      toNumber(order.item_total) ??
+      0
+    if (orderTotal > 0) {
+      const fallbackTotal =
+        shippingTotal > 0
+          ? Math.max(orderTotal - shippingTotal, 0)
+          : orderTotal
+      if (fallbackTotal > 0) {
+        baseItems = [
+          {
+            title: "Order total",
+            quantity: 1,
+            lineTotal: fallbackTotal,
+            vat: resolveItemVat(shippingMethod?.tax_lines ?? null),
+          },
+        ]
+      }
+    }
+  }
 
   if (documentType === "receipt") {
     const items: BillingoReceiptItem[] = baseItems

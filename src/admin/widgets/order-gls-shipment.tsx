@@ -533,7 +533,9 @@ const OrderGlsShipmentWidget = () => {
   const [billingoCreating, setBillingoCreating] = useState<
     "invoice" | "receipt" | null
   >(null)
-  const [billingoEmailing, setBillingoEmailing] = useState(false)
+  const [billingoEmailing, setBillingoEmailing] = useState<
+    "invoice" | "receipt" | null
+  >(null)
   const prompt = usePrompt()
 
   useEffect(() => {
@@ -1267,15 +1269,16 @@ const OrderGlsShipmentWidget = () => {
     [orderId, loadOrder]
   )
 
-  const handleBillingoEmail = useCallback(async () => {
+  const handleBillingoEmail = useCallback(
+    async (type: "invoice" | "receipt") => {
     if (!orderId) {
       return
     }
 
-    setBillingoEmailing(true)
+    setBillingoEmailing(type)
     try {
       const response = await fetch(
-        `/admin/billingo/orders/${orderId}/documents/invoice/email`,
+        `/admin/billingo/orders/${orderId}/documents/${type}/email`,
         {
           method: "POST",
           credentials: "include",
@@ -1291,13 +1294,16 @@ const OrderGlsShipmentWidget = () => {
       }
 
       toast.success("Billingo", {
-        description: "A számla e-mail elküldve.",
+        description:
+          type === "invoice"
+            ? "A számla e-mail elküldve."
+            : "A nyugta e-mail elküldve.",
       })
     } catch (error) {
       const message =
         error instanceof Error
           ? error.message
-          : "Failed to send the Billingo invoice email."
+          : "Failed to send the Billingo email."
       toast.error("Billingo", {
         description: message,
         action: {
@@ -1307,10 +1313,12 @@ const OrderGlsShipmentWidget = () => {
         },
       })
     } finally {
-      setBillingoEmailing(false)
+      setBillingoEmailing(null)
       await loadOrder({ silent: true })
     }
-  }, [orderId, loadOrder])
+  },
+    [orderId, loadOrder]
+  )
 
   const handleOpenBillingoUrl = useCallback((url?: string | null) => {
     if (!url) {
@@ -1363,18 +1371,16 @@ const OrderGlsShipmentWidget = () => {
             >
               PDF letöltése
             </Button>
-            {type === "invoice" ? (
-              <Button
-                size="small"
-                variant="secondary"
-                className="w-full"
-                onClick={() => void handleBillingoEmail()}
-                isLoading={billingoEmailing}
-                disabled={billingoEmailing || !order?.email}
-              >
-                E-mail küldése
-              </Button>
-            ) : null}
+            <Button
+              size="small"
+              variant="secondary"
+              className="w-full"
+              onClick={() => void handleBillingoEmail(type)}
+              isLoading={billingoEmailing === type}
+              disabled={billingoEmailing === type || !order?.email}
+            >
+              {type === "invoice" ? "Számla e-mail" : "Nyugta e-mail"}
+            </Button>
             {document?.public_url ? (
               <Button
                 size="small"
@@ -1401,18 +1407,16 @@ const OrderGlsShipmentWidget = () => {
             >
               Létrehozás
             </Button>
-            {type === "invoice" ? (
-              <Button
-                size="small"
-                variant="secondary"
-                className="w-full"
-                onClick={() => void handleBillingoEmail()}
-                isLoading={billingoEmailing}
-                disabled={billingoEmailing || !order?.email}
-              >
-                E-mail küldése
-              </Button>
-            ) : null}
+            <Button
+              size="small"
+              variant="secondary"
+              className="w-full"
+              onClick={() => void handleBillingoEmail(type)}
+              isLoading={billingoEmailing === type}
+              disabled={billingoEmailing === type || !order?.email}
+            >
+              {type === "invoice" ? "Számla e-mail" : "Nyugta e-mail"}
+            </Button>
           </div>
         )}
       </div>
