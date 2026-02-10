@@ -1226,9 +1226,7 @@ const OrderGlsShipmentWidget = () => {
         const blob = await response.blob()
         const url = URL.createObjectURL(blob)
         const link = document.createElement("a")
-        const fallbackName = `${
-          type === "invoice" ? "szamla" : "nyugta"
-        }-${order?.display_id ?? orderId}.pdf`
+        const fallbackName = `szamla-${order?.display_id ?? orderId}.pdf`
         const contentDisposition =
           response.headers.get("Content-Disposition")
         const match = contentDisposition?.match(
@@ -1344,10 +1342,7 @@ const OrderGlsShipmentWidget = () => {
       }
 
       toast.success("Billingo", {
-        description:
-          type === "invoice"
-            ? "A számla e-mail elküldve."
-            : "A nyugta e-mail elküldve.",
+          description: "A számla e-mail elküldve.",
       })
     } catch (error) {
       const message =

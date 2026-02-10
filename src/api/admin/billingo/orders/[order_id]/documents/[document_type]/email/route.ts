@@ -220,10 +220,7 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
 
     const ref = order.display_id ?? order.id ?? "order"
     const safeRef = String(ref).replace(/[^a-zA-Z0-9_-]+/g, "-")
-    const filename =
-      resolvedType === "invoice"
-        ? `szamla-${safeRef}.pdf`
-        : `nyugta-${safeRef}.pdf`
+    const filename = `szamla-${safeRef}.pdf`
 
     const notificationModuleService =
       req.scope.resolve(Modules.NOTIFICATION)

@@ -181,7 +181,7 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
       return
     }
 
-    const prefix = resolvedType === "invoice" ? "szamla" : "nyugta"
+    const prefix = "szamla"
     const filename = `${prefix}-${order.display_id ?? order.id}.pdf`
     const buffer = Buffer.from(content, "base64")
 

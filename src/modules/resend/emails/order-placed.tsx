@@ -264,10 +264,10 @@ export const OrderPlacedEmailComponent = ({ order }: OrderPlacedEmailProps) => {
       statusTitle: "Rendelési állapot",
       statusCopy:
         "A rendelés aktuális állapotát bármikor ellenőrizheted az alábbi gombra kattintva:",
-      receiptTitle: "Nyugta",
+      receiptTitle: "Számla",
       receiptCopy:
-        "A rendelésedhez elkészült a nyugta. Az alábbi gombra kattintva letöltheted a PDF-et:",
-      receiptCta: "Nyugta letöltése",
+        "A rendelésedhez elkészült a számla. Az alábbi gombra kattintva letöltheted a PDF-et:",
+      receiptCta: "Számla letöltése",
       ctaLabel: "Rendelés megtekintése",
       contactCopy: (
         <>
@@ -322,10 +322,10 @@ export const OrderPlacedEmailComponent = ({ order }: OrderPlacedEmailProps) => {
       statusTitle: "Stav objednávky",
       statusCopy:
         "Aktuálny stav objednávky si môžete kedykoľvek pozrieť kliknutím na tlačidlo nižšie:",
-      receiptTitle: "Pokladnicny doklad",
+      receiptTitle: "Faktúra",
       receiptCopy:
-        "K objednavke bol vystaveny doklad. PDF si mozete stiahnut kliknutim na tlacidlo:",
-      receiptCta: "Stiahnut doklad",
+        "K objednávke bola vystavená faktúra. PDF si môžete stiahnuť kliknutím na tlačidlo:",
+      receiptCta: "Stiahnuť faktúru",
       ctaLabel: "Zobraziť objednávku",
       contactCopy: (
         <>

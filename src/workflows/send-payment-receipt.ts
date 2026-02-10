@@ -54,7 +54,7 @@ const fetchBillingoReceiptAttachmentStep = createStep(
 
     const ref = input.order?.display_id ?? input.order?.id ?? "order"
     const safeRef = String(ref).replace(/[^a-zA-Z0-9_-]+/g, "-")
-    const filename = `nyugta-${safeRef}.pdf`
+    const filename = `szamla-${safeRef}.pdf`
 
     const maxAttempts = 5
     let delayMs = 1200

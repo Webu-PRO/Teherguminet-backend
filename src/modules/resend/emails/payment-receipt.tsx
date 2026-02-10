@@ -355,12 +355,12 @@ const languageBlocks: Record<LanguageCode, LanguageBlock> = {
   hu: {
     code: "hu",
     locale: "hu-HU",
-    preview: "Fizetési bizonylat",
-    heading: "Fizetési visszaigazolás",
+    preview: "Számla",
+    heading: "Számla elkészült",
     intro: (name) => (
       <>
-        Köszönjük a vásárlást, {name}! Az alábbiakban megtalálod a sikeres
-        fizetés részleteit.
+        Köszönjük a vásárlást, {name}! Elkészült a számla, az alábbiakban pedig
+        megtalálod a fizetés részleteit.
       </>
     ),
     labels: {
@@ -377,10 +377,10 @@ const languageBlocks: Record<LanguageCode, LanguageBlock> = {
       shipping: "Szállítás",
       total: "Fizetendő",
     },
-    receiptTitle: "Nyugta",
-    receiptCopy: "A nyugtát az alábbi gombbal tudod letölteni.",
-    receiptCta: "Nyugta letöltése",
-    note: "A bizonylatot e-mailben őrizd meg. Ha ÁFA-s számlára van szükség, jelezd nekünk válasz e-mailben, és elkészítjük.",
+    receiptTitle: "Számla",
+    receiptCopy: "A számlát az alábbi gombbal tudod letölteni.",
+    receiptCta: "Számla letöltése",
+    note: "A számlát kérjük őrizd meg. Ha módosításra van szükség, válaszolj erre az e-mailre, és segítünk.",
     closingLines: ["Üdvözlettel,", `A ${BRAND} csapata`],
     orderFallback: "Rendelés",
     dateFallback: "Frissen feldolgozva",
@@ -389,11 +389,12 @@ const languageBlocks: Record<LanguageCode, LanguageBlock> = {
   sk: {
     code: "sk",
     locale: "sk-SK",
-    preview: "Potvrdenie platby",
-    heading: "Potvrdenie platby",
+    preview: "Faktúra vystavená",
+    heading: "Faktúra vystavená",
     intro: (name) => (
       <>
-        Ďakujeme za nákup, {name}! Nižšie nájdete podrobnosti o úspešnej platbe.
+        Ďakujeme za nákup, {name}! Faktúra je pripravená a nižšie nájdete
+        podrobnosti o platbe.
       </>
     ),
     labels: {
@@ -410,10 +411,10 @@ const languageBlocks: Record<LanguageCode, LanguageBlock> = {
       shipping: "Doprava",
       total: "Celková suma",
     },
-    receiptTitle: "Doklad",
-    receiptCopy: "Doklad si môžeš stiahnuť pomocou tlačidla nižšie.",
-    receiptCta: "Stiahnuť doklad",
-    note: "Potvrdenie si, prosím, uchovajte. Ak potrebujete faktúru s DPH, odpovedzte na tento e-mail a pripravíme ju.",
+    receiptTitle: "Faktúra",
+    receiptCopy: "Faktúru si môžeš stiahnuť pomocou tlačidla nižšie.",
+    receiptCta: "Stiahnuť faktúru",
+    note: "Faktúru si, prosím, uchovajte. Ak potrebujete zmenu, odpovedzte na tento e-mail.",
     closingLines: ["S pozdravom,", `Tím ${BRAND}`],
     orderFallback: "Objednávka",
     dateFallback: "Práve spracované",
@@ -425,10 +426,10 @@ const resolveBillingoPublicUrl = (
   metadata?: Record<string, unknown> | null
 ) => {
   const candidates: Array<unknown> = [
-    metadata?.billingo_receipt,
-    metadata?.billingo_receipt_public_url,
     metadata?.billingo_invoice,
     metadata?.billingo_invoice_public_url,
+    metadata?.billingo_receipt,
+    metadata?.billingo_receipt_public_url,
   ];
 
   for (const candidate of candidates) {
