@@ -636,10 +636,6 @@ const OrderGlsShipmentWidget = () => {
     () => readBillingoDocument(order?.metadata, "invoice"),
     [order?.metadata]
   )
-  const billingoReceipt = useMemo(
-    () => readBillingoDocument(order?.metadata, "receipt"),
-    [order?.metadata]
-  )
 
   const shipment = useMemo(
     () => readGlsShipment(fulfillment?.metadata),
@@ -1519,10 +1515,7 @@ const OrderGlsShipmentWidget = () => {
             {billingoInvoice ? (
               <StatusBadge color="green">Számla</StatusBadge>
             ) : null}
-            {billingoReceipt ? (
-              <StatusBadge color="green">Nyugta</StatusBadge>
-            ) : null}
-            {!billingoInvoice && !billingoReceipt ? (
+            {!billingoInvoice ? (
               <StatusBadge color="grey">Nincs dokumentum</StatusBadge>
             ) : null}
             <Button
@@ -1538,7 +1531,6 @@ const OrderGlsShipmentWidget = () => {
         </div>
         <div className="mt-3 flex flex-col gap-y-3">
           {renderBillingoCard("Számla", "invoice", billingoInvoice)}
-          {renderBillingoCard("Nyugta", "receipt", billingoReceipt)}
         </div>
       </div>
 
