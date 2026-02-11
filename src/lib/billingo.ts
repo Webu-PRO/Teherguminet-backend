@@ -34,8 +34,7 @@ export type BillingoDocumentMetadata = {
 export type BillingoConfig = {
   apiKey: string
   baseUrl: string
-  receiptBlockId: number
-  invoiceBlockId?: number
+  invoiceBlockId: number
   paymentMethodDefault: string
   electronic: boolean
   timeoutMs: number
@@ -691,21 +690,17 @@ const resolveExtraPayload = (
 
 export const getBillingoConfig = (): BillingoConfig | null => {
   const apiKey = process.env.BILLINGO_API_KEY?.trim()
-  const receiptBlockIdRaw =
-    process.env.BILLINGO_RECEIPT_BLOCK_ID?.trim() ??
-    process.env.BILLINGO_BLOCK_ID?.trim()
-  if (!apiKey || !receiptBlockIdRaw) {
-    return null
-  }
-
-  const receiptBlockId = parsePositiveNumber(receiptBlockIdRaw)
-  if (!receiptBlockId) {
-    return null
-  }
-
-  const invoiceBlockId = parsePositiveNumber(
+  const invoiceBlockIdRaw =
     process.env.BILLINGO_INVOICE_BLOCK_ID?.trim()
-  )
+  if (!apiKey || !invoiceBlockIdRaw) {
+    return null
+  }
+
+  const invoiceBlockId = parsePositiveNumber(invoiceBlockIdRaw)
+  if (!invoiceBlockId) {
+    return null
+  }
+
   const defaultDocumentType =
     process.env.BILLINGO_DOCUMENT_TYPE?.trim().toLowerCase() === "invoice"
       ? "invoice"
@@ -734,8 +729,7 @@ export const getBillingoConfig = (): BillingoConfig | null => {
   return {
     apiKey,
     baseUrl: process.env.BILLINGO_BASE_URL?.trim() || DEFAULT_BASE_URL,
-    receiptBlockId,
-    invoiceBlockId: invoiceBlockId ?? undefined,
+    invoiceBlockId,
     paymentMethodDefault,
     electronic,
     timeoutMs: Number.isFinite(timeoutMs) ? timeoutMs : DEFAULT_TIMEOUT_MS,
@@ -1270,7 +1264,7 @@ export const createBillingoDocument = async (
       vendor_id: resolveVendorId(order, "receipt"),
       name: resolveCustomerName(order),
       emails: order.email ? [order.email] : undefined,
-      block_id: config.receiptBlockId,
+      block_id: config.invoiceBlockId,
       type: "receipt",
       payment_method: paymentMethod,
       currency,
