@@ -1531,9 +1531,9 @@ export const getBillingoDocumentPdf = async (
     const hasPdfHeader = headerSample.includes("%PDF")
     const isPdfContentType = contentType.includes("application/pdf")
 
-    if (!isPdfContentType && !hasPdfHeader) {
+    if (!hasPdfHeader) {
       throw new Error(
-        `Billingo PDF response is not a valid PDF (content-type: ${
+        `Billingo PDF response is not a valid PDF payload (content-type: ${
           contentType || "unknown"
         })`
       )
