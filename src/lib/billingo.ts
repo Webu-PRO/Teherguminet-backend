@@ -1519,6 +1519,26 @@ export const getBillingoDocumentPdf = async (
     }
 
     const buffer = Buffer.from(await response.arrayBuffer())
+    if (!buffer.length) {
+      throw new Error("Billingo PDF response is empty")
+    }
+
+    const contentType =
+      response.headers.get("content-type")?.toLowerCase() ?? ""
+    const headerSample = buffer
+      .subarray(0, Math.min(buffer.length, 1024))
+      .toString("latin1")
+    const hasPdfHeader = headerSample.includes("%PDF")
+    const isPdfContentType = contentType.includes("application/pdf")
+
+    if (!isPdfContentType && !hasPdfHeader) {
+      throw new Error(
+        `Billingo PDF response is not a valid PDF (content-type: ${
+          contentType || "unknown"
+        })`
+      )
+    }
+
     return buffer.toString("base64")
   } finally {
     clearTimeout(timeout)

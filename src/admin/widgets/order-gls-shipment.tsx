@@ -578,13 +578,13 @@ const OrderGlsShipmentWidget = () => {
   const [autoCreateAttempted, setAutoCreateAttempted] = useState(false)
   const [logOpen, setLogOpen] = useState(false)
   const [billingoDownloading, setBillingoDownloading] = useState<
-    "invoice" | "receipt" | null
+    "invoice" | null
   >(null)
   const [billingoCreating, setBillingoCreating] = useState<
-    "invoice" | "receipt" | null
+    "invoice" | null
   >(null)
   const [billingoEmailing, setBillingoEmailing] = useState<
-    "invoice" | "receipt" | null
+    "invoice" | null
   >(null)
   const prompt = usePrompt()
 
@@ -1197,7 +1197,7 @@ const OrderGlsShipmentWidget = () => {
   ])
 
   const handleBillingoDownload = useCallback(
-    async (type: "invoice" | "receipt") => {
+    async (type: "invoice") => {
       if (!orderId) {
         return
       }
@@ -1256,7 +1256,7 @@ const OrderGlsShipmentWidget = () => {
   )
 
   const handleBillingoCreate = useCallback(
-    async (type: "invoice" | "receipt") => {
+    async (type: "invoice") => {
       if (!orderId) {
         return
       }
@@ -1287,10 +1287,7 @@ const OrderGlsShipmentWidget = () => {
         }
 
         toast.success("Billingo", {
-          description:
-            type === "invoice"
-              ? "Számla létrehozva."
-              : "Nyugta létrehozva.",
+          description: "Számla létrehozva.",
         })
       } catch (error) {
         const message =
@@ -1314,7 +1311,7 @@ const OrderGlsShipmentWidget = () => {
   )
 
   const handleBillingoEmail = useCallback(
-    async (type: "invoice" | "receipt") => {
+    async (type: "invoice") => {
     if (!orderId) {
       return
     }
@@ -1374,10 +1371,9 @@ const OrderGlsShipmentWidget = () => {
   }
 
   const renderBillingoCard = (
-    label: string,
-    type: "invoice" | "receipt",
     document: BillingoDocumentSummary | null
   ) => {
+    const type = "invoice" as const
     const isAvailable = Boolean(document?.id)
     const statusLabel = isAvailable ? "Elkészült" : "Nincs"
     const statusColor = isAvailable ? "green" : "grey"
@@ -1400,7 +1396,7 @@ const OrderGlsShipmentWidget = () => {
       <div className="rounded-md border border-ui-border-base bg-ui-bg-base p-3">
         <div className="flex items-center justify-between">
           <Text size="xsmall" weight="plus">
-            {label}
+            Számla
           </Text>
           <StatusBadge color={statusColor}>{statusLabel}</StatusBadge>
         </div>
@@ -1434,7 +1430,7 @@ const OrderGlsShipmentWidget = () => {
               isLoading={billingoEmailing === type}
               disabled={billingoEmailing === type || !order?.email}
             >
-              {type === "invoice" ? "Számla e-mail" : "Nyugta e-mail"}
+              Számla e-mail
             </Button>
             {document?.public_url ? (
               <Button
@@ -1480,9 +1476,7 @@ const OrderGlsShipmentWidget = () => {
                   isLoading={billingoEmailing === type}
                   disabled={billingoEmailing === type || !order?.email}
                 >
-                  {type === "invoice"
-                    ? "Számla e-mail"
-                    : "Nyugta e-mail"}
+                  Számla e-mail
                 </Button>
               </>
             ) : (
@@ -1530,7 +1524,7 @@ const OrderGlsShipmentWidget = () => {
           </div>
         </div>
         <div className="mt-3 flex flex-col gap-y-3">
-          {renderBillingoCard("Számla", "invoice", billingoInvoice)}
+          {renderBillingoCard(billingoInvoice)}
         </div>
       </div>
 
@@ -1554,7 +1548,7 @@ const OrderGlsShipmentWidget = () => {
               size="small"
               variant="secondary"
               className="w-full"
-              onClick={handleCreate}
+              onClick={() => void handleCreate()}
               isLoading={submitting}
               disabled={isLocked}
             >

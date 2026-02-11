@@ -199,10 +199,13 @@ const resolveAttachments = (notification: ProviderSendNotificationDTO) => {
         typeof record.filename === "string" ? record.filename.trim() : "";
       const path =
         typeof record.path === "string" ? record.path.trim() : "";
-      const content =
-        typeof record.content === "string" || Buffer.isBuffer(record.content)
-          ? record.content
-          : undefined;
+      let content: string | undefined;
+      if (typeof record.content === "string") {
+        const trimmed = record.content.trim();
+        content = trimmed || undefined;
+      } else if (Buffer.isBuffer(record.content)) {
+        content = record.content.toString("base64");
+      }
       const contentType =
         typeof record.contentType === "string"
           ? record.contentType.trim()
