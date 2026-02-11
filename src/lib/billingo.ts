@@ -1016,6 +1016,51 @@ export const createBillingoDocument = async (
     usePercentDiscount && typeof shippingTaxTotalOriginal === "number"
       ? shippingTaxTotalOriginal
       : shippingTaxTotal
+  let effectiveShippingLineGross = shippingLineGross
+  let effectiveShippingLineTaxTotal = shippingLineTaxTotal
+  if (
+    (!effectiveShippingLineGross ||
+      effectiveShippingLineGross <= 0) &&
+    typeof shippingSubtotal === "number" &&
+    shippingSubtotal > 0 &&
+    typeof effectiveShippingLineTaxTotal === "number" &&
+    Number.isFinite(effectiveShippingLineTaxTotal) &&
+    effectiveShippingLineTaxTotal > 0
+  ) {
+    effectiveShippingLineGross =
+      shippingSubtotal + effectiveShippingLineTaxTotal
+  }
+  if (
+    (!effectiveShippingLineGross ||
+      effectiveShippingLineGross <= 0) &&
+    typeof shippingSubtotal === "number" &&
+    shippingSubtotal > 0
+  ) {
+    effectiveShippingLineGross = shippingSubtotal
+  }
+  if (
+    (!effectiveShippingLineTaxTotal ||
+      effectiveShippingLineTaxTotal <= 0) &&
+    typeof taxTotal === "number" &&
+    typeof itemTaxTotal === "number" &&
+    taxTotal > itemTaxTotal
+  ) {
+    effectiveShippingLineTaxTotal = taxTotal - itemTaxTotal
+  }
+  if (
+    (!effectiveShippingLineGross ||
+      effectiveShippingLineGross <= 0) &&
+    typeof effectiveShippingLineTaxTotal === "number" &&
+    Number.isFinite(effectiveShippingLineTaxTotal) &&
+    effectiveShippingLineTaxTotal > 0 &&
+    typeof globalVatRate === "number" &&
+    globalVatRate > 0
+  ) {
+    const net = effectiveShippingLineTaxTotal / (globalVatRate / 100)
+    if (Number.isFinite(net) && net > 0) {
+      effectiveShippingLineGross = net + effectiveShippingLineTaxTotal
+    }
+  }
   if (
     globalVatRate === null &&
     typeof targetTotalRounded === "number"
@@ -1030,8 +1075,8 @@ export const createBillingoDocument = async (
     }
   }
   const shippingVatFallback = resolveVatFromTotals(
-    shippingLineGross,
-    shippingLineTaxTotal
+    effectiveShippingLineGross,
+    effectiveShippingLineTaxTotal
   )
   const shippingVatFromLines = resolveItemVat(
     shippingMethod?.tax_lines ?? null
@@ -1147,11 +1192,11 @@ export const createBillingoDocument = async (
       } => Boolean(item)
     )
 
-  if (shippingLineGross > 0) {
+  if (effectiveShippingLineGross > 0) {
     baseItems.push({
       title: "Shipping",
       quantity: 1,
-      lineTotal: shippingLineGross,
+      lineTotal: effectiveShippingLineGross,
       vat: shippingVat,
     })
   }
@@ -1218,8 +1263,8 @@ export const createBillingoDocument = async (
           ) ?? 0
     if (fallbackTotal > 0) {
       const fallbackItemTotal =
-        shippingLineGross > 0
-          ? Math.max(fallbackTotal - shippingLineGross, 0)
+        effectiveShippingLineGross > 0
+          ? Math.max(fallbackTotal - effectiveShippingLineGross, 0)
           : fallbackTotal
       if (fallbackItemTotal > 0) {
         baseItems = [
