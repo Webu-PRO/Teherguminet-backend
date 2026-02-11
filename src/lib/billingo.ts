@@ -275,7 +275,10 @@ const normalizeBillingoVat = (value: string) => {
         closest = candidate
       }
     }
-    return `${closest}%`
+    if (minDiff <= 2 || (closest === 0 && rate === 0)) {
+      return `${closest}%`
+    }
+    return formatVat(rate)
   }
   return formatVat(rate)
 }
@@ -856,6 +859,38 @@ export const createBillingoDocument = async (
   }
 
   const shippingMethod = order.shipping_methods?.[0]
+  const shippingMethodRecord =
+    shippingMethod &&
+    typeof shippingMethod === "object" &&
+    !Array.isArray(shippingMethod)
+      ? (shippingMethod as unknown as Record<string, unknown>)
+      : null
+  const shippingMethodSubtotal = shippingMethodRecord
+    ? readNumber(
+        shippingMethodRecord.subtotal,
+        shippingMethodRecord.amount,
+        shippingMethodRecord.raw_subtotal,
+        shippingMethodRecord.raw_amount,
+        shippingMethodRecord.original_subtotal,
+        shippingMethodRecord.raw_original_subtotal
+      )
+    : null
+  const shippingMethodGross = shippingMethodRecord
+    ? readNumber(
+        shippingMethodRecord.total,
+        shippingMethodRecord.raw_total,
+        shippingMethodRecord.original_total,
+        shippingMethodRecord.raw_original_total
+      )
+    : null
+  const shippingMethodTaxTotal = shippingMethodRecord
+    ? readNumber(
+        shippingMethodRecord.tax_total,
+        shippingMethodRecord.raw_tax_total,
+        shippingMethodRecord.original_tax_total,
+        shippingMethodRecord.raw_original_tax_total
+      )
+    : null
   const orderRecord = order as unknown as Record<string, unknown>
   const totalGross =
     readNumber(
@@ -896,18 +931,24 @@ export const createBillingoDocument = async (
       orderRecord.shipping_subtotal,
       orderRecord.raw_shipping_subtotal,
       orderRecord.original_shipping_subtotal
-    ) ?? 0
+    ) ??
+    shippingMethodSubtotal ??
+    0
   const shippingOriginalGross =
     readNumber(
       orderRecord.original_shipping_total,
       orderRecord.raw_original_shipping_total
-    ) ?? null
+    ) ??
+    shippingMethodGross ??
+    null
   let shippingGross =
     readNumber(
       orderRecord.shipping_total,
       orderRecord.raw_shipping_total,
       orderRecord.original_shipping_total
-    ) ?? 0
+    ) ??
+    shippingMethodGross ??
+    0
   if (
     (!shippingGross || shippingGross <= 0) &&
     totalGross &&
@@ -920,13 +961,17 @@ export const createBillingoDocument = async (
     readNumber(
       orderRecord.original_shipping_tax_total,
       orderRecord.raw_original_shipping_tax_total
-    ) ?? null
+    ) ??
+    shippingMethodTaxTotal ??
+    null
   let shippingTaxTotal =
     readNumber(
       orderRecord.shipping_tax_total,
       orderRecord.raw_shipping_tax_total,
       orderRecord.original_shipping_tax_total
-    ) ?? null
+    ) ??
+    shippingMethodTaxTotal ??
+    null
   if (
     shippingSubtotal > 0 &&
     shippingTaxTotal !== null &&
@@ -1002,10 +1047,30 @@ export const createBillingoDocument = async (
           100
         )
       : null
+  const hasReliableDiscountedItemTotals = (order.items ?? []).some(
+    (item) => {
+      if (!item || typeof item !== "object") {
+        return false
+      }
+      const record = item as unknown as Record<string, unknown>
+      const value = readNumber(
+        record.total,
+        record.item_total,
+        record.raw_total,
+        record.raw_item_total
+      )
+      return (
+        typeof value === "number" &&
+        Number.isFinite(value) &&
+        value >= 0
+      )
+    }
+  )
   const usePercentDiscount =
     documentType === "invoice" &&
     typeof discountPercent === "number" &&
-    discountPercent > 0
+    discountPercent > 0 &&
+    !hasReliableDiscountedItemTotals
   const shippingLineGross =
     usePercentDiscount &&
     typeof shippingOriginalGross === "number" &&
@@ -1148,8 +1213,7 @@ export const createBillingoDocument = async (
           record.total,
           record.item_total,
           record.raw_total,
-          record.raw_item_total,
-          record.raw_subtotal
+          record.raw_item_total
         ) ??
         Math.max(originalTotal - discount, 0) ??
         Math.max(subtotal - discount, 0)
@@ -1298,7 +1362,7 @@ export const createBillingoDocument = async (
       })
       .filter(
         (item) =>
-          Number.isFinite(item.unit_price) && item.unit_price >= 0
+          Number.isFinite(item.unit_price) && item.unit_price > 0
       )
 
     if (!items.length) {
@@ -1346,7 +1410,7 @@ export const createBillingoDocument = async (
     })
     .filter(
       (item) =>
-        Number.isFinite(item.unit_price) && item.unit_price >= 0
+        Number.isFinite(item.unit_price) && item.unit_price > 0
     )
 
   if (!items.length) {
