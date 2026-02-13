@@ -27,12 +27,20 @@ async function attachEmployee(
   scope: MedusaRequest["scope"]
 ) {
   const b2bService: B2BModuleService = scope.resolve(B2B_MODULE)
-  const [employee] = await b2bService.listEmployees(
+  const employees = await b2bService.listEmployees(
     { customer_id: customerId },
     { relations: ["company"] }
   )
 
-  return employee ?? null
+  if (!employees.length) {
+    return null
+  }
+
+  const adminEmployee = employees.find(
+    (employee) => employee.is_admin
+  )
+
+  return adminEmployee ?? employees[0]
 }
 
 const fetchCustomer = async (
