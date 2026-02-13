@@ -1,9 +1,9 @@
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { defineWidgetConfig } from "@medusajs/admin-sdk"
 import { Button, Container, Heading, Text, toast } from "@medusajs/ui"
 import type { HttpTypes } from "@medusajs/types"
 
-type ProvisioningResponse = {
+type AccessPayload = {
   ok: boolean
   user?: {
     id?: string
@@ -16,7 +16,7 @@ type ProvisioningResponse = {
     updated?: boolean
   }
   auth?: {
-    auth_identity_id?: string
+    auth_identity_id?: string | null
     identity_created?: boolean
     customer_linked?: boolean
     temporary_password?: string | null
@@ -25,20 +25,19 @@ type ProvisioningResponse = {
     employee_id?: string | null
     company_id?: string | null
     is_admin?: boolean
+    enabled?: boolean
     employee_created?: boolean
+    employee_updated?: boolean
     company_created?: boolean
+    matched_employees?: number
   }
-  message?: string
 }
 
 type WidgetProps = {
   data: HttpTypes.AdminUser
 }
 
-const readErrorMessage = async (
-  response: Response,
-  fallback: string
-) => {
+const readErrorMessage = async (response: Response, fallback: string) => {
   try {
     const payload = (await response.json()) as {
       message?: string
@@ -57,10 +56,7 @@ const readErrorMessage = async (
 }
 
 const copyToClipboard = async (value: string) => {
-  if (
-    typeof navigator !== "undefined" &&
-    navigator.clipboard?.writeText
-  ) {
+  if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
     await navigator.clipboard.writeText(value)
     return
   }
@@ -77,120 +73,172 @@ const copyToClipboard = async (value: string) => {
 }
 
 const UserStorefrontEditorAccessWidget = ({ data }: WidgetProps) => {
+  const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
-  const [result, setResult] = useState<ProvisioningResponse | null>(
-    null
-  )
+  const [result, setResult] = useState<AccessPayload | null>(null)
+  const [temporaryPassword, setTemporaryPassword] = useState<string | null>(null)
 
-  const email = useMemo(
-    () => data.email?.trim() || "",
-    [data.email]
-  )
+  const email = useMemo(() => data.email?.trim() || "", [data.email])
   const userId = data.id
 
-  const handleProvision = useCallback(async () => {
+  const fetchStatus = useCallback(async () => {
     if (!userId) {
-      toast.error("Storefront hozzáférés", {
-        description: "Hiányzó admin felhasználó-azonosító.",
-      })
+      setLoading(false)
       return
     }
 
-    setSubmitting(true)
+    setLoading(true)
     try {
       const response = await fetch(
-        `/admin/users/${encodeURIComponent(
-          userId
-        )}/storefront-editor-access`,
+        `/admin/users/${encodeURIComponent(userId)}/storefront-editor-access`,
         {
-          method: "POST",
+          method: "GET",
           credentials: "include",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({}),
+          cache: "no-store",
         }
       )
 
       if (!response.ok) {
         const message = await readErrorMessage(
           response,
-          "Nem sikerült beállítani a storefront tartalomszerkesztő hozzáférést."
+          "Nem sikerült lekérni a storefront hozzáférési állapotot."
         )
         throw new Error(message)
       }
 
-      const payload = (await response.json()) as ProvisioningResponse
+      const payload = (await response.json()) as AccessPayload
       setResult(payload)
-
-      const temporaryPassword = payload?.auth?.temporary_password
-      toast.success("Storefront hozzáférés frissítve", {
-        description: temporaryPassword
-          ? "Ideiglenes storefront jelszó létrejött. Másold és oszd meg biztonságosan."
-          : "A vásárlói fiók és a tartalomszerkesztő admin jogosultság készen áll.",
-      })
     } catch (error) {
       const message =
         error instanceof Error
           ? error.message
-          : "Nem sikerült beállítani a storefront tartalomszerkesztő hozzáférést."
+          : "Nem sikerült lekérni a storefront hozzáférési állapotot."
       toast.error("Storefront hozzáférés", {
         description: message,
       })
     } finally {
-      setSubmitting(false)
+      setLoading(false)
     }
   }, [userId])
 
-  const temporaryPassword = result?.auth?.temporary_password
+  useEffect(() => {
+    void fetchStatus()
+  }, [fetchStatus])
+
+  const handleToggle = useCallback(
+    async (nextEnabled: boolean) => {
+      if (!userId) {
+        toast.error("Storefront hozzáférés", {
+          description: "Hiányzó admin felhasználó-azonosító.",
+        })
+        return
+      }
+
+      setSubmitting(true)
+      try {
+        const response = await fetch(
+          `/admin/users/${encodeURIComponent(userId)}/storefront-editor-access`,
+          {
+            method: "PATCH",
+            credentials: "include",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              enabled: nextEnabled,
+            }),
+          }
+        )
+
+        if (!response.ok) {
+          const message = await readErrorMessage(
+            response,
+            "Nem sikerült frissíteni a storefront hozzáférést."
+          )
+          throw new Error(message)
+        }
+
+        const payload = (await response.json()) as AccessPayload
+        setResult(payload)
+        const password = payload?.auth?.temporary_password ?? null
+        setTemporaryPassword(password)
+
+        toast.success("Storefront hozzáférés frissítve", {
+          description: nextEnabled
+            ? "A felhasználó storefront szerkesztő jogosultsága aktív."
+            : "A felhasználó storefront szerkesztő jogosultsága letiltva.",
+        })
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Nem sikerült frissíteni a storefront hozzáférést."
+        toast.error("Storefront hozzáférés", {
+          description: message,
+        })
+      } finally {
+        setSubmitting(false)
+      }
+    },
+    [userId]
+  )
+
+  const enabled = Boolean(
+    result?.storefront_editor?.enabled ?? result?.storefront_editor?.is_admin
+  )
 
   return (
     <Container className="p-0">
       <div className="flex flex-col gap-y-3 px-6 py-4">
         <div>
-          <Heading level="h3">
-            Storefront Tartalomszerkesztő Hozzáférés
-          </Heading>
+          <Heading level="h3">Storefront Tartalomszerkesztő Hozzáférés</Heading>
           <Text size="small" className="text-ui-fg-subtle mt-1">
-            Regisztrál egy storefront vásárlói fiókot ehhez az
-            e-mail-címhez, és admin jogosultságot ad a tartalomszerkesztőhöz.
+            A felhasználóhoz kapcsolt storefront customer account jogosultságát
+            itt tudod be- vagy kikapcsolni.
           </Text>
           <Text size="xsmall" className="text-ui-fg-subtle mt-2">
             E-mail: {email || "-"}
           </Text>
         </div>
 
+        <div className="rounded-md border border-ui-border-base bg-ui-bg-subtle p-3">
+          <Text size="xsmall" weight="plus">
+            Állapot: {loading ? "betöltés..." : enabled ? "aktív" : "inaktív"}
+          </Text>
+          <Text size="xsmall" className="text-ui-fg-subtle mt-1">
+            Customer: {result?.customer?.id ?? "-"}
+          </Text>
+          <Text size="xsmall" className="text-ui-fg-subtle">
+            Employee: {result?.storefront_editor?.employee_id ?? "-"}
+          </Text>
+          <Text size="xsmall" className="text-ui-fg-subtle">
+            Auth identity: {result?.auth?.auth_identity_id ?? "-"}
+          </Text>
+        </div>
+
         <div className="flex flex-wrap items-center gap-2">
           <Button
             size="small"
-            variant="secondary"
-            onClick={handleProvision}
+            onClick={() => {
+              void handleToggle(!enabled)
+            }}
             isLoading={submitting}
-            disabled={!email || submitting}
+            disabled={loading || !email || submitting}
           >
-            Regisztráció + Admin Jogosultság
+            {enabled ? "Hozzáférés letiltása" : "Hozzáférés engedélyezése"}
+          </Button>
+
+          <Button
+            size="small"
+            variant="secondary"
+            onClick={() => {
+              void fetchStatus()
+            }}
+            disabled={loading || submitting}
+          >
+            Frissítés
           </Button>
         </div>
-
-        {result?.ok ? (
-          <div className="rounded-md border border-ui-border-base bg-ui-bg-subtle p-3">
-            <Text size="xsmall" className="text-ui-fg-subtle">
-              Vásárló:{" "}
-              {result.customer?.created ? "létrehozva" : "meglévő"} ·{" "}
-              {result.customer?.id ?? "-"}
-            </Text>
-            <Text size="xsmall" className="text-ui-fg-subtle">
-              Szerkesztő hozzáférés:{" "}
-              {result.storefront_editor?.employee_created
-                ? "új admin jogosultság létrehozva"
-                : "már megadva"}{" "}
-              · alkalmazott {result.storefront_editor?.employee_id ?? "-"}
-            </Text>
-            <Text size="xsmall" className="text-ui-fg-subtle">
-              Auth azonosító: {result.auth?.auth_identity_id ?? "-"}
-            </Text>
-          </div>
-        ) : null}
 
         {temporaryPassword ? (
           <div className="rounded-md border border-ui-border-base bg-ui-bg-base p-3">

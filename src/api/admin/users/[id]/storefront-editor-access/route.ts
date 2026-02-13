@@ -24,11 +24,17 @@ const DEFAULT_EDITOR_COMPANY_CURRENCY =
   process.env.STOREFRONT_EDITOR_COMPANY_CURRENCY?.trim().toUpperCase() ||
   "HUF"
 
-const requestSchema = z
+const provisionSchema = z
   .object({
     company_name: z.string().trim().min(1).max(255).optional(),
     company_email: z.string().email().optional(),
     currency_code: z.string().trim().min(3).max(10).optional(),
+  })
+  .strict()
+
+const toggleSchema = provisionSchema
+  .extend({
+    enabled: z.boolean(),
   })
   .strict()
 
@@ -76,10 +82,7 @@ const findEmailpassProviderIdentity = async (
   return null
 }
 
-const pickCustomerByEmail = (
-  customers: CustomerDTO[],
-  email: string
-) => {
+const pickCustomerByEmail = (customers: CustomerDTO[], email: string) => {
   if (!customers.length) {
     return null
   }
@@ -88,17 +91,14 @@ const pickCustomerByEmail = (
     return normalizeEmail(customer.email) === email
   })
 
-  const accountMatch = customers.find(
-    (customer) => customer.has_account === true
-  )
+  const accountMatch = customers.find((customer) => {
+    return customer.has_account === true
+  })
 
   return accountMatch ?? exactMatch ?? customers[0]
 }
 
-const pickEditorCompany = (
-  companies: Array<any>,
-  preferredName: string
-) => {
+const pickEditorCompany = (companies: Array<any>, preferredName: string) => {
   if (!companies.length) {
     return null
   }
@@ -119,10 +119,88 @@ const pickEditorCompany = (
   return named ?? companies[0]
 }
 
-type RequestBody = z.infer<typeof requestSchema>
+const readEmployeeScope = (employee: any) => {
+  const metadata = toRecord(employee?.metadata)
 
-export async function POST(req: MedusaRequest, res: MedusaResponse) {
-  const parsedBody = requestSchema.safeParse(req.body ?? {})
+  return {
+    metadata,
+    scope: normalizeString(metadata.scope),
+    source: normalizeString(metadata.source),
+    adminUserId: normalizeString(metadata.admin_user_id),
+  }
+}
+
+const pickEmployeeForUser = (employees: Array<any>, userId: string) => {
+  if (!employees.length) {
+    return null
+  }
+
+  const scored = employees
+    .map((employee) => {
+      const scope = readEmployeeScope(employee)
+      let score = 0
+
+      if (scope.adminUserId === userId) {
+        score += 100
+      }
+      if (scope.scope === "storefront-content-editor") {
+        score += 20
+      }
+      if (employee?.is_admin === true) {
+        score += 10
+      }
+
+      return { employee, score }
+    })
+    .sort((left, right) => right.score - left.score)
+
+  return scored[0]?.employee ?? employees[0]
+}
+
+const buildEditorMetadata = (employee: any, userId: string) => {
+  return {
+    ...toRecord(employee?.metadata),
+    scope: "storefront-content-editor",
+    source: "admin-user-storefront-access",
+    admin_user_id: userId,
+  }
+}
+
+type RequestBody = z.infer<typeof provisionSchema>
+type ToggleBody = z.infer<typeof toggleSchema>
+
+type AdminContext = {
+  userId: string
+  rawEmail: string
+  email: string
+  firstName: string | null
+  lastName: string | null
+  customerService: ICustomerModuleService
+  authService: IAuthModuleService
+  b2bService: B2BModuleService
+}
+
+type AccessState = {
+  authIdentityId: string | null
+  authAppMetadata: Record<string, unknown>
+  customer: CustomerDTO | null
+  employees: Array<any>
+  selectedEmployee: any | null
+}
+
+type ResponseFlags = {
+  authIdentityCreated?: boolean
+  authCustomerLinked?: boolean
+  temporaryPassword?: string | null
+  customerCreated?: boolean
+  customerUpdated?: boolean
+  employeeCreated?: boolean
+  employeeUpdated?: boolean
+  companyCreated?: boolean
+}
+
+const parseProvisionBody = (body: unknown): RequestBody => {
+  const parsedBody = provisionSchema.safeParse(body ?? {})
   if (!parsedBody.success) {
     const firstIssue = parsedBody.error.issues[0]
     throw new MedusaError(
@@ -131,9 +209,26 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     )
   }
 
-  const body = parsedBody.data as RequestBody
-  const userId = normalizeString(req.params?.id)
+  return parsedBody.data as RequestBody
+}
 
+const parseToggleBody = (body: unknown): ToggleBody => {
+  const parsedBody = toggleSchema.safeParse(body ?? {})
+  if (!parsedBody.success) {
+    const firstIssue = parsedBody.error.issues[0]
+    throw new MedusaError(
+      MedusaError.Types.INVALID_DATA,
+      firstIssue?.message || "Invalid request payload."
+    )
+  }
+
+  return parsedBody.data as ToggleBody
+}
+
+const resolveAdminContext = async (
+  req: MedusaRequest
+): Promise<AdminContext> => {
+  const userId = normalizeString(req.params?.id)
   if (!userId) {
     throw new MedusaError(
       MedusaError.Types.INVALID_DATA,
@@ -158,26 +253,141 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     )
   }
 
-  const email = rawEmail.toLowerCase()
-  const firstName = normalizeString(adminUser.first_name)
-  const lastName = normalizeString(adminUser.last_name)
+  return {
+    userId,
+    rawEmail,
+    email: rawEmail.toLowerCase(),
+    firstName: normalizeString(adminUser.first_name),
+    lastName: normalizeString(adminUser.last_name),
+    customerService,
+    authService,
+    b2bService,
+  }
+}
+
+const readCurrentAccessState = async (
+  context: AdminContext
+): Promise<AccessState> => {
   const emailCandidates = Array.from(
-    new Set([rawEmail, email].filter(Boolean))
+    new Set([context.rawEmail, context.email].filter(Boolean))
   )
 
-  let providerIdentity = await findEmailpassProviderIdentity(
-    authService,
+  const providerIdentity = await findEmailpassProviderIdentity(
+    context.authService,
     emailCandidates
   )
   let authIdentityId = normalizeString(providerIdentity?.auth_identity_id)
+  let authAppMetadata: Record<string, unknown> = {}
+  let linkedCustomerId: string | null = null
+
+  if (authIdentityId) {
+    try {
+      const authIdentity = await context.authService.retrieveAuthIdentity(
+        authIdentityId
+      )
+      authAppMetadata = toRecord(authIdentity.app_metadata)
+      linkedCustomerId = normalizeString(authAppMetadata.customer_id)
+    } catch {
+      authIdentityId = null
+      authAppMetadata = {}
+      linkedCustomerId = null
+    }
+  }
+
+  let customer: CustomerDTO | null = null
+  if (linkedCustomerId) {
+    try {
+      customer = await context.customerService.retrieveCustomer(linkedCustomerId)
+    } catch {
+      customer = null
+    }
+  }
+
+  if (!customer) {
+    const existingCustomers = await context.customerService.listCustomers({
+      email: context.email,
+    })
+    customer = pickCustomerByEmail(existingCustomers, context.email)
+  }
+
+  const customerId = normalizeString(customer?.id)
+  let employees: Array<any> = []
+  if (customerId) {
+    employees = (await context.b2bService.listEmployees(
+      { customer_id: customerId },
+      {}
+    )) as Array<any>
+  }
+
+  return {
+    authIdentityId,
+    authAppMetadata,
+    customer,
+    employees,
+    selectedEmployee: pickEmployeeForUser(employees, context.userId),
+  }
+}
+
+const buildAccessResponse = (
+  context: AdminContext,
+  state: AccessState,
+  flags: ResponseFlags = {}
+) => {
+  const customerId = normalizeString(state.customer?.id)
+  const employeeId = normalizeString(state.selectedEmployee?.id)
+  const companyId = normalizeString(state.selectedEmployee?.company_id)
+  const isAdmin = state.selectedEmployee?.is_admin === true
+
+  return {
+    ok: true,
+    user: {
+      id: context.userId,
+      email: context.email,
+    },
+    customer: customerId
+      ? {
+          id: customerId,
+          email: normalizeEmail(state.customer?.email) || context.email,
+          created: flags.customerCreated ?? false,
+          updated: flags.customerUpdated ?? false,
+        }
+      : undefined,
+    auth: {
+      auth_identity_id: state.authIdentityId,
+      identity_created: flags.authIdentityCreated ?? false,
+      customer_linked: flags.authCustomerLinked ?? false,
+      temporary_password: flags.temporaryPassword ?? null,
+    },
+    storefront_editor: {
+      employee_id: employeeId,
+      company_id: companyId,
+      is_admin: isAdmin,
+      enabled: isAdmin,
+      employee_created: flags.employeeCreated ?? false,
+      employee_updated: flags.employeeUpdated ?? false,
+      company_created: flags.companyCreated ?? false,
+      matched_employees: state.employees.length,
+    },
+  }
+}
+
+const ensureEditorAccess = async (
+  context: AdminContext,
+  body: RequestBody
+) => {
+  let state = await readCurrentAccessState(context)
+
+  let authIdentityId = state.authIdentityId
+  let authAppMetadata = state.authAppMetadata
   let authIdentityCreated = false
+  let authCustomerLinked = false
   let temporaryPassword: string | null = null
 
   if (!authIdentityId) {
     temporaryPassword = generateTemporaryPassword()
-    const registration = await authService.register("emailpass", {
+    const registration = await context.authService.register("emailpass", {
       body: {
-        email,
+        email: context.email,
         password: temporaryPassword,
       },
     })
@@ -186,23 +396,24 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
       authIdentityCreated = true
       authIdentityId = registration.authIdentity.id
     } else {
-      // Handle race or pre-existing identities with case-variant emails.
-      providerIdentity = await findEmailpassProviderIdentity(
-        authService,
-        emailCandidates
+      const fallbackIdentity = await findEmailpassProviderIdentity(
+        context.authService,
+        Array.from(new Set([context.rawEmail, context.email]))
       )
-      authIdentityId = normalizeString(providerIdentity?.auth_identity_id)
+      authIdentityId = normalizeString(fallbackIdentity?.auth_identity_id)
 
       if (!authIdentityId) {
         throw new MedusaError(
           MedusaError.Types.UNAUTHORIZED,
-          registration.error ||
-            "Unable to create or resolve emailpass identity."
+          registration.error || "Unable to create or resolve emailpass identity."
         )
       }
 
       temporaryPassword = null
     }
+
+    const authIdentity = await context.authService.retrieveAuthIdentity(authIdentityId)
+    authAppMetadata = toRecord(authIdentity.app_metadata)
   }
 
   if (!authIdentityId) {
@@ -212,29 +423,15 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     )
   }
 
-  const authIdentity = await authService.retrieveAuthIdentity(authIdentityId)
-  const authAppMetadata = toRecord(authIdentity.app_metadata)
-  const linkedCustomerId = normalizeString(authAppMetadata.customer_id)
-
-  let customer: CustomerDTO | null = null
+  let customer = state.customer
   let customerCreated = false
-
-  if (linkedCustomerId) {
-    customer = await customerService.retrieveCustomer(linkedCustomerId)
-  }
+  let customerUpdated = false
 
   if (!customer) {
-    const existingCustomers = await customerService.listCustomers({
-      email,
-    })
-    customer = pickCustomerByEmail(existingCustomers, email)
-  }
-
-  if (!customer) {
-    customer = await customerService.createCustomers({
-      email,
-      first_name: firstName ?? undefined,
-      last_name: lastName ?? undefined,
+    customer = await context.customerService.createCustomers({
+      email: context.email,
+      first_name: context.firstName ?? undefined,
+      last_name: context.lastName ?? undefined,
       has_account: true,
     })
     customerCreated = true
@@ -248,9 +445,9 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     )
   }
 
-  let authCustomerLinked = false
+  const linkedCustomerId = normalizeString(authAppMetadata.customer_id)
   if (!linkedCustomerId) {
-    await authService.updateAuthIdentities({
+    await context.authService.updateAuthIdentities({
       id: authIdentityId,
       app_metadata: {
         ...authAppMetadata,
@@ -265,43 +462,61 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     )
   }
 
-  const customerFirstName = normalizeString(customer.first_name)
-  const customerLastName = normalizeString(customer.last_name)
   const customerUpdatePayload: {
     first_name?: string
     last_name?: string
   } = {}
 
-  if (!customerFirstName && firstName) {
-    customerUpdatePayload.first_name = firstName
+  if (!normalizeString(customer.first_name) && context.firstName) {
+    customerUpdatePayload.first_name = context.firstName
   }
-  if (!customerLastName && lastName) {
-    customerUpdatePayload.last_name = lastName
+  if (!normalizeString(customer.last_name) && context.lastName) {
+    customerUpdatePayload.last_name = context.lastName
   }
 
-  let customerUpdated = false
   if (Object.keys(customerUpdatePayload).length) {
-    customer = await customerService.updateCustomers(
+    customer = await context.customerService.updateCustomers(
       customerId,
       customerUpdatePayload
     )
     customerUpdated = true
   }
 
-  const existingEmployees = (await b2bService.listEmployees(
+  const existingEmployees = (await context.b2bService.listEmployees(
     { customer_id: customerId },
     {}
   )) as Array<any>
-  const existingAdminEmployee = existingEmployees.find(
-    (employee) => employee.is_admin === true
-  )
 
-  let employee = existingAdminEmployee ?? null
+  let employee = pickEmployeeForUser(existingEmployees, context.userId)
   let employeeCreated = false
+  let employeeUpdated = false
   let companyCreated = false
-  let company: any | null = null
 
-  if (!employee) {
+  if (employee) {
+    const employeeId = normalizeString(employee.id)
+    if (!employeeId) {
+      throw new MedusaError(
+        MedusaError.Types.INVALID_DATA,
+        "Unable to resolve employee ID."
+      )
+    }
+
+    const scope = readEmployeeScope(employee)
+    const needsAdminFlag = employee.is_admin !== true
+    const needsMetadata =
+      scope.adminUserId !== context.userId ||
+      scope.scope !== "storefront-content-editor" ||
+      scope.source !== "admin-user-storefront-access"
+
+    if (needsAdminFlag || needsMetadata) {
+      employee = await context.b2bService.updateEmployee({
+        id: employeeId,
+        is_admin: true,
+        metadata: buildEditorMetadata(employee, context.userId),
+      })
+      employeeUpdated = true
+    }
+  } else {
     const companyName =
       body.company_name?.trim() || DEFAULT_EDITOR_COMPANY_NAME
     const companyEmail =
@@ -311,16 +526,14 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
       body.currency_code?.trim().toUpperCase() ||
       DEFAULT_EDITOR_COMPANY_CURRENCY
 
-    const existingCompanies = (await b2bService.listCompanies(
-      {
-        email: companyEmail,
-      },
+    const existingCompanies = (await context.b2bService.listCompanies(
+      { email: companyEmail },
       {}
     )) as Array<any>
-    company = pickEditorCompany(existingCompanies, companyName)
 
+    let company = pickEditorCompany(existingCompanies, companyName)
     if (!company) {
-      company = await b2bService.createCompany({
+      company = await context.b2bService.createCompany({
         name: companyName,
         email: companyEmail,
         currency_code: currencyCode,
@@ -343,44 +556,106 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
       )
     }
 
-    employee = await b2bService.createEmployee({
+    employee = await context.b2bService.createEmployee({
       company_id: companyId,
       customer_id: customerId,
       is_admin: true,
       spending_limit: 0,
-      metadata: {
-        scope: "storefront-content-editor",
-        source: "admin-user-storefront-access",
-        admin_user_id: userId,
-      },
+      metadata: buildEditorMetadata(null, context.userId),
     })
     employeeCreated = true
   }
 
-  res.status(200).json({
-    ok: true,
-    user: {
-      id: userId,
-      email,
-    },
-    customer: {
-      id: customerId,
-      email: normalizeEmail(customer.email) || email,
-      created: customerCreated,
-      updated: customerUpdated,
-    },
-    auth: {
-      auth_identity_id: authIdentityId,
-      identity_created: authIdentityCreated,
-      customer_linked: authCustomerLinked,
-      temporary_password: temporaryPassword,
-    },
-    storefront_editor: {
-      employee_id: normalizeString(employee?.id),
-      company_id: normalizeString(employee?.company_id),
-      is_admin: employee?.is_admin === true,
-      employee_created: employeeCreated,
-      company_created: companyCreated,
-    },
+  state = {
+    authIdentityId,
+    authAppMetadata,
+    customer,
+    employees: (await context.b2bService.listEmployees(
+      { customer_id: customerId },
+      {}
+    )) as Array<any>,
+    selectedEmployee: employee,
+  }
+
+  return buildAccessResponse(context, state, {
+    authIdentityCreated,
+    authCustomerLinked,
+    temporaryPassword,
+    customerCreated,
+    customerUpdated,
+    employeeCreated,
+    employeeUpdated,
+    companyCreated,
   })
+}
+
+const disableEditorAccess = async (context: AdminContext) => {
+  const state = await readCurrentAccessState(context)
+  const customerId = normalizeString(state.customer?.id)
+
+  if (!customerId || state.employees.length === 0) {
+    return buildAccessResponse(context, state)
+  }
+
+  const matchingByUser = state.employees.filter((employee) => {
+    return readEmployeeScope(employee).adminUserId === context.userId
+  })
+
+  const matchingByScope = state.employees.filter((employee) => {
+    return readEmployeeScope(employee).scope === "storefront-content-editor"
+  })
+
+  let targets = matchingByUser
+  if (!targets.length) {
+    targets = matchingByScope
+  }
+  if (!targets.length && state.selectedEmployee) {
+    targets = [state.selectedEmployee]
+  }
+
+  let employeeUpdated = false
+  for (const employee of targets) {
+    const employeeId = normalizeString(employee?.id)
+    if (!employeeId || employee?.is_admin !== true) {
+      continue
+    }
+
+    await context.b2bService.updateEmployee({
+      id: employeeId,
+      is_admin: false,
+    })
+    employeeUpdated = true
+  }
+
+  const refreshedState = await readCurrentAccessState(context)
+  return buildAccessResponse(context, refreshedState, {
+    employeeUpdated,
+  })
+}
+
+export async function GET(req: MedusaRequest, res: MedusaResponse) {
+  const context = await resolveAdminContext(req)
+  const state = await readCurrentAccessState(context)
+  res.status(200).json(buildAccessResponse(context, state))
+}
+
+export async function POST(req: MedusaRequest, res: MedusaResponse) {
+  const body = parseProvisionBody(req.body)
+  const context = await resolveAdminContext(req)
+  const payload = await ensureEditorAccess(context, body)
+  res.status(200).json(payload)
+}
+
+export async function PATCH(req: MedusaRequest, res: MedusaResponse) {
+  const body = parseToggleBody(req.body)
+  const context = await resolveAdminContext(req)
+
+  if (body.enabled) {
+    const payload = await ensureEditorAccess(context, body)
+    res.status(200).json(payload)
+    return
+  }
+
+  const payload = await disableEditorAccess(context)
+  res.status(200).json(payload)
 }
