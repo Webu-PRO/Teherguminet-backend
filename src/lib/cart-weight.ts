@@ -186,7 +186,13 @@ export const isWeightBasedProviderId = (
 
   const normalized = providerId.toLowerCase()
   return (
+    normalized === "manual" ||
+    normalized.startsWith("manual_") ||
+    normalized === "tomket" ||
+    normalized.startsWith("tomket_") ||
+    normalized === "gls" ||
     normalized.startsWith("gls_") ||
+    normalized === "teherguminet" ||
     normalized.includes("teherguminet")
   )
 }
