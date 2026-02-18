@@ -18,7 +18,7 @@ const ADMIN_ACTORS = new Set(["user", "admin"]);
 const DEFAULT_ADMIN_BASE_URL = "https://admin.teherguminet.hu";
 const DEFAULT_ADMIN_PATH = "/app/reset-password";
 const DEFAULT_STOREFRONT_BASE_URL = "https://teherguminet.hu";
-const DEFAULT_STOREFRONT_PATH = "/account/reset-password";
+const DEFAULT_STOREFRONT_PATH = "/account";
 const DEFAULT_TOKEN_QUERY_KEY = "token";
 const DEFAULT_EXPIRY_MINUTES = 15;
 
@@ -31,6 +31,8 @@ const resolveLogger = (container: SubscriberArgs["container"]) => {
 };
 
 const normalizeBaseUrl = (value: string) => value.replace(/\/$/, "");
+const normalizeStorefrontDomain = (value: string) =>
+  value.replace(/therguminet\.hu/gi, "teherguminet.hu");
 
 const normalizePath = (value: string) => {
   const trimmed = value.trim();
@@ -55,13 +57,21 @@ const applyTemplate = (
     .replace(/{{\s*actor_type\s*}}/gi, actorType);
 };
 
+const isAdminActor = (actorType: string) =>
+  ADMIN_ACTORS.has(actorType.trim().toLowerCase());
+
 const resolveTemplate = (actorType: string) => {
   const fallback =
     actorType === "user" || actorType === "admin"
       ? process.env.ADMIN_RESET_PASSWORD_URL_TEMPLATE
       : process.env.STOREFRONT_RESET_PASSWORD_URL_TEMPLATE;
 
-  return (process.env.RESET_PASSWORD_URL_TEMPLATE || fallback || "").trim();
+  const resolved = (process.env.RESET_PASSWORD_URL_TEMPLATE || fallback || "").trim();
+  if (!resolved) {
+    return "";
+  }
+
+  return isAdminActor(actorType) ? resolved : normalizeStorefrontDomain(resolved);
 };
 
 const resolveBaseUrl = (actorType: string) => {
@@ -75,7 +85,9 @@ const resolveBaseUrl = (actorType: string) => {
     );
   }
 
-  return process.env.STOREFRONT_URL || DEFAULT_STOREFRONT_BASE_URL;
+  return normalizeStorefrontDomain(
+    process.env.STOREFRONT_URL || DEFAULT_STOREFRONT_BASE_URL
+  );
 };
 
 const resolvePath = (actorType: string) => {
@@ -93,7 +105,10 @@ const resolveResetUrl = (
 ) => {
   const template = resolveTemplate(actorType);
   if (template) {
-    return applyTemplate(template, token, entityId, actorType);
+    const resolved = applyTemplate(template, token, entityId, actorType);
+    return isAdminActor(actorType)
+      ? resolved
+      : normalizeStorefrontDomain(resolved);
   }
 
   const baseUrl = normalizeBaseUrl(resolveBaseUrl(actorType));
@@ -110,10 +125,16 @@ const resolveResetUrl = (
   try {
     const url = new URL(path || "/", baseUrl);
     url.searchParams.set(tokenKey, token);
-    return url.toString();
+    const resolved = url.toString();
+    return isAdminActor(actorType)
+      ? resolved
+      : normalizeStorefrontDomain(resolved);
   } catch {
     const encodedToken = encodeURIComponent(token);
-    return `${baseUrl}${path}?${tokenKey}=${encodedToken}`;
+    const resolved = `${baseUrl}${path}?${tokenKey}=${encodedToken}`;
+    return isAdminActor(actorType)
+      ? resolved
+      : normalizeStorefrontDomain(resolved);
   }
 };
 
