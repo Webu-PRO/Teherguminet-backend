@@ -11,12 +11,16 @@ import {
   Section,
   Text,
 } from "@react-email/components";
+import { LanguageCode, resolveLanguageFromHints } from "../email-language";
 import { CONTACT_EMAIL, CONTACT_PHONE, F1_RED } from "./order-email-shared";
 
 export type PasswordResetEmailProps = {
   reset_url: string;
   email?: string | null;
   actor_type?: string | null;
+  language?: string | null;
+  locale?: string | null;
+  countryCode?: string | null;
   expires_in_minutes?: number | null;
 };
 
@@ -34,15 +38,65 @@ const resolveAccountLabel = (actorType?: string | null) => {
 };
 
 type LangSection = {
-  code: "hu" | "sk";
+  code: LanguageCode;
+  preview: string;
   languageLabel: string;
   heading: string;
+  subtitle: string;
+  emailLabel: string;
+  accountLabel: string;
+  contactLabel: string;
   greeting: string;
   lead: string;
   bulletPoints: string[];
   buttonLabel: string;
   copyIntro: string;
+  footer: string;
   accent: string; // only color accent (still white/black design)
+};
+
+const resolveLanguageFromResetUrl = (resetUrl: string): LanguageCode | null => {
+  if (!resetUrl) {
+    return null;
+  }
+
+  try {
+    const url = new URL(resetUrl);
+    const localeSegment =
+      url.pathname.split("/").filter(Boolean)[0]?.trim().toLowerCase() ?? "";
+
+    if (localeSegment === "hu" || localeSegment === "sk") {
+      return localeSegment;
+    }
+
+    const fromHints = resolveLanguageFromHints({
+      locale: url.searchParams.get("locale"),
+      language: url.searchParams.get("language"),
+      lang: url.searchParams.get("lang"),
+      countryCode: url.searchParams.get("countryCode"),
+    });
+    return fromHints;
+  } catch {
+    return null;
+  }
+};
+
+const resolvePasswordResetLanguage = (
+  props: PasswordResetEmailProps
+): LanguageCode => {
+  const hasHints = [props.language, props.locale, props.countryCode].some(
+    (value) => typeof value === "string" && value.trim().length > 0
+  );
+
+  if (hasHints) {
+    return resolveLanguageFromHints({
+      language: props.language,
+      locale: props.locale,
+      countryCode: props.countryCode,
+    });
+  }
+
+  return resolveLanguageFromResetUrl(props.reset_url) ?? "hu";
 };
 
 const styles = {
@@ -202,6 +256,9 @@ export const PasswordResetEmail = ({
   reset_url,
   email,
   actor_type,
+  language,
+  locale,
+  countryCode,
   expires_in_minutes,
 }: PasswordResetEmailProps) => {
   const expiryMinutes =
@@ -210,14 +267,26 @@ export const PasswordResetEmail = ({
       ? Math.max(1, Math.round(expires_in_minutes))
       : DEFAULT_EXPIRY_MINUTES;
 
-  const previewText =
-    "Jelszó visszaállítása / Obnovenie hesla – kattints a linkre a folytatáshoz";
+  const resolvedLanguage = resolvePasswordResetLanguage({
+    reset_url,
+    email,
+    actor_type,
+    language,
+    locale,
+    countryCode,
+    expires_in_minutes,
+  });
 
-  const languageSections: LangSection[] = [
-    {
+  const languageSections: Record<LanguageCode, LangSection> = {
+    hu: {
       code: "hu",
-      languageLabel: "Magyar / Hungarian",
+      preview: "Jelszó visszaállítása – kattints a linkre a folytatáshoz",
+      languageLabel: "Magyar",
       heading: "Jelszó visszaállítása",
+      subtitle: "Biztonságos jelszó-visszaállítás a Teherguminet.hu fiókhoz.",
+      emailLabel: "E-mail",
+      accountLabel: "Fiók",
+      contactLabel: "Kapcsolat",
       greeting: "Szia!",
       lead: "Az alábbi gombbal visszaállíthatod a jelszavadat. A link csak rövid ideig érvényes.",
       bulletPoints: [
@@ -226,12 +295,18 @@ export const PasswordResetEmail = ({
       ],
       buttonLabel: "Új jelszó beállítása",
       copyIntro: "Ha nem működik a gomb, másold be ezt a linket a böngészőbe:",
+      footer: "Ez egy automatikusan generált üzenet, kérjük ne válaszolj rá közvetlenül.",
       accent: "#E10600",
     },
-    {
+    sk: {
       code: "sk",
-      languageLabel: "Slovenčina / Slovak",
+      preview: "Obnovenie hesla – klikni na odkaz pre pokračovanie",
+      languageLabel: "Slovenčina",
       heading: "Obnovenie hesla",
+      subtitle: "Bezpečná obnova hesla pre účet Teherguminet.hu.",
+      emailLabel: "E-mail",
+      accountLabel: "Konto",
+      contactLabel: "Kontakt",
       greeting: "Ahoj!",
       lead: "Klikni na tlačidlo nižšie a nastav si nové heslo. Odkaz je platný len krátku dobu.",
       bulletPoints: [
@@ -240,17 +315,20 @@ export const PasswordResetEmail = ({
       ],
       buttonLabel: "Nastaviť nové heslo",
       copyIntro: "Ak tlačidlo nefunguje, skopíruj tento odkaz do prehliadača:",
+      footer: "Toto je automaticky generovaná správa, prosím, neodpovedajte na ňu.",
       accent: "#3F8DFF",
     },
-  ];
+  };
 
+  const section = languageSections[resolvedLanguage] ?? languageSections.hu;
+  const previewText = section.preview;
   const metaTiles = [
-    { label: "E-mail / Email", value: email ?? "—" },
-    { label: "Fiók / Konto", value: resolveAccountLabel(actor_type) },
+    { label: section.emailLabel, value: email ?? "—" },
+    { label: section.accountLabel, value: resolveAccountLabel(actor_type) },
   ];
 
   return (
-    <Html>
+    <Html lang={resolvedLanguage === "sk" ? "sk" : "hu"}>
       <Head />
       <Preview>{previewText}</Preview>
 
@@ -262,12 +340,8 @@ export const PasswordResetEmail = ({
               <Link href="https://teherguminet.hu" style={styles.brand}>
                 {BRAND_NAME.toUpperCase()}
               </Link>
-              <Heading style={styles.title}>
-                Jelszó visszaállítása / Obnovenie hesla
-              </Heading>
-              <Text style={styles.subtitle}>
-                Biztonságos jelszó-visszaállítás a Teherguminet.hu fiókhoz.
-              </Text>
+              <Heading style={styles.title}>{section.heading}</Heading>
+              <Text style={styles.subtitle}>{section.subtitle}</Text>
             </Section>
 
             <Hr style={styles.divider} />
@@ -307,55 +381,50 @@ export const PasswordResetEmail = ({
                 </tbody>
               </table>
 
-              {/* Language blocks */}
-              {languageSections.map((section) => (
-                <Section key={section.code} style={styles.sectionCard}>
-                  <Text style={{ ...styles.sectionTag, color: section.accent }}>
-                    {section.languageLabel}
-                  </Text>
-                  <Heading as="h2" style={styles.h2}>
-                    {section.heading}
-                  </Heading>
+              <Section key={section.code} style={styles.sectionCard}>
+                <Text style={{ ...styles.sectionTag, color: section.accent }}>
+                  {section.languageLabel}
+                </Text>
+                <Heading as="h2" style={styles.h2}>
+                  {section.heading}
+                </Heading>
 
-                  <Text style={styles.p}>{section.greeting}</Text>
-                  <Text style={styles.p}>{section.lead}</Text>
+                <Text style={styles.p}>{section.greeting}</Text>
+                <Text style={styles.p}>{section.lead}</Text>
 
-                  <Section style={{ marginTop: "10px" }}>
-                    {section.bulletPoints.map((item, idx) => (
-                      <Text
-                        key={`${section.code}-bp-${idx}`}
-                        style={styles.bullet}
-                      >
-                        • {item}
-                      </Text>
-                    ))}
-                  </Section>
-
-                  <Section style={styles.ctaWrap}>
-                    <Button href={reset_url} style={styles.cta}>
-                      {section.buttonLabel}
-                    </Button>
-                  </Section>
-
-                  <Text style={styles.helper}>{section.copyIntro}</Text>
-                  <Link
-                    href={reset_url}
-                    style={{ ...styles.link, color: section.accent }}
-                  >
-                    {reset_url}
-                  </Link>
+                <Section style={{ marginTop: "10px" }}>
+                  {section.bulletPoints.map((item, idx) => (
+                    <Text
+                      key={`${section.code}-bp-${idx}`}
+                      style={styles.bullet}
+                    >
+                      • {item}
+                    </Text>
+                  ))}
                 </Section>
-              ))}
+
+                <Section style={styles.ctaWrap}>
+                  <Button href={reset_url} style={styles.cta}>
+                    {section.buttonLabel}
+                  </Button>
+                </Section>
+
+                <Text style={styles.helper}>{section.copyIntro}</Text>
+                <Link
+                  href={reset_url}
+                  style={{ ...styles.link, color: section.accent }}
+                >
+                  {reset_url}
+                </Link>
+              </Section>
             </Section>
           </Section>
 
           <Text style={styles.footer}>
-            {languageSections[0].code === "hu"
-              ? "Ez egy automatikusan generált üzenet, kérjük ne válaszolj rá közvetlenül."
-              : "Toto je automaticky generovaná správa, prosím, neodpovedajte na ňu."}
+            {section.footer}
             <br />
             <span>
-              Kapcsolat / Kontakt:{" "}
+              {section.contactLabel}:{" "}
               <Link href={`mailto:${CONTACT_EMAIL}`} style={styles.link}>
                 {CONTACT_EMAIL}
               </Link>{" "}

@@ -150,6 +150,45 @@ const resolveNotificationLanguage = (
   const template = notification.template as Templates;
   const data = notification.data as any;
 
+  const resolvePasswordResetLanguage = (): LanguageCode => {
+    const hasHints = [data?.locale, data?.language, data?.lang, data?.countryCode].some(
+      (value) => typeof value === "string" && value.trim().length > 0
+    );
+
+    if (hasHints) {
+      return resolveLanguageFromHints({
+        locale: data?.locale,
+        language: data?.language,
+        lang: data?.lang,
+        countryCode: data?.countryCode,
+      });
+    }
+
+    const resetUrl = typeof data?.reset_url === "string" ? data.reset_url.trim() : "";
+    if (!resetUrl) {
+      return "hu";
+    }
+
+    try {
+      const url = new URL(resetUrl);
+      const localeSegment =
+        url.pathname.split("/").filter(Boolean)[0]?.trim().toLowerCase() ?? "";
+
+      if (localeSegment === "hu" || localeSegment === "sk") {
+        return localeSegment;
+      }
+
+      const fromUrlHints = resolveLanguageFromHints({
+        locale: url.searchParams.get("locale"),
+        language: url.searchParams.get("language"),
+        lang: url.searchParams.get("lang"),
+      });
+      return fromUrlHints;
+    } catch {
+      return "hu";
+    }
+  };
+
   if (
     template === Templates.ORDER_PLACED ||
     template === Templates.ORDER_THANKS ||
@@ -173,6 +212,10 @@ const resolveNotificationLanguage = (
       countryCode: data?.countryCode,
       currencyCode: data?.currencyCode,
     });
+  }
+
+  if (template === Templates.PASSWORD_RESET) {
+    return resolvePasswordResetLanguage();
   }
 
   return "hu";
@@ -366,7 +409,9 @@ class ResendNotificationProviderService extends AbstractNotificationProviderServ
           ? `Váš košík ešte čaká – ${BRAND_NAME}`
           : `A kosarad még vár rád – ${BRAND_NAME}`;
       case Templates.PASSWORD_RESET:
-        return `Reset your password – ${BRAND_NAME}`;
+        return language === "sk"
+          ? `Obnova hesla – ${BRAND_NAME}`
+          : `Jelszó visszaállítása – ${BRAND_NAME}`;
       case Templates.GLS_LABEL_CANCELLED: {
         const orderRef = resolveOrderReference(
           (notification.data as any)?.order
