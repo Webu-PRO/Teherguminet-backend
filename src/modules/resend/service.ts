@@ -471,14 +471,17 @@ class ResendNotificationProviderService extends AbstractNotificationProviderServ
 
     const { data, error } = await this.resendClient.emails.send(emailOptions);
 
-    if (error || !data) {
+    if (error || !data?.id) {
+      const detail = error ? JSON.stringify(error) : "unknown error";
+      const message = "Failed to send email template=" + notification.template + " to=" + notification.to + ": " + detail;
+
       if (error) {
-        this.logger.error("Failed to send email", error as Error);
+        this.logger.error(message, error as Error);
       } else {
-        this.logger.error("Failed to send email: unknown error");
+        this.logger.error(message);
       }
 
-      return {};
+      throw new Error(message);
     }
 
     return { id: data.id };
