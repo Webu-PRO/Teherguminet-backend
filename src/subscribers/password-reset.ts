@@ -12,6 +12,8 @@ type PasswordResetEventPayload = {
   entity_id?: string | null;
   actor_type?: string | null;
   token?: string | null;
+  identifier?: string | null;
+  email?: string | null;
 };
 
 type PasswordResetLanguage = "hu" | "sk";
@@ -30,6 +32,15 @@ const resolveLogger = (container: SubscriberArgs["container"]) => {
   } catch {
     return undefined;
   }
+};
+
+const readString = (value: unknown) => {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : "";
 };
 
 const normalizeBaseUrl = (value: string) => value.replace(/\/$/, "");
@@ -222,13 +233,18 @@ export default async function passwordResetHandler({
   container,
 }: SubscriberArgs<PasswordResetEventPayload>) {
   const payload = event?.data ?? {};
-  const entityId =
-    typeof payload.entity_id === "string" ? payload.entity_id : "";
-  const token = typeof payload.token === "string" ? payload.token : "";
-  const actorType =
-    typeof payload.actor_type === "string" ? payload.actor_type : "customer";
+  const entityId = readString(payload.entity_id);
+  const token = readString(payload.token);
+  const actorType = readString(payload.actor_type) || "customer";
 
-  if (!entityId || !token) {
+  const recipientEmail =
+    readString(payload.email) ||
+    readString(payload.identifier) ||
+    entityId;
+
+  const urlEntityId = entityId || recipientEmail;
+
+  if (!recipientEmail || !token) {
     return;
   }
 
@@ -241,7 +257,7 @@ export default async function passwordResetHandler({
     return;
   }
 
-  const resetUrl = resolveResetUrl(actorType, token, entityId);
+  const resetUrl = resolveResetUrl(actorType, token, urlEntityId);
 
   if (!resetUrl) {
     return;
@@ -255,7 +271,7 @@ export default async function passwordResetHandler({
     : applyLanguagePrefixToStorefrontUrl(resetUrl, resetLanguage);
 
   const notification: CreateNotificationDTO = {
-    to: entityId,
+    to: recipientEmail,
     channel: "email",
     template: "password-reset",
     data: {
@@ -268,17 +284,27 @@ export default async function passwordResetHandler({
       expires_in_minutes: DEFAULT_EXPIRY_MINUTES,
     },
     trigger_type: "auth.password_reset",
-    resource_id: entityId,
+    resource_id: urlEntityId,
     resource_type: "auth",
   };
 
   const logger = resolveLogger(container);
 
-  await dispatchNotificationsIndividually(
+  const created = await dispatchNotificationsIndividually(
     notificationModuleService,
     [notification],
-    logger
+    logger,
+    {
+      concurrency: 1,
+      failOnError: true,
+    }
   );
+
+  if (!created.length) {
+    throw new Error(
+      `password-reset subscriber: notification was not created for ${recipientEmail}`
+    );
+  }
 }
 
 export const config: SubscriberConfig = {
