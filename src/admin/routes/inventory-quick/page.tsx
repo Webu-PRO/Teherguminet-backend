@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+} from "react"
 import { defineRouteConfig } from "@medusajs/admin-sdk"
 import { TruckFast } from "@medusajs/icons"
 import { Button, Input, Text, toast } from "@medusajs/ui"
@@ -464,7 +471,7 @@ const InventoryQuickPage = () => {
         <div className="mt-4 flex flex-col gap-3 xl:flex-row">
           <form
             className="flex flex-1 items-center gap-2"
-            onSubmit={(event) => {
+            onSubmit={(event: FormEvent<HTMLFormElement>) => {
               event.preventDefault()
               setOffset(0)
               setSearchQuery(normalizeText(searchInput))
@@ -472,7 +479,9 @@ const InventoryQuickPage = () => {
           >
             <Input
               value={searchInput}
-              onChange={(event) => setSearchInput(event.target.value)}
+              onChange={(
+                event: ChangeEvent<HTMLInputElement>
+              ) => setSearchInput(event.target.value)}
               placeholder="Kereses cim vagy SKU alapjan"
             />
             <Button type="submit" variant="secondary">
@@ -486,7 +495,9 @@ const InventoryQuickPage = () => {
             </Text>
             <select
               value={selectedLocationId}
-              onChange={(event) => setSelectedLocationId(event.target.value)}
+              onChange={(
+                event: ChangeEvent<HTMLSelectElement>
+              ) => setSelectedLocationId(event.target.value)}
               className="h-10 rounded-md border border-ui-border-base bg-ui-bg-field px-3 text-sm text-ui-fg-base"
               disabled={loadingLocations || locations.length === 0}
             >
@@ -508,7 +519,7 @@ const InventoryQuickPage = () => {
             </Text>
             <select
               value={String(limit)}
-              onChange={(event) => {
+              onChange={(event: ChangeEvent<HTMLSelectElement>) => {
                 const parsed = Number(event.target.value)
                 const nextLimit = Number.isFinite(parsed)
                   ? parsed
@@ -663,7 +674,7 @@ const InventoryQuickPage = () => {
 export const config = defineRouteConfig({
   label: "Keszlet+",
   icon: TruckFast,
-  nested: "/inventory-items",
+  nested: "/inventory",
 })
 
 export default InventoryQuickPage
