@@ -5,6 +5,7 @@ import {
   useState,
   type ChangeEvent,
   type FormEvent,
+  type KeyboardEvent,
 } from "react"
 import { defineRouteConfig } from "@medusajs/admin-sdk"
 import { Button, Input, Text, toast } from "@medusajs/ui"
@@ -112,12 +113,70 @@ const resolveDisplayQuantities = (
   )
 }
 
+const matchesSearch = (item: InventoryItem, query: string) => {
+  const normalizedQuery = normalizeText(query).toLowerCase()
+  if (!normalizedQuery) {
+    return true
+  }
+
+  const title = normalizeText(item.title).toLowerCase()
+  const sku = normalizeText(item.sku).toLowerCase()
+
+  return (
+    title.includes(normalizedQuery) || sku.includes(normalizedQuery)
+  )
+}
+
+const upsertLocationLevelStock = (
+  item: InventoryItem,
+  locationId: string,
+  stockedQuantity: number
+) => {
+  const levels = readLocationLevels(item)
+  const normalizedLocationId = normalizeText(locationId)
+
+  if (!normalizedLocationId) {
+    return item
+  }
+
+  const levelExists = levels.some((level) => {
+    return normalizeText(level.location_id) === normalizedLocationId
+  })
+
+  const nextLevels = levelExists
+    ? levels.map((level) => {
+        if (
+          normalizeText(level.location_id) !== normalizedLocationId
+        ) {
+          return level
+        }
+
+        return {
+          ...level,
+          location_id: normalizedLocationId,
+          stocked_quantity: stockedQuantity,
+        }
+      })
+    : [
+        ...levels,
+        {
+          location_id: normalizedLocationId,
+          stocked_quantity: stockedQuantity,
+          reserved_quantity: 0,
+        },
+      ]
+
+  return {
+    ...item,
+    location_levels: nextLevels,
+  }
+}
+
 const InventoryQuickPage = () => {
   const [items, setItems] = useState<InventoryItem[]>([])
   const [locations, setLocations] = useState<StockLocation[]>([])
   const [selectedLocationId, setSelectedLocationId] = useState("")
   const [searchInput, setSearchInput] = useState("")
-  const [searchQuery, setSearchQuery] = useState("")
   const [limit, setLimit] = useState<number>(50)
   const [offset, setOffset] = useState(0)
   const [count, setCount] = useState(0)
@@ -126,6 +185,10 @@ const InventoryQuickPage = () => {
   const [updatingItemId, setUpdatingItemId] = useState<string | null>(
     null
   )
+  const [editingStockItemId, setEditingStockItemId] = useState<
+    string | null
+  >(null)
+  const [editingStockValue, setEditingStockValue] = useState("")
 
   const totalPages = useMemo(() => {
     if (count <= 0) {
@@ -142,6 +205,52 @@ const InventoryQuickPage = () => {
 
     return Math.floor(offset / limit) + 1
   }, [count, limit, offset])
+
+  const filteredItems = useMemo(() => {
+    return items.filter((item) => {
+      return matchesSearch(item, searchInput)
+    })
+  }, [items, searchInput])
+
+  const searchSuggestions = useMemo(() => {
+    const normalizedQuery = normalizeText(searchInput).toLowerCase()
+    const seen = new Set<string>()
+    const suggestions: string[] = []
+
+    for (const item of items) {
+      const candidates = [
+        normalizeText(item.sku),
+        normalizeText(item.title),
+      ]
+
+      for (const candidate of candidates) {
+        if (!candidate) {
+          continue
+        }
+
+        if (
+          normalizedQuery &&
+          !candidate.toLowerCase().includes(normalizedQuery)
+        ) {
+          continue
+        }
+
+        const key = candidate.toLowerCase()
+        if (seen.has(key)) {
+          continue
+        }
+
+        seen.add(key)
+        suggestions.push(candidate)
+
+        if (suggestions.length >= 8) {
+          return suggestions
+        }
+      }
+    }
+
+    return suggestions
+  }, [items, searchInput])
 
   const loadStockLocations = useCallback(async () => {
     setLoadingLocations(true)
@@ -201,11 +310,6 @@ const InventoryQuickPage = () => {
       params.set("offset", String(offset))
       params.set("fields", "id,title,sku,*location_levels")
 
-      const normalizedQuery = normalizeText(searchQuery)
-      if (normalizedQuery) {
-        params.set("q", normalizedQuery)
-      }
-
       let response = await fetch(
         `/admin/inventory-items?${params.toString()}`,
         {
@@ -213,7 +317,7 @@ const InventoryQuickPage = () => {
         }
       )
 
-      if (response.status === 400) {
+      if (!response.ok) {
         const fallbackParams = new URLSearchParams(params)
         fallbackParams.delete("fields")
         response = await fetch(
@@ -256,7 +360,7 @@ const InventoryQuickPage = () => {
     } finally {
       setLoadingItems(false)
     }
-  }, [limit, offset, searchQuery])
+  }, [limit, offset])
 
   const loadInventoryItem = useCallback(async (itemId: string) => {
     const params = new URLSearchParams()
@@ -271,7 +375,7 @@ const InventoryQuickPage = () => {
       }
     )
 
-    if (response.status === 400) {
+    if (!response.ok) {
       response = await fetch(
         `/admin/inventory-items/${encodeURIComponent(itemId)}`,
         {
@@ -342,14 +446,36 @@ const InventoryQuickPage = () => {
     []
   )
 
-  const handleAdjustStock = useCallback(
-    async (item: InventoryItem, delta: number) => {
-      if (delta === 0 || updatingItemId) {
+  const resolveActiveLocationId = useCallback(
+    (item: InventoryItem) => {
+      const selected = normalizeText(selectedLocationId)
+      if (selected) {
+        return selected
+      }
+
+      const fromItem = normalizeText(
+        readLocationLevels(item)[0]?.location_id
+      )
+      if (fromItem) {
+        return fromItem
+      }
+
+      return normalizeText(locations[0]?.id)
+    },
+    [locations, selectedLocationId]
+  )
+
+  const updateStockForItem = useCallback(
+    async (
+      item: InventoryItem,
+      resolveNextStock: (currentStock: number) => number
+    ) => {
+      if (updatingItemId) {
         return
       }
 
-      const normalizedSelectedLocation = normalizeText(selectedLocationId)
       setUpdatingItemId(item.id)
+      let previousItemSnapshot: InventoryItem | null = null
 
       try {
         const enrichedItem = readLocationLevels(item).length
@@ -360,11 +486,7 @@ const InventoryQuickPage = () => {
           throw new Error("A készlet elem nem található.")
         }
 
-        const activeLocationId =
-          normalizedSelectedLocation ||
-          normalizeText(readLocationLevels(enrichedItem)[0]?.location_id) ||
-          normalizeText(locations[0]?.id)
-
+        const activeLocationId = resolveActiveLocationId(enrichedItem)
         if (!activeLocationId) {
           throw new Error(
             "Nincs elérhető raktárhely. Hozz létre legalább egyet."
@@ -378,11 +500,32 @@ const InventoryQuickPage = () => {
         const currentStock = normalizeNumber(
           currentLevel?.stocked_quantity
         )
-        const nextStock = Math.max(0, currentStock + delta)
+        const nextStock = Math.max(
+          0,
+          Math.trunc(resolveNextStock(currentStock))
+        )
 
         if (nextStock === currentStock) {
           return
         }
+
+        previousItemSnapshot =
+          items.find((entry) => entry.id === item.id) ?? enrichedItem
+
+        const optimisticItem = upsertLocationLevelStock(
+          previousItemSnapshot,
+          activeLocationId,
+          nextStock
+        )
+
+        setItems((currentItems) => {
+          return currentItems.map((currentItem) => {
+            if (currentItem.id !== item.id) {
+              return currentItem
+            }
+            return optimisticItem
+          })
+        })
 
         const globalBody = currentLevel
           ? {
@@ -423,8 +566,19 @@ const InventoryQuickPage = () => {
             }
 
         await updateLevelBatch(item.id, globalBody, itemBody)
-        await loadInventoryItems()
       } catch (error) {
+        if (previousItemSnapshot) {
+          setItems((currentItems) => {
+            return currentItems.map((currentItem) => {
+              if (currentItem.id !== item.id) {
+                return currentItem
+              }
+
+              return previousItemSnapshot as InventoryItem
+            })
+          })
+        }
+
         const message =
           error instanceof Error
             ? error.message
@@ -437,13 +591,81 @@ const InventoryQuickPage = () => {
       }
     },
     [
+      items,
       loadInventoryItem,
-      loadInventoryItems,
-      locations,
-      selectedLocationId,
+      resolveActiveLocationId,
       updateLevelBatch,
       updatingItemId,
     ]
+  )
+
+  const handleAdjustStock = useCallback(
+    async (item: InventoryItem, delta: number) => {
+      if (delta === 0) {
+        return
+      }
+
+      setEditingStockItemId(null)
+      setEditingStockValue("")
+
+      await updateStockForItem(item, (currentStock) => {
+        return currentStock + delta
+      })
+    },
+    [updateStockForItem]
+  )
+
+  const beginEditStock = useCallback(
+    (itemId: string, currentStock: number) => {
+      setEditingStockItemId(itemId)
+      setEditingStockValue(String(Math.max(0, Math.trunc(currentStock))))
+    },
+    []
+  )
+
+  const cancelEditStock = useCallback(() => {
+    setEditingStockItemId(null)
+    setEditingStockValue("")
+  }, [])
+
+  const commitEditStock = useCallback(
+    async (item: InventoryItem) => {
+      if (editingStockItemId !== item.id) {
+        return
+      }
+
+      const parsedValue = Number(editingStockValue)
+      if (!Number.isFinite(parsedValue)) {
+        toast.error("Készlet frissítése", {
+          description: "Adj meg egy ervenyes darabszamot.",
+        })
+        return
+      }
+
+      cancelEditStock()
+      await updateStockForItem(item, () => parsedValue)
+    },
+    [
+      cancelEditStock,
+      editingStockItemId,
+      editingStockValue,
+      updateStockForItem,
+    ]
+  )
+
+  const handleStockInputKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLInputElement>, item: InventoryItem) => {
+      if (event.key === "Enter") {
+        event.preventDefault()
+        void commitEditStock(item)
+      }
+
+      if (event.key === "Escape") {
+        event.preventDefault()
+        cancelEditStock()
+      }
+    },
+    [cancelEditStock, commitEditStock]
   )
 
   useEffect(() => {
@@ -452,7 +674,7 @@ const InventoryQuickPage = () => {
 
   useEffect(() => {
     void loadInventoryItems()
-  }, [loadInventoryItems, selectedLocationId])
+  }, [loadInventoryItems])
 
   return (
     <div className="flex flex-col gap-y-4">
@@ -472,8 +694,7 @@ const InventoryQuickPage = () => {
             className="flex flex-1 items-center gap-2"
             onSubmit={(event: FormEvent<HTMLFormElement>) => {
               event.preventDefault()
-              setOffset(0)
-              setSearchQuery(normalizeText(searchInput))
+              setSearchInput(normalizeText(searchInput))
             }}
           >
             <Input
@@ -481,12 +702,27 @@ const InventoryQuickPage = () => {
               onChange={(
                 event: ChangeEvent<HTMLInputElement>
               ) => setSearchInput(event.target.value)}
+              list="inventory-quick-suggestions"
               placeholder="Kereses cim vagy SKU alapjan"
             />
             <Button type="submit" variant="secondary">
               Kereses
             </Button>
+            {searchInput.trim().length > 0 ? (
+              <Button
+                type="button"
+                variant="transparent"
+                onClick={() => setSearchInput("")}
+              >
+                Torles
+              </Button>
+            ) : null}
           </form>
+          <datalist id="inventory-quick-suggestions">
+            {searchSuggestions.map((suggestion) => (
+              <option key={suggestion} value={suggestion} />
+            ))}
+          </datalist>
 
           <div className="flex items-center gap-2">
             <Text size="xsmall" className="text-ui-fg-subtle">
@@ -559,7 +795,7 @@ const InventoryQuickPage = () => {
                     Betoltes...
                   </td>
                 </tr>
-              ) : items.length === 0 ? (
+              ) : filteredItems.length === 0 ? (
                 <tr>
                   <td
                     colSpan={4}
@@ -569,12 +805,13 @@ const InventoryQuickPage = () => {
                   </td>
                 </tr>
               ) : (
-                items.map((item) => {
+                filteredItems.map((item) => {
                   const quantities = resolveDisplayQuantities(
                     item,
                     selectedLocationId
                   )
                   const rowIsUpdating = updatingItemId === item.id
+                  const rowIsEditing = editingStockItemId === item.id
 
                   return (
                     <tr
@@ -597,7 +834,9 @@ const InventoryQuickPage = () => {
                             size="small"
                             variant="secondary"
                             disabled={
-                              rowIsUpdating || quantities.stocked <= 0
+                              Boolean(updatingItemId) ||
+                              rowIsUpdating ||
+                              quantities.stocked <= 0
                             }
                             onClick={() =>
                               void handleAdjustStock(item, -1)
@@ -605,14 +844,55 @@ const InventoryQuickPage = () => {
                           >
                             -
                           </Button>
-                          <span className="inline-flex min-w-10 justify-center">
-                            {quantities.stocked}
-                          </span>
+                          {rowIsEditing ? (
+                            <input
+                              type="number"
+                              min={0}
+                              step={1}
+                              value={editingStockValue}
+                              disabled={Boolean(updatingItemId)}
+                              onChange={(
+                                event: ChangeEvent<HTMLInputElement>
+                              ) =>
+                                setEditingStockValue(
+                                  event.target.value
+                                )
+                              }
+                              onBlur={() => {
+                                void commitEditStock(item)
+                              }}
+                              onKeyDown={(
+                                event: KeyboardEvent<HTMLInputElement>
+                              ) =>
+                                handleStockInputKeyDown(event, item)
+                              }
+                              className="h-8 w-20 rounded-md border border-ui-border-base bg-ui-bg-field px-2 text-center text-sm"
+                              autoFocus
+                            />
+                          ) : (
+                            <button
+                              type="button"
+                              className="inline-flex min-w-12 justify-center rounded-md border border-ui-border-base px-2 py-1 text-sm hover:bg-ui-bg-subtle"
+                              disabled={
+                                Boolean(updatingItemId) || rowIsUpdating
+                              }
+                              onClick={() =>
+                                beginEditStock(
+                                  item.id,
+                                  quantities.stocked
+                                )
+                              }
+                            >
+                              {quantities.stocked}
+                            </button>
+                          )}
                           <Button
                             type="button"
                             size="small"
                             variant="secondary"
-                            disabled={rowIsUpdating}
+                            disabled={
+                              Boolean(updatingItemId) || rowIsUpdating
+                            }
                             onClick={() =>
                               void handleAdjustStock(item, 1)
                             }
@@ -631,9 +911,11 @@ const InventoryQuickPage = () => {
 
         <div className="mt-4 flex items-center justify-between">
           <Text size="xsmall" className="text-ui-fg-subtle">
-            {count > 0
-              ? `${offset + 1}-${Math.min(offset + items.length, count)} / ${count}`
-              : "0 / 0"}
+            {searchInput.trim().length > 0
+              ? `${filteredItems.length} talalat ezen az oldalon`
+              : count > 0
+                ? `${offset + 1}-${Math.min(offset + items.length, count)} / ${count}`
+                : "0 / 0"}
           </Text>
           <div className="flex items-center gap-2">
             <Button
