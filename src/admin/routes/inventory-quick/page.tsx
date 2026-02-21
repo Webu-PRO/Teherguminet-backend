@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ChangeEvent,
   type FormEvent,
@@ -40,6 +41,13 @@ type InventoryItemResponse = {
 
 type StockLocationListResponse = {
   stock_locations?: StockLocation[]
+}
+
+type SearchSuggestion = {
+  id: string
+  title: string
+  sku: string
+  score: number
 }
 
 const PAGE_SIZE_OPTIONS = [20, 50, 100] as const
@@ -127,6 +135,29 @@ const matchesSearch = (item: InventoryItem, query: string) => {
   )
 }
 
+const computeSuggestionScore = (
+  item: InventoryItem,
+  normalizedQuery: string
+) => {
+  const title = normalizeText(item.title).toLowerCase()
+  const sku = normalizeText(item.sku).toLowerCase()
+
+  if (sku.startsWith(normalizedQuery)) {
+    return 400
+  }
+  if (title.startsWith(normalizedQuery)) {
+    return 300
+  }
+  if (sku.includes(normalizedQuery)) {
+    return 200
+  }
+  if (title.includes(normalizedQuery)) {
+    return 100
+  }
+
+  return 0
+}
+
 const upsertLocationLevelStock = (
   item: InventoryItem,
   locationId: string,
@@ -189,6 +220,8 @@ const InventoryQuickPage = () => {
     string | null
   >(null)
   const [editingStockValue, setEditingStockValue] = useState("")
+  const [isSuggestionOpen, setIsSuggestionOpen] = useState(false)
+  const suggestionCloseTimeoutRef = useRef<number | null>(null)
 
   const totalPages = useMemo(() => {
     if (count <= 0) {
@@ -214,42 +247,36 @@ const InventoryQuickPage = () => {
 
   const searchSuggestions = useMemo(() => {
     const normalizedQuery = normalizeText(searchInput).toLowerCase()
-    const seen = new Set<string>()
-    const suggestions: string[] = []
-
-    for (const item of items) {
-      const candidates = [
-        normalizeText(item.sku),
-        normalizeText(item.title),
-      ]
-
-      for (const candidate of candidates) {
-        if (!candidate) {
-          continue
-        }
-
-        if (
-          normalizedQuery &&
-          !candidate.toLowerCase().includes(normalizedQuery)
-        ) {
-          continue
-        }
-
-        const key = candidate.toLowerCase()
-        if (seen.has(key)) {
-          continue
-        }
-
-        seen.add(key)
-        suggestions.push(candidate)
-
-        if (suggestions.length >= 8) {
-          return suggestions
-        }
-      }
+    if (!normalizedQuery) {
+      return [] as SearchSuggestion[]
     }
 
-    return suggestions
+    return items
+      .map((item) => {
+        const score = computeSuggestionScore(item, normalizedQuery)
+        if (score <= 0) {
+          return null
+        }
+
+        return {
+          id: item.id,
+          title: normalizeText(item.title) || "-",
+          sku: normalizeText(item.sku) || "-",
+          score,
+        } as SearchSuggestion
+      })
+      .filter(Boolean)
+      .sort((left, right) => {
+        const leftSuggestion = left as SearchSuggestion
+        const rightSuggestion = right as SearchSuggestion
+
+        if (rightSuggestion.score !== leftSuggestion.score) {
+          return rightSuggestion.score - leftSuggestion.score
+        }
+
+        return leftSuggestion.title.localeCompare(rightSuggestion.title)
+      })
+      .slice(0, 8) as SearchSuggestion[]
   }, [items, searchInput])
 
   const loadStockLocations = useCallback(async () => {
@@ -668,6 +695,34 @@ const InventoryQuickPage = () => {
     [cancelEditStock, commitEditStock]
   )
 
+  const clearSuggestionCloseTimeout = useCallback(() => {
+    if (suggestionCloseTimeoutRef.current !== null) {
+      clearTimeout(suggestionCloseTimeoutRef.current)
+      suggestionCloseTimeoutRef.current = null
+    }
+  }, [])
+
+  const openSuggestions = useCallback(() => {
+    clearSuggestionCloseTimeout()
+    setIsSuggestionOpen(true)
+  }, [clearSuggestionCloseTimeout])
+
+  const scheduleCloseSuggestions = useCallback(() => {
+    clearSuggestionCloseTimeout()
+    suggestionCloseTimeoutRef.current = window.setTimeout(() => {
+      setIsSuggestionOpen(false)
+      suggestionCloseTimeoutRef.current = null
+    }, 120)
+  }, [clearSuggestionCloseTimeout])
+
+  const handleSuggestionSelect = useCallback(
+    (suggestion: SearchSuggestion) => {
+      setSearchInput(suggestion.sku !== "-" ? suggestion.sku : suggestion.title)
+      setIsSuggestionOpen(false)
+    },
+    []
+  )
+
   useEffect(() => {
     void loadStockLocations()
   }, [loadStockLocations])
@@ -676,16 +731,22 @@ const InventoryQuickPage = () => {
     void loadInventoryItems()
   }, [loadInventoryItems])
 
+  useEffect(() => {
+    return () => {
+      clearSuggestionCloseTimeout()
+    }
+  }, [clearSuggestionCloseTimeout])
+
   return (
     <div className="flex flex-col gap-y-4">
       <div className="rounded-lg border border-ui-border-base bg-ui-bg-base p-6 shadow-card-rest">
         <div className="flex flex-col gap-y-1">
           <Text size="large" weight="plus">
-            Keszlet gyors szerkeszto
+            Készlet kezelő
           </Text>
           <Text size="small" className="text-ui-fg-subtle">
-            Keszlet modositas kozvetlenul a listaban. Nem kell minden
-            termeket megnyitni.
+            Készlet módosítás közvetlenül a listában. Nem kell minden
+            terméket megnyitni.
           </Text>
         </div>
 
@@ -697,14 +758,42 @@ const InventoryQuickPage = () => {
               setSearchInput(normalizeText(searchInput))
             }}
           >
-            <Input
-              value={searchInput}
-              onChange={(
-                event: ChangeEvent<HTMLInputElement>
-              ) => setSearchInput(event.target.value)}
-              list="inventory-quick-suggestions"
-              placeholder="Kereses cim vagy SKU alapjan"
-            />
+            <div className="relative flex-1">
+              <Input
+                value={searchInput}
+                onChange={(
+                  event: ChangeEvent<HTMLInputElement>
+                ) => setSearchInput(event.target.value)}
+                onFocus={() => openSuggestions()}
+                onBlur={() => scheduleCloseSuggestions()}
+                placeholder="Keresés cím vagy SKU alapján"
+              />
+              {isSuggestionOpen &&
+              searchInput.trim().length > 0 &&
+              searchSuggestions.length > 0 ? (
+                <div className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-md border border-ui-border-base bg-ui-bg-base shadow-card-rest">
+                  <ul className="max-h-64 overflow-y-auto py-1">
+                    {searchSuggestions.map((suggestion) => (
+                      <li key={suggestion.id}>
+                        <button
+                          type="button"
+                          className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left hover:bg-ui-bg-subtle"
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => handleSuggestionSelect(suggestion)}
+                        >
+                          <span className="min-w-0 flex-1 truncate text-sm text-ui-fg-base">
+                            {suggestion.title}
+                          </span>
+                          <span className="rounded-md border border-ui-border-base bg-ui-bg-subtle px-2 py-0.5 text-xs text-ui-fg-subtle">
+                            {suggestion.sku}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </div>
             <Button type="submit" variant="secondary">
               Kereses
             </Button>
@@ -718,11 +807,6 @@ const InventoryQuickPage = () => {
               </Button>
             ) : null}
           </form>
-          <datalist id="inventory-quick-suggestions">
-            {searchSuggestions.map((suggestion) => (
-              <option key={suggestion} value={suggestion} />
-            ))}
-          </datalist>
 
           <div className="flex items-center gap-2">
             <Text size="xsmall" className="text-ui-fg-subtle">
@@ -953,7 +1037,7 @@ const InventoryQuickPage = () => {
 }
 
 export const config = defineRouteConfig({
-  label: "Keszlet+",
+  label: "Készlet kezelő",
   nested: "/inventory",
 })
 
