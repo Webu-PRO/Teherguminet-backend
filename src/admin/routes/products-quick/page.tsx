@@ -8,7 +8,21 @@ import {
   type KeyboardEvent,
 } from "react"
 import { defineRouteConfig } from "@medusajs/admin-sdk"
+import {
+  EllipsisHorizontal,
+  MinusMini,
+  PencilSquare,
+  PlusMini,
+  Trash,
+} from "@medusajs/icons"
 import { Button, Input, Text, toast } from "@medusajs/ui"
+
+type InventoryLevel = {
+  id?: string
+  location_id?: string | null
+  stocked_quantity?: number | null
+  reserved_quantity?: number | null
+}
 
 type ProductCollection = {
   id: string
@@ -36,6 +50,7 @@ type InventoryItemSummary = {
   width?: number | null
   length?: number | null
   weight?: number | null
+  location_levels?: InventoryLevel[] | null
 }
 
 type ProductRow = {
@@ -78,6 +93,16 @@ type InventoryItemResponse = {
   message?: string
 }
 
+type StockLocation = {
+  id: string
+  name?: string | null
+}
+
+type StockLocationListResponse = {
+  stock_locations?: StockLocation[]
+  message?: string
+}
+
 const PAGE_SIZE_OPTIONS = [20, 50, 100] as const
 const PRODUCT_FIELDS =
   "id,title,status,collection_id,*collection,*categories,*variants"
@@ -98,6 +123,84 @@ const normalizeText = (value: unknown) => {
   }
 
   return value.trim()
+}
+
+const normalizeNumber = (value: unknown) => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) {
+      return parsed
+    }
+  }
+
+  return 0
+}
+
+const readLocationLevels = (item: InventoryItemSummary | null | undefined) => {
+  return Array.isArray(item?.location_levels) ? item.location_levels : []
+}
+
+const readLevelForLocation = (
+  item: InventoryItemSummary,
+  locationId: string
+) => {
+  const normalizedLocationId = normalizeText(locationId)
+  if (!normalizedLocationId) {
+    return null
+  }
+
+  const match = readLocationLevels(item).find((level) => {
+    return normalizeText(level.location_id) === normalizedLocationId
+  })
+
+  return match ?? null
+}
+
+const upsertLocationLevelStock = (
+  item: InventoryItemSummary,
+  locationId: string,
+  stockedQuantity: number
+) => {
+  const levels = readLocationLevels(item)
+  const normalizedLocationId = normalizeText(locationId)
+
+  if (!normalizedLocationId) {
+    return item
+  }
+
+  const levelExists = levels.some((level) => {
+    return normalizeText(level.location_id) === normalizedLocationId
+  })
+
+  const nextLevels = levelExists
+    ? levels.map((level) => {
+        if (normalizeText(level.location_id) !== normalizedLocationId) {
+          return level
+        }
+
+        return {
+          ...level,
+          location_id: normalizedLocationId,
+          stocked_quantity: stockedQuantity,
+        }
+      })
+    : [
+        ...levels,
+        {
+          location_id: normalizedLocationId,
+          stocked_quantity: stockedQuantity,
+          reserved_quantity: 0,
+        },
+      ]
+
+  return {
+    ...item,
+    location_levels: nextLevels,
+  }
 }
 
 const resolveStatusLabel = (status: unknown) => {
@@ -148,6 +251,10 @@ const ProductsQuickPage = () => {
     []
   )
   const [categories, setCategories] = useState<ProductCategory[]>([])
+  const [stockLocations, setStockLocations] = useState<StockLocation[]>(
+    []
+  )
+  const [defaultLocationId, setDefaultLocationId] = useState("")
   const [inventoryItemsBySku, setInventoryItemsBySku] = useState<
     Record<string, InventoryItemSummary>
   >({})
@@ -168,6 +275,10 @@ const ProductsQuickPage = () => {
   const [openActionsProductId, setOpenActionsProductId] = useState<
     string | null
   >(null)
+  const [editingStockProductId, setEditingStockProductId] = useState<
+    string | null
+  >(null)
+  const [editingStockValue, setEditingStockValue] = useState("")
 
   const filteredProducts = useMemo(() => {
     return products.filter((product) => {
@@ -241,6 +352,49 @@ const ProductsQuickPage = () => {
       return null
     },
     [resolveInventoryItemForProduct]
+  )
+
+  const resolveActiveLocationId = useCallback(
+    (inventoryItem: InventoryItemSummary | null) => {
+      if (!inventoryItem) {
+        return normalizeText(defaultLocationId)
+      }
+
+      const fromItem = normalizeText(
+        readLocationLevels(inventoryItem)[0]?.location_id
+      )
+      if (fromItem) {
+        return fromItem
+      }
+
+      return (
+        normalizeText(defaultLocationId) ||
+        normalizeText(stockLocations[0]?.id)
+      )
+    },
+    [defaultLocationId, stockLocations]
+  )
+
+  const resolveStockValue = useCallback(
+    (product: ProductRow): number | null => {
+      const inventoryItem = resolveInventoryItemForProduct(product)
+      if (!inventoryItem) {
+        return null
+      }
+
+      const activeLocationId = resolveActiveLocationId(inventoryItem)
+      if (activeLocationId) {
+        return normalizeNumber(
+          readLevelForLocation(inventoryItem, activeLocationId)
+            ?.stocked_quantity
+        )
+      }
+
+      return readLocationLevels(inventoryItem).reduce((sum, level) => {
+        return sum + normalizeNumber(level.stocked_quantity)
+      }, 0)
+    },
+    [resolveActiveLocationId, resolveInventoryItemForProduct]
   )
 
   const replaceProductRow = useCallback((nextProduct: ProductRow) => {
@@ -348,17 +502,21 @@ const ProductsQuickPage = () => {
     setLoadingLookups(true)
 
     try {
-      const [collectionsResponse, categoriesResponse] = await Promise.all([
-        fetch("/admin/collections?limit=250&fields=id,title", {
-          credentials: "include",
-        }),
-        fetch("/admin/product-categories?limit=250&fields=id,name", {
-          credentials: "include",
-        }),
-      ])
+      const [collectionsResponse, categoriesResponse, stockLocationsResponse] =
+        await Promise.all([
+          fetch("/admin/collections?limit=250&fields=id,title", {
+            credentials: "include",
+          }),
+          fetch("/admin/product-categories?limit=250&fields=id,name", {
+            credentials: "include",
+          }),
+          fetch("/admin/stock-locations?limit=200&fields=id,name", {
+            credentials: "include",
+          }),
+        ])
 
       let inventoryItemsResponse = await fetch(
-        "/admin/inventory-items?limit=500&fields=id,sku,height,width,length,weight",
+        "/admin/inventory-items?limit=500&fields=id,sku,height,width,length,weight,*location_levels",
         {
           credentials: "include",
         }
@@ -376,6 +534,9 @@ const ProductsQuickPage = () => {
       const categoriesPayload = (await categoriesResponse
         .json()
         .catch(() => ({}))) as CategoryListResponse
+      const stockLocationsPayload = (await stockLocationsResponse
+        .json()
+        .catch(() => ({}))) as StockLocationListResponse
       const inventoryItemsPayload = (await inventoryItemsResponse
         .json()
         .catch(() => ({}))) as InventoryItemListResponse
@@ -394,6 +555,19 @@ const ProductsQuickPage = () => {
             ? categoriesPayload.product_categories
             : []
         )
+      }
+
+      if (stockLocationsResponse.ok) {
+        const nextLocations = Array.isArray(stockLocationsPayload.stock_locations)
+          ? stockLocationsPayload.stock_locations
+          : []
+        setStockLocations(nextLocations)
+        setDefaultLocationId((current) => {
+          if (normalizeText(current)) {
+            return current
+          }
+          return nextLocations[0]?.id ?? ""
+        })
       }
 
       if (inventoryItemsResponse.ok) {
@@ -595,6 +769,279 @@ const ProductsQuickPage = () => {
     [fetchProductRow, replaceProductRow, updatingProductId]
   )
 
+  const loadInventoryItem = useCallback(async (itemId: string) => {
+    const params = new URLSearchParams()
+    params.set("fields", "id,sku,height,width,length,weight,*location_levels")
+
+    let response = await fetch(
+      `/admin/inventory-items/${encodeURIComponent(
+        itemId
+      )}?${params.toString()}`,
+      {
+        credentials: "include",
+      }
+    )
+
+    if (!response.ok) {
+      response = await fetch(
+        `/admin/inventory-items/${encodeURIComponent(itemId)}`,
+        {
+          credentials: "include",
+        }
+      )
+    }
+
+    const payload = (await response
+      .json()
+      .catch(() => ({}))) as InventoryItemResponse
+
+    if (!response.ok || !payload.inventory_item) {
+      throw new Error(payload.message || "Nem sikerült lekérni a készlet adatot.")
+    }
+
+    return payload.inventory_item
+  }, [])
+
+  const updateLevelBatch = useCallback(
+    async (
+      inventoryItemId: string,
+      globalBody: Record<string, unknown>,
+      itemBody: Record<string, unknown>
+    ) => {
+      let response = await fetch(
+        "/admin/inventory-items/location-levels/batch",
+        {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify(globalBody),
+        }
+      )
+
+      if (response.status === 404) {
+        response = await fetch(
+          `/admin/inventory-items/${encodeURIComponent(
+            inventoryItemId
+          )}/location-levels/batch`,
+          {
+            method: "POST",
+            credentials: "include",
+            headers: {
+              "content-type": "application/json",
+            },
+            body: JSON.stringify(itemBody),
+          }
+        )
+      }
+
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        const errorMessage =
+          typeof payload?.message === "string"
+            ? payload.message
+            : "Nem sikerült frissíteni a készletet."
+        throw new Error(errorMessage)
+      }
+    },
+    []
+  )
+
+  const updateStockForProduct = useCallback(
+    async (
+      product: ProductRow,
+      resolveNextStock: (currentStock: number) => number
+    ) => {
+      if (updatingProductId) {
+        return
+      }
+
+      const mappedInventoryItem = resolveInventoryItemForProduct(product)
+      if (!mappedInventoryItem) {
+        toast.error("Készlet frissítése", {
+          description: "Ehhez a termékhez nincs kapcsolt készlet elem.",
+        })
+        return
+      }
+
+      setUpdatingProductId(product.id)
+      const skuKey = normalizeText(mappedInventoryItem.sku).toLowerCase()
+      const previousSnapshot = mappedInventoryItem
+
+      try {
+        const enrichedItem = readLocationLevels(mappedInventoryItem).length
+          ? mappedInventoryItem
+          : await loadInventoryItem(mappedInventoryItem.id)
+
+        const activeLocationId = resolveActiveLocationId(enrichedItem)
+        if (!activeLocationId) {
+          throw new Error(
+            "Nincs elérhető raktárhely. Hozz létre legalább egyet."
+          )
+        }
+
+        const currentLevel = readLevelForLocation(enrichedItem, activeLocationId)
+        const currentStock = normalizeNumber(currentLevel?.stocked_quantity)
+        const nextStock = Math.max(
+          0,
+          Math.trunc(resolveNextStock(currentStock))
+        )
+
+        if (nextStock === currentStock) {
+          return
+        }
+
+        const optimisticItem = upsertLocationLevelStock(
+          enrichedItem,
+          activeLocationId,
+          nextStock
+        )
+
+        if (skuKey) {
+          setInventoryItemsBySku((currentMap) => {
+            return {
+              ...currentMap,
+              [skuKey]: optimisticItem,
+            }
+          })
+        }
+
+        const globalBody = currentLevel
+          ? {
+              update: [
+                {
+                  inventory_item_id: enrichedItem.id,
+                  location_id: activeLocationId,
+                  stocked_quantity: nextStock,
+                },
+              ],
+            }
+          : {
+              create: [
+                {
+                  inventory_item_id: enrichedItem.id,
+                  location_id: activeLocationId,
+                  stocked_quantity: nextStock,
+                },
+              ],
+            }
+
+        const itemBody = currentLevel
+          ? {
+              update: [
+                {
+                  location_id: activeLocationId,
+                  stocked_quantity: nextStock,
+                },
+              ],
+            }
+          : {
+              create: [
+                {
+                  location_id: activeLocationId,
+                  stocked_quantity: nextStock,
+                },
+              ],
+            }
+
+        await updateLevelBatch(enrichedItem.id, globalBody, itemBody)
+      } catch (error) {
+        if (skuKey) {
+          setInventoryItemsBySku((currentMap) => {
+            return {
+              ...currentMap,
+              [skuKey]: previousSnapshot,
+            }
+          })
+        }
+
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Nem sikerült frissíteni a készletet."
+        toast.error("Készlet frissítése", {
+          description: message,
+        })
+      } finally {
+        setUpdatingProductId(null)
+      }
+    },
+    [
+      loadInventoryItem,
+      resolveActiveLocationId,
+      resolveInventoryItemForProduct,
+      updateLevelBatch,
+      updatingProductId,
+    ]
+  )
+
+  const handleAdjustStock = useCallback(
+    async (product: ProductRow, delta: number) => {
+      if (delta === 0) {
+        return
+      }
+
+      setEditingStockProductId(null)
+      setEditingStockValue("")
+      await updateStockForProduct(product, (currentStock) => {
+        return currentStock + delta
+      })
+    },
+    [updateStockForProduct]
+  )
+
+  const beginEditStock = useCallback(
+    (productId: string, currentStock: number) => {
+      setOpenActionsProductId(null)
+      setEditingCell(null)
+      setEditingValue("")
+      setEditingStockProductId(productId)
+      setEditingStockValue(String(Math.max(0, Math.trunc(currentStock))))
+    },
+    []
+  )
+
+  const cancelEditStock = useCallback(() => {
+    setEditingStockProductId(null)
+    setEditingStockValue("")
+  }, [])
+
+  const commitEditStock = useCallback(
+    async (product: ProductRow) => {
+      if (editingStockProductId !== product.id) {
+        return
+      }
+
+      const parsedValue = Number(editingStockValue)
+      if (!Number.isFinite(parsedValue)) {
+        toast.error("Készlet frissítése", {
+          description: "Adj meg egy ervenyes darabszamot.",
+        })
+        return
+      }
+
+      cancelEditStock()
+      await updateStockForProduct(product, () => parsedValue)
+    },
+    [cancelEditStock, editingStockProductId, editingStockValue, updateStockForProduct]
+  )
+
+  const handleStockInputKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLInputElement>, product: ProductRow) => {
+      if (event.key === "Enter") {
+        event.preventDefault()
+        void commitEditStock(product)
+      }
+
+      if (event.key === "Escape") {
+        event.preventDefault()
+        cancelEditStock()
+      }
+    },
+    [cancelEditStock, commitEditStock]
+  )
+
   const deleteProduct = useCallback(
     async (product: ProductRow) => {
       if (updatingProductId) {
@@ -668,6 +1115,8 @@ const ProductsQuickPage = () => {
 
   const beginEditCell = useCallback(
     (product: ProductRow, field: EditableField) => {
+      setEditingStockProductId(null)
+      setEditingStockValue("")
       setEditingCell({
         productId: product.id,
         field,
@@ -880,19 +1329,20 @@ const ProductsQuickPage = () => {
                 <th className="py-3 pr-4 font-normal">Szélesség</th>
                 <th className="py-3 pr-4 font-normal">Hossz</th>
                 <th className="py-3 pr-4 font-normal">Súly</th>
+                <th className="py-3 pr-4 font-normal">Készlet</th>
                 <th className="py-3 pr-0 text-right font-normal">Műveletek</th>
               </tr>
             </thead>
             <tbody>
               {loadingProducts ? (
                 <tr>
-                  <td colSpan={9} className="py-6 text-ui-fg-subtle">
+                  <td colSpan={10} className="py-6 text-ui-fg-subtle">
                     Betöltés...
                   </td>
                 </tr>
               ) : filteredProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-6 text-ui-fg-subtle">
+                  <td colSpan={10} className="py-6 text-ui-fg-subtle">
                     Nincs találat.
                   </td>
                 </tr>
@@ -906,6 +1356,8 @@ const ProductsQuickPage = () => {
                   const widthValue = resolveDimensionValue(product, "width")
                   const lengthValue = resolveDimensionValue(product, "length")
                   const weightValue = resolveDimensionValue(product, "weight")
+                  const stockValue = resolveStockValue(product)
+                  const isEditingStock = editingStockProductId === product.id
                   const canEditDimensions = Boolean(variant || inventoryItem)
 
                   const renderEditableCell = (
@@ -919,6 +1371,7 @@ const ProductsQuickPage = () => {
                     if (isEditing) {
                       const inputType =
                         field === "title" ? "text" : "number"
+                      const isTitleField = field === "title"
 
                       return (
                         <input
@@ -933,16 +1386,25 @@ const ProductsQuickPage = () => {
                           onKeyDown={(
                             event: KeyboardEvent<HTMLInputElement>
                           ) => handleEditInputKeyDown(event, product)}
-                          className="h-8 w-28 rounded-md border border-ui-border-base bg-ui-bg-field px-2 text-sm"
+                          className={
+                            isTitleField
+                              ? "h-8 w-full min-w-[20rem] rounded-md border border-ui-border-base bg-ui-bg-field px-2 text-sm"
+                              : "h-8 w-20 rounded-md border border-ui-border-base bg-ui-bg-field px-2 text-sm"
+                          }
                           autoFocus
                         />
                       )
                     }
 
+                    const isTitleField = field === "title"
                     return (
                       <button
                         type="button"
-                        className="rounded-md border border-ui-border-base px-2 py-1 text-left text-sm hover:bg-ui-bg-subtle"
+                        className={
+                          isTitleField
+                            ? "w-full min-w-[20rem] rounded-md border border-ui-border-base px-2 py-1 text-left text-sm hover:bg-ui-bg-subtle"
+                            : "min-w-16 rounded-md border border-ui-border-base px-2 py-1 text-left text-sm hover:bg-ui-bg-subtle"
+                        }
                         disabled={Boolean(updatingProductId)}
                         onClick={() => beginEditCell(product, field)}
                       >
@@ -956,7 +1418,7 @@ const ProductsQuickPage = () => {
                       key={product.id}
                       className="border-b border-ui-border-base/60"
                     >
-                      <td className="py-3 pr-4">
+                      <td className="py-3 pr-4 min-w-[20rem]">
                         {renderEditableCell(
                           "title",
                           normalizeText(product.title) || "-"
@@ -1069,6 +1531,64 @@ const ProductsQuickPage = () => {
                             )
                           : "-"}
                       </td>
+                      <td className="py-3 pr-4">
+                        {inventoryItem ? (
+                          <div className="inline-flex items-center gap-1 rounded-md border border-ui-border-base bg-ui-bg-field px-1 py-1">
+                            <button
+                              type="button"
+                              className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-ui-bg-subtle disabled:opacity-50"
+                              disabled={rowUpdating}
+                              onClick={() => {
+                                void handleAdjustStock(product, -1)
+                              }}
+                              aria-label="Készlet csökkentése"
+                            >
+                              <MinusMini className="h-4 w-4" />
+                            </button>
+                            {isEditingStock ? (
+                              <input
+                                type="number"
+                                value={editingStockValue}
+                                onChange={(
+                                  event: ChangeEvent<HTMLInputElement>
+                                ) => setEditingStockValue(event.target.value)}
+                                onBlur={() => {
+                                  void commitEditStock(product)
+                                }}
+                                onKeyDown={(
+                                  event: KeyboardEvent<HTMLInputElement>
+                                ) => handleStockInputKeyDown(event, product)}
+                                className="h-7 w-16 rounded-md border border-ui-border-base bg-ui-bg-base px-2 text-center text-sm"
+                                autoFocus
+                              />
+                            ) : (
+                              <button
+                                type="button"
+                                className="h-7 min-w-14 rounded-md px-2 text-center text-sm hover:bg-ui-bg-subtle"
+                                disabled={rowUpdating}
+                                onClick={() => {
+                                  beginEditStock(product.id, stockValue ?? 0)
+                                }}
+                              >
+                                {String(stockValue ?? 0)}
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-ui-bg-subtle disabled:opacity-50"
+                              disabled={rowUpdating}
+                              onClick={() => {
+                                void handleAdjustStock(product, 1)
+                              }}
+                              aria-label="Készlet növelése"
+                            >
+                              <PlusMini className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          "-"
+                        )}
+                      </td>
                       <td className="py-3 pr-0 text-right">
                         <div
                           className="relative inline-flex"
@@ -1076,35 +1596,38 @@ const ProductsQuickPage = () => {
                         >
                           <button
                             type="button"
-                            className="h-8 rounded-md border border-ui-border-base px-3 text-sm hover:bg-ui-bg-subtle"
+                            className="flex h-8 w-8 items-center justify-center rounded-md border border-ui-border-base text-sm hover:bg-ui-bg-subtle"
                             disabled={Boolean(updatingProductId)}
                             onClick={() => {
                               setOpenActionsProductId((current) => {
                                 return current === product.id ? null : product.id
                               })
                             }}
+                            aria-label="Műveletek"
                           >
-                            ...
+                            <EllipsisHorizontal className="h-4 w-4" />
                           </button>
                           {openActionsProductId === product.id ? (
                             <div className="absolute right-0 top-9 z-10 min-w-36 overflow-hidden rounded-md border border-ui-border-base bg-ui-bg-component shadow-elevation-card-rest">
                               <button
                                 type="button"
-                                className="block w-full px-3 py-2 text-left text-sm hover:bg-ui-bg-subtle"
+                                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-ui-bg-subtle"
                                 onClick={() => {
                                   beginEditCell(product, "title")
                                 }}
                               >
+                                <PencilSquare className="h-4 w-4" />
                                 Szerkesztés
                               </button>
                               <button
                                 type="button"
-                                className="block w-full px-3 py-2 text-left text-sm text-ui-fg-error hover:bg-ui-bg-subtle"
+                                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-ui-fg-error hover:bg-ui-bg-subtle"
                                 onClick={() => {
                                   setOpenActionsProductId(null)
                                   void deleteProduct(product)
                                 }}
                               >
+                                <Trash className="h-4 w-4" />
                                 Törlés
                               </button>
                             </div>
