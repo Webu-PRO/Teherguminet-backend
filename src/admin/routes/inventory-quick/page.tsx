@@ -221,7 +221,12 @@ const InventoryQuickPage = () => {
   >(null)
   const [editingStockValue, setEditingStockValue] = useState("")
   const [isSuggestionOpen, setIsSuggestionOpen] = useState(false)
+  const [activeSuggestionIndex, setActiveSuggestionIndex] =
+    useState(-1)
   const suggestionCloseTimeoutRef = useRef<number | null>(null)
+  const suggestionItemRefs = useRef<Array<HTMLButtonElement | null>>(
+    []
+  )
 
   const totalPages = useMemo(() => {
     if (count <= 0) {
@@ -711,16 +716,84 @@ const InventoryQuickPage = () => {
     clearSuggestionCloseTimeout()
     suggestionCloseTimeoutRef.current = window.setTimeout(() => {
       setIsSuggestionOpen(false)
+      setActiveSuggestionIndex(-1)
       suggestionCloseTimeoutRef.current = null
     }, 120)
   }, [clearSuggestionCloseTimeout])
 
   const handleSuggestionSelect = useCallback(
     (suggestion: SearchSuggestion) => {
-      setSearchInput(suggestion.sku !== "-" ? suggestion.sku : suggestion.title)
+      setSearchInput(
+        suggestion.sku !== "-" ? suggestion.sku : suggestion.title
+      )
       setIsSuggestionOpen(false)
+      setActiveSuggestionIndex(-1)
     },
     []
+  )
+
+  const handleSearchInputKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLInputElement>) => {
+      if (event.key === "ArrowDown") {
+        if (!searchSuggestions.length) {
+          return
+        }
+
+        event.preventDefault()
+        setIsSuggestionOpen(true)
+        setActiveSuggestionIndex((current: number) => {
+          if (current < 0) {
+            return 0
+          }
+
+          return Math.min(current + 1, searchSuggestions.length - 1)
+        })
+        return
+      }
+
+      if (event.key === "ArrowUp") {
+        if (!searchSuggestions.length) {
+          return
+        }
+
+        event.preventDefault()
+        setIsSuggestionOpen(true)
+        setActiveSuggestionIndex((current: number) => {
+          if (current <= 0) {
+            return 0
+          }
+
+          return current - 1
+        })
+        return
+      }
+
+      if (event.key === "Enter") {
+        if (
+          isSuggestionOpen &&
+          activeSuggestionIndex >= 0 &&
+          activeSuggestionIndex < searchSuggestions.length
+        ) {
+          event.preventDefault()
+          handleSuggestionSelect(
+            searchSuggestions[activeSuggestionIndex] as SearchSuggestion
+          )
+        }
+        return
+      }
+
+      if (event.key === "Escape" && isSuggestionOpen) {
+        event.preventDefault()
+        setIsSuggestionOpen(false)
+        setActiveSuggestionIndex(-1)
+      }
+    },
+    [
+      activeSuggestionIndex,
+      handleSuggestionSelect,
+      isSuggestionOpen,
+      searchSuggestions,
+    ]
   )
 
   useEffect(() => {
@@ -730,6 +803,36 @@ const InventoryQuickPage = () => {
   useEffect(() => {
     void loadInventoryItems()
   }, [loadInventoryItems])
+
+  useEffect(() => {
+    if (!searchSuggestions.length) {
+      setActiveSuggestionIndex(-1)
+      return
+    }
+
+    setActiveSuggestionIndex((current: number) => {
+      if (current < searchSuggestions.length) {
+        return current
+      }
+
+      return searchSuggestions.length - 1
+    })
+  }, [searchSuggestions])
+
+  useEffect(() => {
+    if (activeSuggestionIndex < 0) {
+      return
+    }
+
+    const activeItem = suggestionItemRefs.current[activeSuggestionIndex]
+    if (!activeItem) {
+      return
+    }
+
+    activeItem.scrollIntoView({
+      block: "nearest",
+    })
+  }, [activeSuggestionIndex])
 
   useEffect(() => {
     return () => {
@@ -763,9 +866,16 @@ const InventoryQuickPage = () => {
                 value={searchInput}
                 onChange={(
                   event: ChangeEvent<HTMLInputElement>
-                ) => setSearchInput(event.target.value)}
-                onFocus={() => openSuggestions()}
+                ) => {
+                  setSearchInput(event.target.value)
+                  openSuggestions()
+                  setActiveSuggestionIndex(-1)
+                }}
+                onFocus={() => {
+                  openSuggestions()
+                }}
                 onBlur={() => scheduleCloseSuggestions()}
+                onKeyDown={handleSearchInputKeyDown}
                 placeholder="Keresés cím vagy SKU alapján"
               />
               {isSuggestionOpen &&
@@ -773,12 +883,22 @@ const InventoryQuickPage = () => {
               searchSuggestions.length > 0 ? (
                 <div className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-md border border-ui-border-base bg-ui-bg-base shadow-card-rest">
                   <ul className="max-h-64 overflow-y-auto py-1">
-                    {searchSuggestions.map((suggestion) => (
+                    {searchSuggestions.map((suggestion, index) => (
                       <li key={suggestion.id}>
                         <button
                           type="button"
-                          className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left hover:bg-ui-bg-subtle"
+                          ref={(element) => {
+                            suggestionItemRefs.current[index] = element
+                          }}
+                          className={`flex w-full items-center justify-between gap-3 px-3 py-2 text-left hover:bg-ui-bg-subtle ${
+                            activeSuggestionIndex === index
+                              ? "bg-ui-bg-subtle"
+                              : ""
+                          }`}
                           onMouseDown={(event) => event.preventDefault()}
+                          onMouseEnter={() =>
+                            setActiveSuggestionIndex(index)
+                          }
                           onClick={() => handleSuggestionSelect(suggestion)}
                         >
                           <span className="min-w-0 flex-1 truncate text-sm text-ui-fg-base">
@@ -795,7 +915,7 @@ const InventoryQuickPage = () => {
               ) : null}
             </div>
             <Button type="submit" variant="secondary">
-              Kereses
+              Keresés
             </Button>
             {searchInput.trim().length > 0 ? (
               <Button
@@ -803,14 +923,14 @@ const InventoryQuickPage = () => {
                 variant="transparent"
                 onClick={() => setSearchInput("")}
               >
-                Torles
+                Törlés
               </Button>
             ) : null}
           </form>
 
           <div className="flex items-center gap-2">
             <Text size="xsmall" className="text-ui-fg-subtle">
-              Raktarhely
+              Raktárhely
             </Text>
             <select
               value={selectedLocationId}
@@ -821,7 +941,7 @@ const InventoryQuickPage = () => {
               disabled={loadingLocations || locations.length === 0}
             >
               {locations.length === 0 ? (
-                <option value="">Nincs raktarhely</option>
+                <option value="">Nincs raktárhely</option>
               ) : (
                 locations.map((location) => (
                   <option key={location.id} value={location.id}>
@@ -863,10 +983,10 @@ const InventoryQuickPage = () => {
           <table className="min-w-full text-sm">
             <thead>
               <tr className="border-b border-ui-border-base text-left text-ui-fg-subtle">
-                <th className="py-3 pr-4 font-normal">Cim</th>
+                <th className="py-3 pr-4 font-normal">Cím</th>
                 <th className="py-3 pr-4 font-normal">SKU</th>
                 <th className="py-3 pr-4 font-normal">Foglalt</th>
-                <th className="py-3 pr-4 font-normal">Keszleten</th>
+                <th className="py-3 pr-4 font-normal">Készleten</th>
               </tr>
             </thead>
             <tbody>
@@ -876,7 +996,7 @@ const InventoryQuickPage = () => {
                     colSpan={4}
                     className="py-6 text-ui-fg-subtle"
                   >
-                    Betoltes...
+                    Betöltés...
                   </td>
                 </tr>
               ) : filteredItems.length === 0 ? (
@@ -885,7 +1005,7 @@ const InventoryQuickPage = () => {
                     colSpan={4}
                     className="py-6 text-ui-fg-subtle"
                   >
-                    Nincs talalat.
+                    Nincs találat.
                   </td>
                 </tr>
               ) : (
@@ -996,7 +1116,7 @@ const InventoryQuickPage = () => {
         <div className="mt-4 flex items-center justify-between">
           <Text size="xsmall" className="text-ui-fg-subtle">
             {searchInput.trim().length > 0
-              ? `${filteredItems.length} talalat ezen az oldalon`
+              ? `${filteredItems.length} találat ezen az oldalon`
               : count > 0
                 ? `${offset + 1}-${Math.min(offset + items.length, count)} / ${count}`
                 : "0 / 0"}
@@ -1013,7 +1133,7 @@ const InventoryQuickPage = () => {
                 )
               }}
             >
-              Elozo
+              Előző
             </Button>
             <Text size="xsmall" className="text-ui-fg-subtle">
               Oldal {currentPage} / {totalPages}
@@ -1027,7 +1147,7 @@ const InventoryQuickPage = () => {
                 setOffset((current: number) => current + limit)
               }}
             >
-              Kovetkezo
+              Következő
             </Button>
           </div>
         </div>
