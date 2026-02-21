@@ -29,6 +29,15 @@ type ProductVariant = {
   weight?: number | null
 }
 
+type InventoryItemSummary = {
+  id: string
+  sku?: string | null
+  height?: number | null
+  width?: number | null
+  length?: number | null
+  weight?: number | null
+}
+
 type ProductRow = {
   id: string
   title?: string | null
@@ -59,11 +68,22 @@ type CategoryListResponse = {
   message?: string
 }
 
+type InventoryItemListResponse = {
+  inventory_items?: InventoryItemSummary[]
+  message?: string
+}
+
+type InventoryItemResponse = {
+  inventory_item?: InventoryItemSummary
+  message?: string
+}
+
 const PAGE_SIZE_OPTIONS = [20, 50, 100] as const
 const PRODUCT_FIELDS =
   "id,title,status,collection_id,*collection,*categories,*variants"
 
 type EditableField = "title" | "height" | "width" | "length" | "weight"
+type DimensionField = Exclude<EditableField, "title">
 
 const STATUS_OPTIONS = [
   { value: "published", label: "Közzétéve" },
@@ -78,21 +98,6 @@ const normalizeText = (value: unknown) => {
   }
 
   return value.trim()
-}
-
-const normalizeNumber = (value: unknown) => {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value
-  }
-
-  if (typeof value === "string") {
-    const parsed = Number(value)
-    if (Number.isFinite(parsed)) {
-      return parsed
-    }
-  }
-
-  return 0
 }
 
 const resolveStatusLabel = (status: unknown) => {
@@ -115,28 +120,6 @@ const resolvePrimaryVariant = (product: ProductRow) => {
     return null
   }
   return product.variants[0] ?? null
-}
-
-const getEditableCellValue = (product: ProductRow, field: EditableField) => {
-  if (field === "title") {
-    return normalizeText(product.title)
-  }
-
-  const variant = resolvePrimaryVariant(product)
-  if (!variant) {
-    return ""
-  }
-
-  if (field === "height") {
-    return String(normalizeNumber(variant.height))
-  }
-  if (field === "width") {
-    return String(normalizeNumber(variant.width))
-  }
-  if (field === "length") {
-    return String(normalizeNumber(variant.length))
-  }
-  return String(normalizeNumber(variant.weight))
 }
 
 const matchesSearch = (product: ProductRow, query: string) => {
@@ -165,6 +148,9 @@ const ProductsQuickPage = () => {
     []
   )
   const [categories, setCategories] = useState<ProductCategory[]>([])
+  const [inventoryItemsBySku, setInventoryItemsBySku] = useState<
+    Record<string, InventoryItemSummary>
+  >({})
   const [searchInput, setSearchInput] = useState("")
   const [limit, setLimit] = useState(50)
   const [offset, setOffset] = useState(0)
@@ -179,6 +165,9 @@ const ProductsQuickPage = () => {
     field: EditableField
   } | null>(null)
   const [editingValue, setEditingValue] = useState("")
+  const [openActionsProductId, setOpenActionsProductId] = useState<
+    string | null
+  >(null)
 
   const filteredProducts = useMemo(() => {
     return products.filter((product) => {
@@ -201,6 +190,58 @@ const ProductsQuickPage = () => {
 
     return Math.floor(offset / limit) + 1
   }, [count, limit, offset])
+
+  const resolveInventoryItemForProduct = useCallback(
+    (product: ProductRow) => {
+      const variant = resolvePrimaryVariant(product)
+      const sku = normalizeText(variant?.sku).toLowerCase()
+      if (!sku) {
+        return null
+      }
+
+      return inventoryItemsBySku[sku] ?? null
+    },
+    [inventoryItemsBySku]
+  )
+
+  const resolveDimensionValue = useCallback(
+    (product: ProductRow, field: DimensionField): number | null => {
+      const variant = resolvePrimaryVariant(product)
+      const variantValue = variant?.[field]
+      const inventoryItem = resolveInventoryItemForProduct(product)
+      const inventoryValue = inventoryItem?.[field]
+
+      if (
+        typeof inventoryValue === "number" &&
+        Number.isFinite(inventoryValue) &&
+        inventoryValue !== 0
+      ) {
+        return inventoryValue
+      }
+
+      if (
+        typeof variantValue === "number" &&
+        Number.isFinite(variantValue) &&
+        variantValue !== 0
+      ) {
+        return variantValue
+      }
+
+      if (
+        typeof inventoryValue === "number" &&
+        Number.isFinite(inventoryValue)
+      ) {
+        return inventoryValue
+      }
+
+      if (typeof variantValue === "number" && Number.isFinite(variantValue)) {
+        return variantValue
+      }
+
+      return null
+    },
+    [resolveInventoryItemForProduct]
+  )
 
   const replaceProductRow = useCallback((nextProduct: ProductRow) => {
     setProducts((currentRows) => {
@@ -307,16 +348,27 @@ const ProductsQuickPage = () => {
     setLoadingLookups(true)
 
     try {
-      const [collectionsResponse, categoriesResponse] = await Promise.all(
-        [
-          fetch("/admin/collections?limit=250&fields=id,title", {
-            credentials: "include",
-          }),
-          fetch("/admin/product-categories?limit=250&fields=id,name", {
-            credentials: "include",
-          }),
-        ]
+      const [collectionsResponse, categoriesResponse] = await Promise.all([
+        fetch("/admin/collections?limit=250&fields=id,title", {
+          credentials: "include",
+        }),
+        fetch("/admin/product-categories?limit=250&fields=id,name", {
+          credentials: "include",
+        }),
+      ])
+
+      let inventoryItemsResponse = await fetch(
+        "/admin/inventory-items?limit=500&fields=id,sku,height,width,length,weight",
+        {
+          credentials: "include",
+        }
       )
+
+      if (!inventoryItemsResponse.ok) {
+        inventoryItemsResponse = await fetch("/admin/inventory-items?limit=500", {
+          credentials: "include",
+        })
+      }
 
       const collectionsPayload = (await collectionsResponse
         .json()
@@ -324,6 +376,9 @@ const ProductsQuickPage = () => {
       const categoriesPayload = (await categoriesResponse
         .json()
         .catch(() => ({}))) as CategoryListResponse
+      const inventoryItemsPayload = (await inventoryItemsResponse
+        .json()
+        .catch(() => ({}))) as InventoryItemListResponse
 
       if (collectionsResponse.ok) {
         setCollections(
@@ -339,6 +394,23 @@ const ProductsQuickPage = () => {
             ? categoriesPayload.product_categories
             : []
         )
+      }
+
+      if (inventoryItemsResponse.ok) {
+        const nextBySku: Record<string, InventoryItemSummary> = {}
+        const items = Array.isArray(inventoryItemsPayload.inventory_items)
+          ? inventoryItemsPayload.inventory_items
+          : []
+
+        for (const item of items) {
+          const key = normalizeText(item.sku).toLowerCase()
+          if (!key || nextBySku[key]) {
+            continue
+          }
+          nextBySku[key] = item
+        }
+
+        setInventoryItemsBySku(nextBySku)
       }
     } catch {
       // Keep page usable even if lookups fail.
@@ -399,7 +471,7 @@ const ProductsQuickPage = () => {
     async (
       product: ProductRow,
       variantId: string,
-      field: Extract<EditableField, "height" | "width" | "length" | "weight">,
+      field: DimensionField,
       value: number | null
     ) => {
       if (updatingProductId) {
@@ -451,6 +523,149 @@ const ProductsQuickPage = () => {
     [fetchProductRow, replaceProductRow, updatingProductId]
   )
 
+  const updateInventoryItemDimensions = useCallback(
+    async (
+      product: ProductRow,
+      inventoryItem: InventoryItemSummary,
+      field: DimensionField,
+      value: number | null
+    ) => {
+      if (updatingProductId) {
+        return
+      }
+
+      setUpdatingProductId(product.id)
+
+      try {
+        const response = await fetch(
+          `/admin/inventory-items/${encodeURIComponent(inventoryItem.id)}`,
+          {
+            method: "POST",
+            credentials: "include",
+            headers: {
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              [field]: value,
+            }),
+          }
+        )
+
+        const payload = (await response
+          .json()
+          .catch(() => ({}))) as InventoryItemResponse
+
+        if (!response.ok) {
+          throw new Error(
+            payload.message || "Nem sikerült frissíteni a méret adatot."
+          )
+        }
+
+        const nextInventoryItem = payload.inventory_item ?? {
+          ...inventoryItem,
+          [field]: value,
+        }
+        const skuKey = normalizeText(
+          nextInventoryItem.sku || inventoryItem.sku
+        ).toLowerCase()
+
+        if (skuKey) {
+          setInventoryItemsBySku((currentMap) => {
+            return {
+              ...currentMap,
+              [skuKey]: nextInventoryItem,
+            }
+          })
+        }
+
+        const freshProduct = await fetchProductRow(product.id)
+        replaceProductRow(freshProduct)
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Nem sikerült frissíteni a méret adatot."
+        toast.error("Méretek frissítése", {
+          description: message,
+        })
+      } finally {
+        setUpdatingProductId(null)
+      }
+    },
+    [fetchProductRow, replaceProductRow, updatingProductId]
+  )
+
+  const deleteProduct = useCallback(
+    async (product: ProductRow) => {
+      if (updatingProductId) {
+        return
+      }
+
+      const confirmed = window.confirm(
+        `Biztosan törlöd ezt a terméket?\n${normalizeText(product.title) || product.id}`
+      )
+
+      if (!confirmed) {
+        return
+      }
+
+      setUpdatingProductId(product.id)
+
+      try {
+        const response = await fetch(
+          `/admin/products/${encodeURIComponent(product.id)}`,
+          {
+            method: "DELETE",
+            credentials: "include",
+          }
+        )
+
+        const payload = (await response
+          .json()
+          .catch(() => ({}))) as { message?: string }
+
+        if (!response.ok) {
+          throw new Error(payload.message || "Nem sikerült törölni a terméket.")
+        }
+
+        setProducts((currentRows) => {
+          return currentRows.filter((row) => row.id !== product.id)
+        })
+        setCount((currentCount) => Math.max(0, currentCount - 1))
+        setOpenActionsProductId((current) => {
+          return current === product.id ? null : current
+        })
+
+        toast.success("Termék", {
+          description: "A termék törlése sikeres.",
+        })
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Nem sikerült törölni a terméket."
+        toast.error("Termék törlése", {
+          description: message,
+        })
+      } finally {
+        setUpdatingProductId(null)
+      }
+    },
+    [updatingProductId]
+  )
+
+  const getEditableCellValue = useCallback(
+    (product: ProductRow, field: EditableField) => {
+      if (field === "title") {
+        return normalizeText(product.title)
+      }
+
+      const dimensionValue = resolveDimensionValue(product, field)
+      return dimensionValue === null ? "" : String(dimensionValue)
+    },
+    [resolveDimensionValue]
+  )
+
   const beginEditCell = useCallback(
     (product: ProductRow, field: EditableField) => {
       setEditingCell({
@@ -458,8 +673,9 @@ const ProductsQuickPage = () => {
         field,
       })
       setEditingValue(getEditableCellValue(product, field))
+      setOpenActionsProductId(null)
     },
-    []
+    [getEditableCellValue]
   )
 
   const cancelEditCell = useCallback(() => {
@@ -486,36 +702,57 @@ const ProductsQuickPage = () => {
         return
       }
 
-      const variant = resolvePrimaryVariant(product)
-      if (!variant) {
-        return
-      }
+      const nextValue = normalizeText(value)
+        ? (() => {
+            const parsed = Number(value)
+            if (!Number.isFinite(parsed)) {
+              return Number.NaN
+            }
+            return Math.trunc(parsed)
+          })()
+        : null
 
-      if (!value) {
-        await updateVariantDimensions(product, variant.id, field, null)
-        return
-      }
-
-      const parsed = Number(value)
-      if (!Number.isFinite(parsed)) {
+      if (typeof nextValue === "number" && !Number.isFinite(nextValue)) {
         toast.error("Méretek frissítése", {
           description: "Adj meg egy érvényes számot.",
         })
         return
       }
 
-      await updateVariantDimensions(
-        product,
-        variant.id,
-        field,
-        Math.trunc(parsed)
-      )
+      const currentValue = resolveDimensionValue(product, field)
+      if (nextValue === currentValue) {
+        return
+      }
+
+      const inventoryItem = resolveInventoryItemForProduct(product)
+      if (inventoryItem) {
+        await updateInventoryItemDimensions(
+          product,
+          inventoryItem,
+          field,
+          nextValue
+        )
+        return
+      }
+
+      const variant = resolvePrimaryVariant(product)
+      if (!variant) {
+        toast.error("Méretek frissítése", {
+          description: "Ehhez a termékhez nincs variáns.",
+        })
+        return
+      }
+
+      await updateVariantDimensions(product, variant.id, field, nextValue)
     },
     [
       cancelEditCell,
       editingCell,
       editingValue,
+      resolveDimensionValue,
+      resolveInventoryItemForProduct,
       updateProduct,
+      updateInventoryItemDimensions,
       updateVariantDimensions,
     ]
   )
@@ -542,6 +779,25 @@ const ProductsQuickPage = () => {
   useEffect(() => {
     void loadLookups()
   }, [loadLookups])
+
+  useEffect(() => {
+    if (!openActionsProductId) {
+      return
+    }
+
+    const handleDocumentMouseDown = (event: MouseEvent) => {
+      const target = event.target as Element | null
+      if (target?.closest("[data-product-row-actions]")) {
+        return
+      }
+      setOpenActionsProductId(null)
+    }
+
+    document.addEventListener("mousedown", handleDocumentMouseDown)
+    return () => {
+      document.removeEventListener("mousedown", handleDocumentMouseDown)
+    }
+  }, [openActionsProductId])
 
   return (
     <div className="flex flex-col gap-y-4">
@@ -624,26 +880,33 @@ const ProductsQuickPage = () => {
                 <th className="py-3 pr-4 font-normal">Szélesség</th>
                 <th className="py-3 pr-4 font-normal">Hossz</th>
                 <th className="py-3 pr-4 font-normal">Súly</th>
+                <th className="py-3 pr-0 text-right font-normal">Műveletek</th>
               </tr>
             </thead>
             <tbody>
               {loadingProducts ? (
                 <tr>
-                  <td colSpan={8} className="py-6 text-ui-fg-subtle">
+                  <td colSpan={9} className="py-6 text-ui-fg-subtle">
                     Betöltés...
                   </td>
                 </tr>
               ) : filteredProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-6 text-ui-fg-subtle">
+                  <td colSpan={9} className="py-6 text-ui-fg-subtle">
                     Nincs találat.
                   </td>
                 </tr>
               ) : (
                 filteredProducts.map((product) => {
                   const variant = resolvePrimaryVariant(product)
+                  const inventoryItem = resolveInventoryItemForProduct(product)
                   const rowUpdating = updatingProductId === product.id
                   const primaryCategory = resolvePrimaryCategory(product)
+                  const heightValue = resolveDimensionValue(product, "height")
+                  const widthValue = resolveDimensionValue(product, "width")
+                  const lengthValue = resolveDimensionValue(product, "length")
+                  const weightValue = resolveDimensionValue(product, "weight")
+                  const canEditDimensions = Boolean(variant || inventoryItem)
 
                   const renderEditableCell = (
                     field: EditableField,
@@ -775,36 +1038,78 @@ const ProductsQuickPage = () => {
                         </Text>
                       </td>
                       <td className="py-3 pr-4">
-                        {variant
+                        {canEditDimensions
                           ? renderEditableCell(
                               "height",
-                              String(normalizeNumber(variant.height))
+                              heightValue === null ? "-" : String(heightValue)
                             )
                           : "-"}
                       </td>
                       <td className="py-3 pr-4">
-                        {variant
+                        {canEditDimensions
                           ? renderEditableCell(
                               "width",
-                              String(normalizeNumber(variant.width))
+                              widthValue === null ? "-" : String(widthValue)
                             )
                           : "-"}
                       </td>
                       <td className="py-3 pr-4">
-                        {variant
+                        {canEditDimensions
                           ? renderEditableCell(
                               "length",
-                              String(normalizeNumber(variant.length))
+                              lengthValue === null ? "-" : String(lengthValue)
                             )
                           : "-"}
                       </td>
                       <td className="py-3 pr-4">
-                        {variant
+                        {canEditDimensions
                           ? renderEditableCell(
                               "weight",
-                              String(normalizeNumber(variant.weight))
+                              weightValue === null ? "-" : String(weightValue)
                             )
                           : "-"}
+                      </td>
+                      <td className="py-3 pr-0 text-right">
+                        <div
+                          className="relative inline-flex"
+                          data-product-row-actions
+                        >
+                          <button
+                            type="button"
+                            className="h-8 rounded-md border border-ui-border-base px-3 text-sm hover:bg-ui-bg-subtle"
+                            disabled={Boolean(updatingProductId)}
+                            onClick={() => {
+                              setOpenActionsProductId((current) => {
+                                return current === product.id ? null : product.id
+                              })
+                            }}
+                          >
+                            ...
+                          </button>
+                          {openActionsProductId === product.id ? (
+                            <div className="absolute right-0 top-9 z-10 min-w-36 overflow-hidden rounded-md border border-ui-border-base bg-ui-bg-component shadow-elevation-card-rest">
+                              <button
+                                type="button"
+                                className="block w-full px-3 py-2 text-left text-sm hover:bg-ui-bg-subtle"
+                                onClick={() => {
+                                  beginEditCell(product, "title")
+                                }}
+                              >
+                                Szerkesztés
+                              </button>
+                              <button
+                                type="button"
+                                className="block w-full px-3 py-2 text-left text-sm text-ui-fg-error hover:bg-ui-bg-subtle"
+                                onClick={() => {
+                                  setOpenActionsProductId(null)
+                                  void deleteProduct(product)
+                                }}
+                              >
+                                Törlés
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
                       </td>
                     </tr>
                   )
