@@ -1,6 +1,5 @@
 import { useCallback, useMemo, useState } from "react"
 import { defineRouteConfig } from "@medusajs/admin-sdk"
-import { TruckFast } from "@medusajs/icons"
 import {
   Button,
   Input,
@@ -340,7 +339,6 @@ const GlsPage = () => {
 
 export const config = defineRouteConfig({
   label: "GLS",
-  icon: TruckFast,
   nested: "/price-lists",
 })
 

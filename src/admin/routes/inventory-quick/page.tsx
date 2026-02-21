@@ -7,7 +7,6 @@ import {
   type FormEvent,
 } from "react"
 import { defineRouteConfig } from "@medusajs/admin-sdk"
-import { TruckFast } from "@medusajs/icons"
 import { Button, Input, Text, toast } from "@medusajs/ui"
 
 type InventoryLevel = {
@@ -673,7 +672,6 @@ const InventoryQuickPage = () => {
 
 export const config = defineRouteConfig({
   label: "Keszlet+",
-  icon: TruckFast,
   nested: "/inventory",
 })
 
