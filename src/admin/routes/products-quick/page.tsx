@@ -1511,8 +1511,8 @@ const ProductsQuickPage = () => {
       </div>
 
       <div className="rounded-lg border border-ui-border-base bg-ui-bg-base p-6 shadow-card-rest">
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
+        <div className="overflow-x-auto pb-1">
+          <table className="w-max text-sm">
             <thead>
               <tr className="border-b border-ui-border-base text-left text-ui-fg-subtle">
                 <th className="py-3 pr-4 font-normal">Termék</th>
@@ -1522,10 +1522,12 @@ const ProductsQuickPage = () => {
                 <th className="py-3 pr-4 font-normal">Szélesség</th>
                 <th className="py-3 pr-4 font-normal">Hossz</th>
                 <th className="py-3 pr-4 font-normal">Súly</th>
-                <th className="py-3 pr-4 font-normal">Ár</th>
-                <th className="py-3 pr-4 font-normal">Készlet</th>
-                <th className="py-3 pr-0 text-right font-normal">Műveletek</th>
-                <th className="border-l border-ui-border-base/80 py-3 pl-6 font-normal">
+                <th className="py-3 pr-2 font-normal whitespace-nowrap">Ár</th>
+                <th className="py-3 pr-2 font-normal whitespace-nowrap">Készlet</th>
+                <th className="py-3 pl-2 pr-0 text-right font-normal whitespace-nowrap">
+                  Műveletek
+                </th>
+                <th className="sticky right-0 z-20 min-w-[12rem] border-l-2 border-ui-border-base bg-ui-bg-base py-3 pl-4 pr-4 font-normal">
                   Státusz
                 </th>
               </tr>
@@ -1595,7 +1597,7 @@ const ProductsQuickPage = () => {
                             isTitleField
                               ? "h-8 w-full min-w-[20rem] rounded-md border border-ui-border-base bg-ui-bg-field px-2 text-sm"
                               : isPriceField
-                                ? "h-8 w-24 rounded-md border border-ui-border-base bg-ui-bg-field px-2 text-sm"
+                                ? "h-8 w-[4.5rem] rounded-md border border-ui-border-base bg-ui-bg-field px-2 text-right text-sm tabular-nums"
                                 : "h-8 w-20 rounded-md border border-ui-border-base bg-ui-bg-field px-2 text-sm"
                           }
                           autoFocus
@@ -1613,7 +1615,7 @@ const ProductsQuickPage = () => {
                           isTitleField
                             ? "w-full min-w-[20rem] rounded-md border border-ui-border-base px-2 py-1 text-left text-sm hover:bg-ui-bg-subtle"
                             : isPriceField
-                              ? "min-w-20 rounded-md border border-ui-border-base px-2 py-1 text-left text-sm hover:bg-ui-bg-subtle"
+                              ? "h-8 w-[4.5rem] rounded-md border border-ui-border-base px-2 py-1 text-right text-sm tabular-nums hover:bg-ui-bg-subtle"
                               : "min-w-16 rounded-md border border-ui-border-base px-2 py-1 text-left text-sm hover:bg-ui-bg-subtle"
                         }
                         disabled={Boolean(updatingProductId)}
@@ -1714,9 +1716,9 @@ const ProductsQuickPage = () => {
                             )
                           : "-"}
                       </td>
-                      <td className="py-3 pr-4">
+                      <td className="py-3 pr-2">
                         {variant ? (
-                          <div className="flex min-w-[14rem] flex-wrap items-center gap-2">
+                          <div className="flex min-w-[9.5rem] flex-col gap-1">
                             <div className="flex items-center gap-2">
                               <Text
                                 size="xsmall"
@@ -1750,7 +1752,7 @@ const ProductsQuickPage = () => {
                           "-"
                         )}
                       </td>
-                      <td className="py-3 pr-4">
+                      <td className="py-3 pr-2">
                         {inventoryItem ? (
                           <div className="inline-flex items-center gap-1 rounded-md border border-ui-border-base bg-ui-bg-field px-1 py-1">
                             <button
@@ -1808,7 +1810,7 @@ const ProductsQuickPage = () => {
                           "-"
                         )}
                       </td>
-                      <td className="py-3 pr-0 text-right">
+                      <td className="py-3 pl-2 pr-0 text-right">
                         <div
                           className="relative inline-flex"
                           data-product-row-actions
@@ -1853,7 +1855,7 @@ const ProductsQuickPage = () => {
                           ) : null}
                         </div>
                       </td>
-                      <td className="border-l border-ui-border-base/60 py-3 pl-6">
+                      <td className="sticky right-0 z-10 min-w-[12rem] border-l-2 border-ui-border-base bg-ui-bg-base py-3 pl-4 pr-4">
                         <select
                           value={normalizeText(product.status).toLowerCase()}
                           onChange={(event: ChangeEvent<HTMLSelectElement>) => {
@@ -1866,7 +1868,7 @@ const ProductsQuickPage = () => {
                             })
                           }}
                           disabled={rowUpdating}
-                          className="h-9 rounded-md border border-ui-border-base bg-ui-bg-field px-2 text-sm"
+                          className="h-9 w-full rounded-md border border-ui-border-base bg-ui-bg-field px-2 text-sm"
                         >
                           {STATUS_OPTIONS.map((statusOption) => (
                             <option
