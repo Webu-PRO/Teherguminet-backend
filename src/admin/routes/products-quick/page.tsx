@@ -115,7 +115,7 @@ type StockLocationListResponse = {
 
 const PAGE_SIZE_OPTIONS = [20, 50, 100] as const
 const PRODUCT_FIELDS =
-  "id,title,status,collection_id,*collection,*categories,*variants"
+  "id,title,status,collection_id,*collection,*categories,*variants,*variants.prices,variants.prices.price_rules.value,variants.prices.price_rules.attribute"
 
 type EditableField =
   | "title"
