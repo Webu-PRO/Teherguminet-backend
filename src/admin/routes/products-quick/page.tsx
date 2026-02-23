@@ -255,6 +255,36 @@ const resolvePrimaryVariantPrice = (
   return withAmount ?? variant.prices[0] ?? null
 }
 
+const resolveVariantPriceByCurrency = (
+  variant: ProductVariant | null | undefined,
+  currencyCode: "EUR" | "HUF"
+) => {
+  if (!variant || !Array.isArray(variant.prices) || !variant.prices.length) {
+    return null
+  }
+
+  const normalizedCurrency = currencyCode.toLowerCase()
+  const exactMatch = variant.prices.find((price) => {
+    const code = normalizeText(price?.currency_code).toLowerCase()
+    return (
+      code === normalizedCurrency &&
+      typeof price?.amount === "number" &&
+      Number.isFinite(price.amount)
+    )
+  })
+
+  return exactMatch ?? null
+}
+
+const resolvePriceAmount = (
+  price: ProductVariantPrice | null | undefined
+) => {
+  const amount = price?.amount
+  return typeof amount === "number" && Number.isFinite(amount)
+    ? amount
+    : null
+}
+
 const matchesSearch = (product: ProductRow, query: string) => {
   const normalizedQuery = normalizeText(query).toLowerCase()
   if (!normalizedQuery) {
@@ -391,13 +421,6 @@ const ProductsQuickPage = () => {
     return typeof amount === "number" && Number.isFinite(amount)
       ? amount
       : null
-  }, [])
-
-  const resolvePriceCurrency = useCallback((product: ProductRow) => {
-    const variant = resolvePrimaryVariant(product)
-    const price = resolvePrimaryVariantPrice(variant)
-    const code = normalizeText(price?.currency_code).toUpperCase()
-    return code || "HUF"
   }, [])
 
   const resolveActiveLocationId = useCallback(
@@ -1497,7 +1520,6 @@ const ProductsQuickPage = () => {
                 <th className="py-3 pr-4 font-normal">Termék</th>
                 <th className="py-3 pr-4 font-normal">Gyűjtemény</th>
                 <th className="py-3 pr-4 font-normal">Kategória</th>
-                <th className="py-3 pr-4 font-normal">Státusz</th>
                 <th className="py-3 pr-4 font-normal">Magasság</th>
                 <th className="py-3 pr-4 font-normal">Szélesség</th>
                 <th className="py-3 pr-4 font-normal">Hossz</th>
@@ -1505,6 +1527,7 @@ const ProductsQuickPage = () => {
                 <th className="py-3 pr-4 font-normal">Ár</th>
                 <th className="py-3 pr-4 font-normal">Készlet</th>
                 <th className="py-3 pr-0 text-right font-normal">Műveletek</th>
+                <th className="py-3 pl-4 font-normal">Státusz</th>
               </tr>
             </thead>
             <tbody>
@@ -1531,7 +1554,12 @@ const ProductsQuickPage = () => {
                   const lengthValue = resolveDimensionValue(product, "length")
                   const weightValue = resolveDimensionValue(product, "weight")
                   const priceValue = resolvePriceValue(product)
-                  const priceCurrency = resolvePriceCurrency(product)
+                  const eurPriceValue = resolvePriceAmount(
+                    resolveVariantPriceByCurrency(variant, "EUR")
+                  )
+                  const hufPriceValue = resolvePriceAmount(
+                    resolveVariantPriceByCurrency(variant, "HUF")
+                  )
                   const stockValue = resolveStockValue(product)
                   const isEditingStock = editingStockProductId === product.id
                   const canEditDimensions = Boolean(variant || inventoryItem)
@@ -1654,34 +1682,6 @@ const ProductsQuickPage = () => {
                         </select>
                       </td>
                       <td className="py-3 pr-4">
-                        <select
-                          value={normalizeText(product.status).toLowerCase()}
-                          onChange={(event: ChangeEvent<HTMLSelectElement>) => {
-                            const nextStatus = normalizeText(event.target.value)
-                            if (!nextStatus) {
-                              return
-                            }
-                            void updateProduct(product, {
-                              status: nextStatus,
-                            })
-                          }}
-                          disabled={rowUpdating}
-                          className="h-9 rounded-md border border-ui-border-base bg-ui-bg-field px-2 text-sm"
-                        >
-                          {STATUS_OPTIONS.map((statusOption) => (
-                            <option
-                              key={statusOption.value}
-                              value={statusOption.value}
-                            >
-                              {statusOption.label}
-                            </option>
-                          ))}
-                        </select>
-                        <Text size="xsmall" className="mt-1 text-ui-fg-subtle">
-                          {resolveStatusLabel(product.status)}
-                        </Text>
-                      </td>
-                      <td className="py-3 pr-4">
                         {canEditDimensions
                           ? renderEditableCell(
                               "height",
@@ -1720,12 +1720,9 @@ const ProductsQuickPage = () => {
                               priceValue === null ? "-" : String(priceValue)
                             )
                           : "-"}
-                        {variant && priceValue !== null ? (
-                          <Text
-                            size="xsmall"
-                            className="mt-1 uppercase text-ui-fg-subtle"
-                          >
-                            {priceCurrency}
+                        {variant ? (
+                          <Text size="xsmall" className="mt-1 text-ui-fg-subtle">
+                            {`${eurPriceValue === null ? "-" : eurPriceValue.toLocaleString("hu-HU")} EUR · ${hufPriceValue === null ? "-" : hufPriceValue.toLocaleString("hu-HU")} HUF`}
                           </Text>
                         ) : null}
                       </td>
@@ -1831,6 +1828,34 @@ const ProductsQuickPage = () => {
                             </div>
                           ) : null}
                         </div>
+                      </td>
+                      <td className="py-3 pl-4">
+                        <select
+                          value={normalizeText(product.status).toLowerCase()}
+                          onChange={(event: ChangeEvent<HTMLSelectElement>) => {
+                            const nextStatus = normalizeText(event.target.value)
+                            if (!nextStatus) {
+                              return
+                            }
+                            void updateProduct(product, {
+                              status: nextStatus,
+                            })
+                          }}
+                          disabled={rowUpdating}
+                          className="h-9 rounded-md border border-ui-border-base bg-ui-bg-field px-2 text-sm"
+                        >
+                          {STATUS_OPTIONS.map((statusOption) => (
+                            <option
+                              key={statusOption.value}
+                              value={statusOption.value}
+                            >
+                              {statusOption.label}
+                            </option>
+                          ))}
+                        </select>
+                        <Text size="xsmall" className="mt-1 text-ui-fg-subtle">
+                          {resolveStatusLabel(product.status)}
+                        </Text>
                       </td>
                     </tr>
                   )
