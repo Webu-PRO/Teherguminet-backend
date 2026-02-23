@@ -7,6 +7,10 @@ import {
   computeCartTotalWeightKg,
   isWeightBasedProviderId,
 } from "../../../lib/cart-weight"
+import {
+  cartContainsGepekItems,
+  isAllowedShippingOptionForGepek,
+} from "../../../lib/gepek-cart-rules"
 
 type ShippingOptionsQuery = {
   cart_id?: string
@@ -59,13 +63,25 @@ export async function GET(
     return
   }
 
-  const hasWeightBasedOption = baseOptions.some((option) =>
+  const hasGepekItems = await cartContainsGepekItems(req.scope, cartId)
+  const eligibleOptions = hasGepekItems
+    ? baseOptions.filter((option) =>
+        isAllowedShippingOptionForGepek(option)
+      )
+    : baseOptions
+
+  if (!eligibleOptions.length) {
+    res.json({ shipping_options: [] })
+    return
+  }
+
+  const hasWeightBasedOption = eligibleOptions.some((option) =>
     isWeightBasedProviderId(option.provider_id)
   )
   const totalWeightKg = hasWeightBasedOption
     ? await computeCartTotalWeightKg(req.scope, cartId)
     : null
-  const options = baseOptions.map((option) => ({
+  const options = eligibleOptions.map((option) => ({
     id: option.id,
     ...(totalWeightKg
       ? isWeightBasedProviderId(option.provider_id)

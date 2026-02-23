@@ -2,12 +2,18 @@ import { addShippingMethodToCartWorkflow } from "@medusajs/core-flows"
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import {
   ContainerRegistrationKeys,
+  MedusaError,
   remoteQueryObjectFromString,
 } from "@medusajs/framework/utils"
 import {
   computeCartTotalWeightKg,
   isWeightBasedProviderId,
 } from "../../../../../lib/cart-weight"
+import {
+  cartContainsGepekItems,
+  isAllowedShippingOptionForGepek,
+  resolveShippingOptionForRules,
+} from "../../../../../lib/gepek-cart-rules"
 
 type AddShippingMethodPayload = {
   option_id: string
@@ -15,38 +21,25 @@ type AddShippingMethodPayload = {
   additional_data?: Record<string, unknown>
 }
 
-const resolveShippingOptionProviderId = async (
-  scope: { resolve: (key: string) => unknown },
-  optionId: string
-) => {
-  const query = scope.resolve(
-    ContainerRegistrationKeys.QUERY
-  ) as {
-    graph: (input: {
-      entity: string
-      fields: string[]
-      filters: Record<string, unknown>
-    }) => Promise<{ data: Array<{ provider_id?: string | null }> }>
-  }
-
-  const { data } = await query.graph({
-    entity: "shipping_option",
-    fields: ["id", "provider_id"],
-    filters: { id: optionId },
-  })
-
-  return data?.[0]?.provider_id ?? null
-}
-
 export async function POST(
   req: MedusaRequest,
   res: MedusaResponse
 ) {
   const payload = req.validatedBody as AddShippingMethodPayload
-  const providerId = await resolveShippingOptionProviderId(
+  const option = await resolveShippingOptionForRules(
     req.scope,
     payload.option_id
   )
+  const hasGepekItems = await cartContainsGepekItems(req.scope, req.params.id)
+
+  if (hasGepekItems && !isAllowedShippingOptionForGepek(option)) {
+    throw new MedusaError(
+      MedusaError.Types.NOT_ALLOWED,
+      "Gépkínálat termék esetén csak a Saját szállítás és a Helyszíni átvétel választható."
+    )
+  }
+
+  const providerId = option?.provider_id ?? null
   const shouldAttachWeight = isWeightBasedProviderId(providerId)
   const totalWeightKg = shouldAttachWeight
     ? await computeCartTotalWeightKg(req.scope, req.params.id)
