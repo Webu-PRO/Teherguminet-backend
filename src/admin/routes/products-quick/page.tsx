@@ -34,6 +34,15 @@ type ProductCategory = {
   name?: string | null
 }
 
+type ProductVariantPrice = {
+  id?: string
+  currency_code?: string | null
+  amount?: number | null
+  min_quantity?: number | null
+  max_quantity?: number | null
+  rules?: Record<string, string> | null
+}
+
 type ProductVariant = {
   id: string
   sku?: string | null
@@ -41,6 +50,7 @@ type ProductVariant = {
   width?: number | null
   length?: number | null
   weight?: number | null
+  prices?: ProductVariantPrice[] | null
 }
 
 type InventoryItemSummary = {
@@ -107,8 +117,14 @@ const PAGE_SIZE_OPTIONS = [20, 50, 100] as const
 const PRODUCT_FIELDS =
   "id,title,status,collection_id,*collection,*categories,*variants"
 
-type EditableField = "title" | "height" | "width" | "length" | "weight"
-type DimensionField = Exclude<EditableField, "title">
+type EditableField =
+  | "title"
+  | "height"
+  | "width"
+  | "length"
+  | "weight"
+  | "price"
+type DimensionField = Exclude<EditableField, "title" | "price">
 
 const STATUS_OPTIONS = [
   { value: "published", label: "Közzétéve" },
@@ -223,6 +239,20 @@ const resolvePrimaryVariant = (product: ProductRow) => {
     return null
   }
   return product.variants[0] ?? null
+}
+
+const resolvePrimaryVariantPrice = (
+  variant: ProductVariant | null | undefined
+) => {
+  if (!variant || !Array.isArray(variant.prices) || !variant.prices.length) {
+    return null
+  }
+
+  const withAmount = variant.prices.find((price) => {
+    return typeof price?.amount === "number" && Number.isFinite(price.amount)
+  })
+
+  return withAmount ?? variant.prices[0] ?? null
 }
 
 const matchesSearch = (product: ProductRow, query: string) => {
@@ -353,6 +383,22 @@ const ProductsQuickPage = () => {
     },
     [resolveInventoryItemForProduct]
   )
+
+  const resolvePriceValue = useCallback((product: ProductRow) => {
+    const variant = resolvePrimaryVariant(product)
+    const price = resolvePrimaryVariantPrice(variant)
+    const amount = price?.amount
+    return typeof amount === "number" && Number.isFinite(amount)
+      ? amount
+      : null
+  }, [])
+
+  const resolvePriceCurrency = useCallback((product: ProductRow) => {
+    const variant = resolvePrimaryVariant(product)
+    const price = resolvePrimaryVariantPrice(variant)
+    const code = normalizeText(price?.currency_code).toUpperCase()
+    return code || "HUF"
+  }, [])
 
   const resolveActiveLocationId = useCallback(
     (inventoryItem: InventoryItemSummary | null) => {
@@ -688,6 +734,87 @@ const ProductsQuickPage = () => {
             ? error.message
             : "Nem sikerült frissíteni a méret adatot."
         toast.error("Méretek frissítése", {
+          description: message,
+        })
+      } finally {
+        setUpdatingProductId(null)
+      }
+    },
+    [fetchProductRow, replaceProductRow, updatingProductId]
+  )
+
+  const updateVariantPrice = useCallback(
+    async (
+      product: ProductRow,
+      variantId: string,
+      amount: number,
+      currentPrice: ProductVariantPrice | null
+    ) => {
+      if (updatingProductId) {
+        return
+      }
+
+      setUpdatingProductId(product.id)
+
+      try {
+        const currencyCode =
+          normalizeText(currentPrice?.currency_code).toLowerCase() || "huf"
+
+        const pricePayload: Record<string, unknown> = {
+          currency_code: currencyCode,
+          amount,
+        }
+
+        const existingPriceId = normalizeText(currentPrice?.id)
+        if (existingPriceId) {
+          pricePayload.id = existingPriceId
+        }
+
+        if (typeof currentPrice?.min_quantity === "number") {
+          pricePayload.min_quantity = currentPrice.min_quantity
+        }
+
+        if (typeof currentPrice?.max_quantity === "number") {
+          pricePayload.max_quantity = currentPrice.max_quantity
+        }
+
+        if (currentPrice?.rules && Object.keys(currentPrice.rules).length > 0) {
+          pricePayload.rules = currentPrice.rules
+        }
+
+        const response = await fetch(
+          `/admin/products/${encodeURIComponent(
+            product.id
+          )}/variants/${encodeURIComponent(variantId)}`,
+          {
+            method: "POST",
+            credentials: "include",
+            headers: {
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              prices: [pricePayload],
+            }),
+          }
+        )
+
+        const payload = await response.json().catch(() => ({}))
+        if (!response.ok) {
+          const message =
+            typeof payload?.message === "string"
+              ? payload.message
+              : "Nem sikerült frissíteni az árat."
+          throw new Error(message)
+        }
+
+        const freshProduct = await fetchProductRow(product.id)
+        replaceProductRow(freshProduct)
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Nem sikerült frissíteni az árat."
+        toast.error("Ár frissítése", {
           description: message,
         })
       } finally {
@@ -1107,10 +1234,15 @@ const ProductsQuickPage = () => {
         return normalizeText(product.title)
       }
 
+      if (field === "price") {
+        const priceValue = resolvePriceValue(product)
+        return priceValue === null ? "" : String(priceValue)
+      }
+
       const dimensionValue = resolveDimensionValue(product, field)
       return dimensionValue === null ? "" : String(dimensionValue)
     },
-    [resolveDimensionValue]
+    [resolveDimensionValue, resolvePriceValue]
   )
 
   const beginEditCell = useCallback(
@@ -1148,6 +1280,45 @@ const ProductsQuickPage = () => {
           return
         }
         await updateProduct(product, { title: nextTitle })
+        return
+      }
+
+      if (field === "price") {
+        const variant = resolvePrimaryVariant(product)
+        if (!variant) {
+          toast.error("Ár frissítése", {
+            description: "Ehhez a termékhez nincs variáns.",
+          })
+          return
+        }
+
+        if (!value) {
+          toast.error("Ár frissítése", {
+            description: "Adj meg egy érvényes árat.",
+          })
+          return
+        }
+
+        const parsedPrice = Number(value)
+        if (!Number.isFinite(parsedPrice) || parsedPrice < 0) {
+          toast.error("Ár frissítése", {
+            description: "Adj meg egy érvényes, nem negatív számot.",
+          })
+          return
+        }
+
+        const nextPrice = Math.trunc(parsedPrice)
+        const currentPrice = resolvePriceValue(product)
+        if (nextPrice === currentPrice) {
+          return
+        }
+
+        await updateVariantPrice(
+          product,
+          variant.id,
+          nextPrice,
+          resolvePrimaryVariantPrice(variant)
+        )
         return
       }
 
@@ -1199,9 +1370,11 @@ const ProductsQuickPage = () => {
       editingCell,
       editingValue,
       resolveDimensionValue,
+      resolvePriceValue,
       resolveInventoryItemForProduct,
       updateProduct,
       updateInventoryItemDimensions,
+      updateVariantPrice,
       updateVariantDimensions,
     ]
   )
@@ -1256,7 +1429,7 @@ const ProductsQuickPage = () => {
             Termékek kezelő
           </Text>
           <Text size="small" className="text-ui-fg-subtle">
-            Név, státusz, gyűjtemény, kategória és méretek gyors
+            Név, státusz, gyűjtemény, kategória, ár és méretek gyors
             szerkesztése közvetlenül a listában.
           </Text>
         </div>
@@ -1329,6 +1502,7 @@ const ProductsQuickPage = () => {
                 <th className="py-3 pr-4 font-normal">Szélesség</th>
                 <th className="py-3 pr-4 font-normal">Hossz</th>
                 <th className="py-3 pr-4 font-normal">Súly</th>
+                <th className="py-3 pr-4 font-normal">Ár</th>
                 <th className="py-3 pr-4 font-normal">Készlet</th>
                 <th className="py-3 pr-0 text-right font-normal">Műveletek</th>
               </tr>
@@ -1336,13 +1510,13 @@ const ProductsQuickPage = () => {
             <tbody>
               {loadingProducts ? (
                 <tr>
-                  <td colSpan={10} className="py-6 text-ui-fg-subtle">
+                  <td colSpan={11} className="py-6 text-ui-fg-subtle">
                     Betöltés...
                   </td>
                 </tr>
               ) : filteredProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-6 text-ui-fg-subtle">
+                  <td colSpan={11} className="py-6 text-ui-fg-subtle">
                     Nincs találat.
                   </td>
                 </tr>
@@ -1356,6 +1530,8 @@ const ProductsQuickPage = () => {
                   const widthValue = resolveDimensionValue(product, "width")
                   const lengthValue = resolveDimensionValue(product, "length")
                   const weightValue = resolveDimensionValue(product, "weight")
+                  const priceValue = resolvePriceValue(product)
+                  const priceCurrency = resolvePriceCurrency(product)
                   const stockValue = resolveStockValue(product)
                   const isEditingStock = editingStockProductId === product.id
                   const canEditDimensions = Boolean(variant || inventoryItem)
@@ -1372,6 +1548,7 @@ const ProductsQuickPage = () => {
                       const inputType =
                         field === "title" ? "text" : "number"
                       const isTitleField = field === "title"
+                      const isPriceField = field === "price"
 
                       return (
                         <input
@@ -1389,7 +1566,9 @@ const ProductsQuickPage = () => {
                           className={
                             isTitleField
                               ? "h-8 w-full min-w-[20rem] rounded-md border border-ui-border-base bg-ui-bg-field px-2 text-sm"
-                              : "h-8 w-20 rounded-md border border-ui-border-base bg-ui-bg-field px-2 text-sm"
+                              : isPriceField
+                                ? "h-8 w-24 rounded-md border border-ui-border-base bg-ui-bg-field px-2 text-sm"
+                                : "h-8 w-20 rounded-md border border-ui-border-base bg-ui-bg-field px-2 text-sm"
                           }
                           autoFocus
                         />
@@ -1397,13 +1576,16 @@ const ProductsQuickPage = () => {
                     }
 
                     const isTitleField = field === "title"
+                    const isPriceField = field === "price"
                     return (
                       <button
                         type="button"
                         className={
                           isTitleField
                             ? "w-full min-w-[20rem] rounded-md border border-ui-border-base px-2 py-1 text-left text-sm hover:bg-ui-bg-subtle"
-                            : "min-w-16 rounded-md border border-ui-border-base px-2 py-1 text-left text-sm hover:bg-ui-bg-subtle"
+                            : isPriceField
+                              ? "min-w-20 rounded-md border border-ui-border-base px-2 py-1 text-left text-sm hover:bg-ui-bg-subtle"
+                              : "min-w-16 rounded-md border border-ui-border-base px-2 py-1 text-left text-sm hover:bg-ui-bg-subtle"
                         }
                         disabled={Boolean(updatingProductId)}
                         onClick={() => beginEditCell(product, field)}
@@ -1530,6 +1712,22 @@ const ProductsQuickPage = () => {
                               weightValue === null ? "-" : String(weightValue)
                             )
                           : "-"}
+                      </td>
+                      <td className="py-3 pr-4">
+                        {variant
+                          ? renderEditableCell(
+                              "price",
+                              priceValue === null ? "-" : String(priceValue)
+                            )
+                          : "-"}
+                        {variant && priceValue !== null ? (
+                          <Text
+                            size="xsmall"
+                            className="mt-1 uppercase text-ui-fg-subtle"
+                          >
+                            {priceCurrency}
+                          </Text>
+                        ) : null}
                       </td>
                       <td className="py-3 pr-4">
                         {inventoryItem ? (
