@@ -123,8 +123,14 @@ type EditableField =
   | "width"
   | "length"
   | "weight"
-  | "price"
-type DimensionField = Exclude<EditableField, "title" | "price">
+  | "priceEur"
+  | "priceHuf"
+type DimensionField = Exclude<
+  EditableField,
+  "title" | "priceEur" | "priceHuf"
+>
+
+type PriceCurrency = "EUR" | "HUF"
 
 const STATUS_OPTIONS = [
   { value: "published", label: "Közzétéve" },
@@ -241,23 +247,9 @@ const resolvePrimaryVariant = (product: ProductRow) => {
   return product.variants[0] ?? null
 }
 
-const resolvePrimaryVariantPrice = (
-  variant: ProductVariant | null | undefined
-) => {
-  if (!variant || !Array.isArray(variant.prices) || !variant.prices.length) {
-    return null
-  }
-
-  const withAmount = variant.prices.find((price) => {
-    return typeof price?.amount === "number" && Number.isFinite(price.amount)
-  })
-
-  return withAmount ?? variant.prices[0] ?? null
-}
-
 const resolveVariantPriceByCurrency = (
   variant: ProductVariant | null | undefined,
-  currencyCode: "EUR" | "HUF"
+  currencyCode: PriceCurrency
 ) => {
   if (!variant || !Array.isArray(variant.prices) || !variant.prices.length) {
     return null
@@ -413,15 +405,6 @@ const ProductsQuickPage = () => {
     },
     [resolveInventoryItemForProduct]
   )
-
-  const resolvePriceValue = useCallback((product: ProductRow) => {
-    const variant = resolvePrimaryVariant(product)
-    const price = resolvePrimaryVariantPrice(variant)
-    const amount = price?.amount
-    return typeof amount === "number" && Number.isFinite(amount)
-      ? amount
-      : null
-  }, [])
 
   const resolveActiveLocationId = useCallback(
     (inventoryItem: InventoryItemSummary | null) => {
@@ -771,7 +754,8 @@ const ProductsQuickPage = () => {
       product: ProductRow,
       variantId: string,
       amount: number,
-      currentPrice: ProductVariantPrice | null
+      currentPrice: ProductVariantPrice | null,
+      targetCurrencyCode?: PriceCurrency
     ) => {
       if (updatingProductId) {
         return
@@ -781,7 +765,9 @@ const ProductsQuickPage = () => {
 
       try {
         const currencyCode =
-          normalizeText(currentPrice?.currency_code).toLowerCase() || "huf"
+          normalizeText(targetCurrencyCode).toLowerCase() ||
+          normalizeText(currentPrice?.currency_code).toLowerCase() ||
+          "huf"
 
         const pricePayload: Record<string, unknown> = {
           currency_code: currencyCode,
@@ -1257,15 +1243,21 @@ const ProductsQuickPage = () => {
         return normalizeText(product.title)
       }
 
-      if (field === "price") {
-        const priceValue = resolvePriceValue(product)
+      if (field === "priceEur" || field === "priceHuf") {
+        const variant = resolvePrimaryVariant(product)
+        const priceValue = resolvePriceAmount(
+          resolveVariantPriceByCurrency(
+            variant,
+            field === "priceEur" ? "EUR" : "HUF"
+          )
+        )
         return priceValue === null ? "" : String(priceValue)
       }
 
       const dimensionValue = resolveDimensionValue(product, field)
       return dimensionValue === null ? "" : String(dimensionValue)
     },
-    [resolveDimensionValue, resolvePriceValue]
+    [resolveDimensionValue]
   )
 
   const beginEditCell = useCallback(
@@ -1306,7 +1298,7 @@ const ProductsQuickPage = () => {
         return
       }
 
-      if (field === "price") {
+      if (field === "priceEur" || field === "priceHuf") {
         const variant = resolvePrimaryVariant(product)
         if (!variant) {
           toast.error("Ár frissítése", {
@@ -1331,8 +1323,14 @@ const ProductsQuickPage = () => {
         }
 
         const nextPrice = Math.trunc(parsedPrice)
-        const currentPrice = resolvePriceValue(product)
-        if (nextPrice === currentPrice) {
+        const priceCurrency: PriceCurrency =
+          field === "priceEur" ? "EUR" : "HUF"
+        const currentPrice = resolveVariantPriceByCurrency(
+          variant,
+          priceCurrency
+        )
+        const currentPriceAmount = resolvePriceAmount(currentPrice)
+        if (nextPrice === currentPriceAmount) {
           return
         }
 
@@ -1340,7 +1338,8 @@ const ProductsQuickPage = () => {
           product,
           variant.id,
           nextPrice,
-          resolvePrimaryVariantPrice(variant)
+          currentPrice,
+          priceCurrency
         )
         return
       }
@@ -1393,7 +1392,6 @@ const ProductsQuickPage = () => {
       editingCell,
       editingValue,
       resolveDimensionValue,
-      resolvePriceValue,
       resolveInventoryItemForProduct,
       updateProduct,
       updateInventoryItemDimensions,
@@ -1527,7 +1525,9 @@ const ProductsQuickPage = () => {
                 <th className="py-3 pr-4 font-normal">Ár</th>
                 <th className="py-3 pr-4 font-normal">Készlet</th>
                 <th className="py-3 pr-0 text-right font-normal">Műveletek</th>
-                <th className="py-3 pl-4 font-normal">Státusz</th>
+                <th className="border-l border-ui-border-base/80 py-3 pl-6 font-normal">
+                  Státusz
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -1553,7 +1553,6 @@ const ProductsQuickPage = () => {
                   const widthValue = resolveDimensionValue(product, "width")
                   const lengthValue = resolveDimensionValue(product, "length")
                   const weightValue = resolveDimensionValue(product, "weight")
-                  const priceValue = resolvePriceValue(product)
                   const eurPriceValue = resolvePriceAmount(
                     resolveVariantPriceByCurrency(variant, "EUR")
                   )
@@ -1576,7 +1575,8 @@ const ProductsQuickPage = () => {
                       const inputType =
                         field === "title" ? "text" : "number"
                       const isTitleField = field === "title"
-                      const isPriceField = field === "price"
+                      const isPriceField =
+                        field === "priceEur" || field === "priceHuf"
 
                       return (
                         <input
@@ -1604,7 +1604,8 @@ const ProductsQuickPage = () => {
                     }
 
                     const isTitleField = field === "title"
-                    const isPriceField = field === "price"
+                    const isPriceField =
+                      field === "priceEur" || field === "priceHuf"
                     return (
                       <button
                         type="button"
@@ -1714,17 +1715,40 @@ const ProductsQuickPage = () => {
                           : "-"}
                       </td>
                       <td className="py-3 pr-4">
-                        {variant
-                          ? renderEditableCell(
-                              "price",
-                              priceValue === null ? "-" : String(priceValue)
-                            )
-                          : "-"}
                         {variant ? (
-                          <Text size="xsmall" className="mt-1 text-ui-fg-subtle">
-                            {`${eurPriceValue === null ? "-" : eurPriceValue.toLocaleString("hu-HU")} EUR · ${hufPriceValue === null ? "-" : hufPriceValue.toLocaleString("hu-HU")} HUF`}
-                          </Text>
-                        ) : null}
+                          <div className="flex min-w-[14rem] flex-wrap items-center gap-2">
+                            <div className="flex items-center gap-2">
+                              <Text
+                                size="xsmall"
+                                className="w-8 uppercase text-ui-fg-subtle"
+                              >
+                                EUR
+                              </Text>
+                              {renderEditableCell(
+                                "priceEur",
+                                eurPriceValue === null
+                                  ? "-"
+                                  : String(eurPriceValue)
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Text
+                                size="xsmall"
+                                className="w-8 uppercase text-ui-fg-subtle"
+                              >
+                                HUF
+                              </Text>
+                              {renderEditableCell(
+                                "priceHuf",
+                                hufPriceValue === null
+                                  ? "-"
+                                  : String(hufPriceValue)
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          "-"
+                        )}
                       </td>
                       <td className="py-3 pr-4">
                         {inventoryItem ? (
@@ -1829,7 +1853,7 @@ const ProductsQuickPage = () => {
                           ) : null}
                         </div>
                       </td>
-                      <td className="py-3 pl-4">
+                      <td className="border-l border-ui-border-base/60 py-3 pl-6">
                         <select
                           value={normalizeText(product.status).toLowerCase()}
                           onChange={(event: ChangeEvent<HTMLSelectElement>) => {
