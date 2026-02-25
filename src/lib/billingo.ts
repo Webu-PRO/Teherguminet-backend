@@ -455,16 +455,27 @@ const readString = (...values: unknown[]) => {
 
 const SHIPPING_TITLE_PATTERN = /\bshipping\b|\bdelivery\b|szállítás/i
 const TIRE_SIZE_PATTERN =
-  /\b\d{3}\/\d{2}(?:\.\d+)?R\d{2}(?:\.\d+)?(?:-\d{1,3})?\b/i
+  /\b(?:\d{3}\/\d{2}(?:\.\d+)?\s*R\d{2}(?:\.\d+)?(?:-\d{1,3})?|\d{2}\s*R\d{2}(?:\.\d+)?(?:-\d{1,3})?)\b/i
 const KNOWN_TIRE_BRANDS = [
   "HUBTRAC",
   "AEROTYRE",
   "SUPERWAY",
   "GROUNDSPEED",
 ] as const
+const BRAND_METADATA_KEYS = [
+  "brand",
+  "márka",
+  "marka",
+  "manufacturer",
+  "gyártó",
+  "gyarto",
+] as const
 
 const compactSpaces = (value: string) =>
   value.replace(/\s+/g, " ").trim()
+
+const escapeRegExp = (value: string) =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 
 const asRecord = (value: unknown): Record<string, unknown> | null => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -478,6 +489,29 @@ const findKnownBrandInText = (text: string) =>
     new RegExp(`\\b${brand}\\b`, "i").test(text)
   ) ?? ""
 
+const readMetadataString = (
+  metadata: Record<string, unknown> | null | undefined,
+  keys: readonly string[]
+) => {
+  if (!metadata) {
+    return ""
+  }
+
+  const normalizedKeys = keys.map((key) => key.toLowerCase())
+  for (const [metadataKey, metadataValue] of Object.entries(metadata)) {
+    if (!normalizedKeys.includes(metadataKey.toLowerCase())) {
+      continue
+    }
+
+    const value = readString(metadataValue)
+    if (value) {
+      return value
+    }
+  }
+
+  return ""
+}
+
 const resolveKnownBrand = (
   record: Record<string, unknown>,
   detail: Record<string, unknown> | null,
@@ -490,14 +524,23 @@ const resolveKnownBrand = (
 
   const recordMetadata = asRecord(record.metadata)
   const detailMetadata = asRecord(detail?.metadata)
+  const recordVariant = asRecord(record.variant) ?? asRecord(detail?.variant)
+  const recordProduct =
+    asRecord(record.product) ??
+    asRecord(detail?.product) ??
+    asRecord(recordVariant?.product)
+  const variantMetadata = asRecord(recordVariant?.metadata)
+  const productMetadata = asRecord(recordProduct?.metadata)
   const metadataBrand =
     readString(
-      recordMetadata?.brand,
-      recordMetadata?.marka,
-      detailMetadata?.brand,
-      detailMetadata?.marka,
+      readMetadataString(recordMetadata, BRAND_METADATA_KEYS),
+      readMetadataString(detailMetadata, BRAND_METADATA_KEYS),
+      readMetadataString(variantMetadata, BRAND_METADATA_KEYS),
+      readMetadataString(productMetadata, BRAND_METADATA_KEYS),
       record.brand,
-      detail?.brand
+      detail?.brand,
+      recordVariant?.brand,
+      recordProduct?.brand
     ) || ""
 
   if (metadataBrand) {
@@ -507,7 +550,21 @@ const resolveKnownBrand = (
     if (known) {
       return known
     }
+    const knownFromMetadata = findKnownBrandInText(metadataBrand)
+    if (knownFromMetadata) {
+      return knownFromMetadata
+    }
   }
+
+  const productTagText = Array.isArray(recordProduct?.tags)
+    ? (recordProduct?.tags as unknown[])
+        .map((tag) => {
+          const tagRecord = asRecord(tag)
+          return readString(tagRecord?.value, tagRecord?.name)
+        })
+        .filter(Boolean)
+        .join(" ")
+    : ""
 
   const fromSkuOrVariant = findKnownBrandInText(
     [
@@ -515,12 +572,20 @@ const resolveKnownBrand = (
       readString(record.sku, detail?.sku),
       readString(record.variant_title, detail?.variant_title),
       readString(record.product_title, detail?.product_title),
+      readString(recordVariant?.title),
+      readString(recordProduct?.title, recordProduct?.handle),
+      productTagText,
+      metadataBrand,
     ]
       .filter(Boolean)
       .join(" ")
   )
 
-  return fromSkuOrVariant
+  if (fromSkuOrVariant) {
+    return fromSkuOrVariant
+  }
+
+  return metadataBrand ? metadataBrand.toUpperCase() : ""
 }
 
 const resolveBillingoItemTitle = (
@@ -559,7 +624,9 @@ const resolveBillingoItemTitle = (
     normalizedTitle.replace(/^gumiabroncs\b/i, "")
   )
   const hasBrandAlready = detectedBrand
-    ? new RegExp(`\\b${detectedBrand}\\b`, "i").test(withoutPrefix)
+    ? new RegExp(`\\b${escapeRegExp(detectedBrand)}\\b`, "i").test(
+        withoutPrefix
+      )
     : false
   const withBrand =
     detectedBrand && !hasBrandAlready
