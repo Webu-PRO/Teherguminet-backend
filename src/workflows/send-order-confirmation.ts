@@ -146,19 +146,6 @@ export const sendOrderConfirmationWorkflow = createWorkflow(
         {
           to: order.email,
           channel: "email",
-          template: "order-placed",
-          data: {
-            order,
-          },
-          attachments,
-          resource_id: order.id,
-          resource_type: "order",
-          trigger_type: "order.placed",
-          idempotency_key: confirmationKey,
-        },
-        {
-          to: order.email,
-          channel: "email",
           template: "order-thanks",
           data: {
             order,
@@ -168,6 +155,19 @@ export const sendOrderConfirmationWorkflow = createWorkflow(
           resource_type: "order",
           trigger_type: "order.placed",
           idempotency_key: thanksKey,
+        },
+        {
+          to: order.email,
+          channel: "email",
+          template: "order-placed",
+          data: {
+            order,
+          },
+          attachments,
+          resource_id: order.id,
+          resource_type: "order",
+          trigger_type: "order.placed",
+          idempotency_key: confirmationKey,
         },
       ])
     })

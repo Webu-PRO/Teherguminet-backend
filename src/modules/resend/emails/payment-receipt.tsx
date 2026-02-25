@@ -1,7 +1,6 @@
 import * as React from "react";
 import {
   Body,
-  Button,
   Container,
   Head,
   Heading,
@@ -13,7 +12,7 @@ import {
   Text,
 } from "@react-email/components";
 import { LanguageCode, resolveLanguageFromOrder } from "../email-language";
-import { F1_RED, INVOICE_COMPANY_DETAILS } from "./order-email-shared";
+import { F1_RED } from "./order-email-shared";
 
 type PaymentSummary = {
   id?: string | null;
@@ -390,12 +389,12 @@ const languageBlocks: Record<LanguageCode, LanguageBlock> = {
   hu: {
     code: "hu",
     locale: "hu-HU",
-    preview: "Számla",
-    heading: "Számla elkészült",
+    preview: "Fizetés beérkezett",
+    heading: "Köszönjük, a fizetés beérkezett",
     intro: (name) => (
       <>
-        Köszönjük a vásárlást, {name}! Elkészült a számla, az alábbiakban pedig
-        megtalálod a fizetés részleteit.
+        Köszönjük a vásárlást, {name}! A fizetés sikeresen beérkezett,
+        az alábbiakban megtalálod a részleteket.
       </>
     ),
     labels: {
@@ -412,10 +411,10 @@ const languageBlocks: Record<LanguageCode, LanguageBlock> = {
       shipping: "Szállítás",
       total: "Fizetendő",
     },
-    receiptTitle: "Számla",
-    receiptCopy: "A számlát az alábbi gombbal tudod letölteni.",
-    receiptCta: "Számla letöltése",
-    note: "A számlát kérjük őrizd meg. Ha módosításra van szükség, válaszolj erre az e-mailre, és segítünk.",
+    receiptTitle: "Fizetés",
+    receiptCopy: "",
+    receiptCta: "",
+    note: "A számlát külön e-mailben küldjük. Ha kérdésed van, válaszolj erre az e-mailre, és segítünk.",
     closingLines: ["Üdvözlettel,", `A ${BRAND} csapata`],
     orderFallback: "Rendelés",
     dateFallback: "Frissen feldolgozva",
@@ -424,12 +423,12 @@ const languageBlocks: Record<LanguageCode, LanguageBlock> = {
   sk: {
     code: "sk",
     locale: "sk-SK",
-    preview: "Faktúra vystavená",
-    heading: "Faktúra vystavená",
+    preview: "Platba prijatá",
+    heading: "Ďakujeme, platba bola prijatá",
     intro: (name) => (
       <>
-        Ďakujeme za nákup, {name}! Faktúra je pripravená a nižšie nájdete
-        podrobnosti o platbe.
+        Ďakujeme za nákup, {name}! Platba bola úspešne prijatá
+        a nižšie nájdete podrobnosti.
       </>
     ),
     labels: {
@@ -446,65 +445,15 @@ const languageBlocks: Record<LanguageCode, LanguageBlock> = {
       shipping: "Doprava",
       total: "Celková suma",
     },
-    receiptTitle: "Faktúra",
-    receiptCopy: "Faktúru si môžeš stiahnuť pomocou tlačidla nižšie.",
-    receiptCta: "Stiahnuť faktúru",
-    note: "Faktúru si, prosím, uchovajte. Ak potrebujete zmenu, odpovedzte na tento e-mail.",
+    receiptTitle: "Platba",
+    receiptCopy: "",
+    receiptCta: "",
+    note: "Faktúru posielame v samostatnom e-maile. Ak potrebujete zmenu, odpovedzte na tento e-mail.",
     closingLines: ["S pozdravom,", `Tím ${BRAND}`],
     orderFallback: "Objednávka",
     dateFallback: "Práve spracované",
     accent: "#3F8DFF",
   },
-};
-
-const resolveBillingoPublicUrl = (
-  metadata?: Record<string, unknown> | null
-) => {
-  const candidates: Array<unknown> = [
-    metadata?.billingo_invoice,
-    metadata?.billingo_invoice_public_url,
-    metadata?.billingo_receipt,
-    metadata?.billingo_receipt_public_url,
-  ];
-
-  for (const candidate of candidates) {
-    if (typeof candidate === "string") {
-      const trimmed = candidate.trim();
-      if (trimmed) {
-        return trimmed;
-      }
-    }
-
-    if (candidate && typeof candidate === "object") {
-      const url = (candidate as { public_url?: unknown }).public_url;
-      if (typeof url === "string") {
-        const trimmed = url.trim();
-        if (trimmed) {
-          return trimmed;
-        }
-      }
-    }
-  }
-
-  return "";
-};
-
-const resolveBillingoInvoiceNumber = (
-  metadata?: Record<string, unknown> | null
-) => {
-  const invoice = metadata?.billingo_invoice;
-  if (invoice && typeof invoice === "object") {
-    const invoiceNumber = (invoice as { invoice_number?: unknown })
-      .invoice_number;
-    if (typeof invoiceNumber === "string") {
-      const trimmed = invoiceNumber.trim();
-      if (trimmed) {
-        return trimmed;
-      }
-    }
-  }
-
-  return "";
 };
 
 const SummaryRow = ({
@@ -592,12 +541,6 @@ export const PaymentReceiptEmail = ({
         ? order.total
         : paymentAmount,
   };
-  const receiptUrl = resolveBillingoPublicUrl(
-    order?.metadata as Record<string, unknown> | null
-  );
-  const invoiceNumber = resolveBillingoInvoiceNumber(
-    order?.metadata as Record<string, unknown> | null
-  );
 
   return (
     <Html>
@@ -740,126 +683,6 @@ export const PaymentReceiptEmail = ({
                   value={formatAmount(totals.total, currency, lang.locale)}
                   accentColor={lang.accent}
                 />
-              </Section>
-
-              {receiptUrl ? (
-                <Section style={styles.receiptCard}>
-                  <Text style={styles.receiptTitle}>{lang.receiptTitle}</Text>
-                  <Text style={{ ...styles.note, margin: 0 }}>
-                    {lang.receiptCopy}
-                  </Text>
-                  <Section style={{ marginTop: "12px" }}>
-                    <Button href={receiptUrl} style={styles.receiptCta}>
-                      {lang.receiptCta}
-                    </Button>
-                    <Text style={{ ...styles.muted, marginTop: "10px" }}>
-                      {lang.code === "hu"
-                        ? "Ha a gomb nem működik, nyisd meg ezt:"
-                        : "Ak tlačidlo nefunguje, otvorte tento odkaz:"}{" "}
-                      <Link href={receiptUrl} style={styles.receiptLink}>
-                        {receiptUrl}
-                      </Link>
-                    </Text>
-                  </Section>
-                </Section>
-              ) : null}
-
-              <Section style={styles.bankCard}>
-                <Text style={styles.bankTitle}>
-                  {lang.code === "hu"
-                    ? "Banki átutalási adatok"
-                    : "Bankove udaje na prevod"}
-                </Text>
-                <Text style={{ ...styles.note, margin: "0 0 12px" }}>
-                  {lang.code === "hu"
-                    ? "A számla kiegyenlítéséhez használd az alábbi adatokat."
-                    : "Na uhradu faktury pouzite prosim nasledujuce udaje."}
-                </Text>
-                <Text style={{ ...styles.bankValue, marginTop: 0 }}>
-                  {INVOICE_COMPANY_DETAILS.companyName}
-                </Text>
-                <Text style={{ ...styles.muted, marginTop: "6px" }}>
-                  {INVOICE_COMPANY_DETAILS.city}, {INVOICE_COMPANY_DETAILS.street}
-                  <br />
-                  {INVOICE_COMPANY_DETAILS.postCode},{" "}
-                  {INVOICE_COMPANY_DETAILS.country}
-                </Text>
-                <table
-                  role="presentation"
-                  width="100%"
-                  cellPadding="0"
-                  cellSpacing="0"
-                  style={{
-                    width: "100%",
-                    borderCollapse: "collapse",
-                    marginTop: "12px",
-                  }}
-                >
-                  <tbody>
-                    <tr>
-                      <td style={{ padding: "6px 0 4px" }}>
-                        <Text style={styles.bankLabel}>Adoszam</Text>
-                        <Text style={styles.bankValue}>
-                          {INVOICE_COMPANY_DETAILS.taxNumber}
-                        </Text>
-                      </td>
-                      <td style={{ padding: "6px 0 4px" }}>
-                        <Text style={styles.bankLabel}>Cegjegyzekszam</Text>
-                        <Text style={styles.bankValue}>
-                          {INVOICE_COMPANY_DETAILS.registryNumber}
-                        </Text>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td style={{ padding: "6px 0 4px" }}>
-                        <Text style={styles.bankLabel}>EU adoszam</Text>
-                        <Text style={styles.bankValue}>
-                          {INVOICE_COMPANY_DETAILS.euTaxNumber}
-                        </Text>
-                      </td>
-                      <td style={{ padding: "6px 0 4px" }}>
-                        <Text style={styles.bankLabel}>Bank neve</Text>
-                        <Text style={styles.bankValue}>
-                          {INVOICE_COMPANY_DETAILS.bankName}
-                        </Text>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td colSpan={2} style={{ padding: "6px 0 4px" }}>
-                        <Text style={styles.bankLabel}>Bankszamlaszam</Text>
-                        <Text style={styles.bankValue}>
-                          {INVOICE_COMPANY_DETAILS.bankAccount}
-                        </Text>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td style={{ padding: "6px 0 4px" }}>
-                        <Text style={styles.bankLabel}>IBAN</Text>
-                        <Text style={styles.bankValue}>
-                          {INVOICE_COMPANY_DETAILS.iban}
-                        </Text>
-                      </td>
-                      <td style={{ padding: "6px 0 4px" }}>
-                        <Text style={styles.bankLabel}>SWIFT/BIC</Text>
-                        <Text style={styles.bankValue}>
-                          {INVOICE_COMPANY_DETAILS.swift}
-                        </Text>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td colSpan={2} style={{ padding: "6px 0 0" }}>
-                        <Text style={styles.bankLabel}>
-                          {lang.code === "hu"
-                            ? "Kozlemenyben add meg"
-                            : "Do poznamky uvedte"}
-                        </Text>
-                        <Text style={styles.bankValue}>
-                          {invoiceNumber || orderId}
-                        </Text>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
               </Section>
 
               {/* Note + Closing */}

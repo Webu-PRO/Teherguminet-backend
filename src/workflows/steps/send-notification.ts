@@ -23,7 +23,12 @@ export const sendNotificationStep = createStep(
     const notifications = await dispatchNotificationsIndividually(
       notificationModuleService,
       payloads,
-      logger
+      logger,
+      {
+        // Preserve predictable send order when multiple templates are queued
+        // in one step (for example order-thanks before order-placed).
+        concurrency: 1,
+      }
     )
 
     return new StepResponse(notifications)

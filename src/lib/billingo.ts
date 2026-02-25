@@ -440,6 +440,56 @@ const readNumber = (...values: unknown[]) => {
   return null
 }
 
+const readString = (...values: unknown[]) => {
+  for (const value of values) {
+    if (typeof value !== "string") {
+      continue
+    }
+    const trimmed = value.trim()
+    if (trimmed) {
+      return trimmed
+    }
+  }
+  return ""
+}
+
+const SHIPPING_TITLE_PATTERN = /^(shipping|szállítás(?:i)?(?:\s+költség)?)$/i
+const TIRE_SIZE_PATTERN =
+  /\b\d{3}\/\d{2}(?:\.\d+)?R\d{2}(?:\.\d+)?(?:-\d{1,3})?\b/i
+
+const resolveBillingoItemTitle = (
+  record: Record<string, unknown>,
+  detail: Record<string, unknown> | null
+) => {
+  const baseTitle = readString(
+    record.product_title,
+    detail?.product_title,
+    record.title,
+    detail?.title,
+    record.variant_title,
+    detail?.variant_title,
+    record.sku,
+    detail?.sku
+  )
+  if (!baseTitle) {
+    return "Item"
+  }
+
+  if (SHIPPING_TITLE_PATTERN.test(baseTitle)) {
+    return "Szállítási költség"
+  }
+
+  if (/^gumiabroncs\b/i.test(baseTitle)) {
+    return baseTitle
+  }
+
+  if (TIRE_SIZE_PATTERN.test(baseTitle)) {
+    return `GUMIABRONCS ${baseTitle}`
+  }
+
+  return baseTitle
+}
+
 const parsePositiveNumber = (value?: string | null) => {
   if (!value) {
     return null
@@ -1344,7 +1394,7 @@ export const createBillingoDocument = async (
           : vatFromLines
 
       return {
-        title: item.title ?? "Item",
+        title: resolveBillingoItemTitle(record, detail),
         quantity,
         lineTotal,
         vat,
@@ -1363,7 +1413,7 @@ export const createBillingoDocument = async (
 
   if (effectiveShippingLineGross > 0) {
     baseItems.push({
-      title: "Shipping",
+      title: "Szállítási költség",
       quantity: 1,
       lineTotal: effectiveShippingLineGross,
       vat: shippingVat,
