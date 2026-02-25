@@ -331,6 +331,56 @@ const resolveVatRateFromTotals = (
   return (taxTotal / (total - taxTotal)) * 100
 }
 
+const parseVatPercent = (vat: string) => {
+  const normalized = vat.trim().replace("%", "").replace(",", ".")
+  if (!normalized) {
+    return null
+  }
+  const parsed = Number(normalized)
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return null
+  }
+  return parsed
+}
+
+const resolveInvoiceUnitPrice = ({
+  lineTotal,
+  quantity,
+  currency,
+  vat,
+  unitPriceType,
+}: {
+  lineTotal: number
+  quantity: number
+  currency: string
+  vat: string
+  unitPriceType: BillingoConfig["invoiceUnitPriceType"]
+}) => {
+  const grossUnitPrice = toMajor(lineTotal / quantity, currency)
+  const currencyDecimals = resolveDecimals(currency)
+  const vatPercent = parseVatPercent(vat)
+
+  if (unitPriceType === "net") {
+    if (vatPercent !== null) {
+      const divider = 1 + vatPercent / 100
+      if (divider > 0) {
+        return roundTo(grossUnitPrice / divider, currencyDecimals)
+      }
+    }
+    return roundTo(grossUnitPrice, currencyDecimals)
+  }
+
+  // For HUF + gross pricing, Billingo can render long net unit-price decimals.
+  // Sending a 2-decimal gross unit price derived from an integer net value keeps
+  // the printed net unit price clean in the PDF.
+  if (currency.toUpperCase() === "HUF" && vatPercent !== null && vatPercent > 0) {
+    const netRounded = Math.round(grossUnitPrice / (1 + vatPercent / 100))
+    return roundTo(netRounded * (1 + vatPercent / 100), 2)
+  }
+
+  return roundTo(grossUnitPrice, currencyDecimals)
+}
+
 const normalizeNumericString = (raw: string) => {
   const trimmed = raw.trim()
   if (!trimmed) {
@@ -1450,10 +1500,13 @@ export const createBillingoDocument = async (
 
   const items: BillingoInvoiceItem[] = baseItems
     .map((item) => {
-      const unitPrice = roundTo(
-        toMajor(item.lineTotal / item.quantity, currency),
-        decimals
-      )
+      const unitPrice = resolveInvoiceUnitPrice({
+        lineTotal: item.lineTotal,
+        quantity: item.quantity,
+        currency,
+        vat: item.vat,
+        unitPriceType: config.invoiceUnitPriceType,
+      })
       return {
         name: item.title,
         unit_price: unitPrice,

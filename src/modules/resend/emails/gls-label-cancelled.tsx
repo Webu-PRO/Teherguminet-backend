@@ -168,6 +168,7 @@ const styles = {
 
   header: {
     padding: `${TOKENS.space.cardPad}px ${TOKENS.space.cardPad}px 16px`,
+    backgroundColor: TOKENS.color.brand,
   } as Css,
 
   headerTopRow: {
@@ -195,7 +196,7 @@ const styles = {
     letterSpacing: "0.22em",
     textTransform: "uppercase",
     margin: 0,
-    color: TOKENS.color.text,
+    color: "#ffffff",
     textDecoration: "none",
     display: "inline-block",
     fontFamily: FONT_STACK,
@@ -220,7 +221,7 @@ const styles = {
     fontSize: `${TOKENS.type.title}px`,
     lineHeight: TOKENS.line.title,
     fontWeight: 800,
-    color: TOKENS.color.text,
+    color: "#ffffff",
     fontFamily: FONT_STACK,
   } as Css,
 
@@ -228,7 +229,7 @@ const styles = {
     margin: "10px 0 0",
     fontSize: `${TOKENS.type.subtitle}px`,
     lineHeight: TOKENS.line.subtitle,
-    color: TOKENS.color.text,
+    color: "#FEE2E2",
     fontFamily: FONT_STACK,
   } as Css,
 
@@ -760,7 +761,7 @@ export const GlsLabelCancelledEmail = ({
               ) : null}
             </Section>
 
-            <Hr style={styles.divider} />
+            <Hr style={{ ...styles.divider, borderTop: "none" }} />
 
             {/* Content */}
             <Section style={styles.content} className="content">

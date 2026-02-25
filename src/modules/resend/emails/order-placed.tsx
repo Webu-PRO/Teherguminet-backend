@@ -78,7 +78,8 @@ const baseStyles = {
     overflow: "hidden",
   } as React.CSSProperties,
   header: {
-    padding: "28px 28px 10px",
+    padding: "22px 28px",
+    backgroundColor: F1_RED,
   } as React.CSSProperties,
   brand: {
     fontSize: "16px",
@@ -86,7 +87,7 @@ const baseStyles = {
     letterSpacing: "0.22em",
     textTransform: "uppercase",
     margin: 0,
-    color: "#111111",
+    color: "#ffffff",
     textDecoration: "none",
     display: "inline-block",
   } as React.CSSProperties,
@@ -159,8 +160,8 @@ const baseStyles = {
     marginTop: "18px",
     padding: "16px",
     borderRadius: "16px",
-    backgroundColor: "#F9FAFB",
-    border: "1px solid #E5E7EB",
+    backgroundColor: "#111111",
+    border: "1px solid #1F2937",
   } as React.CSSProperties,
   receiptTitle: {
     fontSize: "12px",
@@ -168,8 +169,18 @@ const baseStyles = {
     letterSpacing: "0.16em",
     fontWeight: 800,
     margin: "0 0 10px",
-    color: "#111111",
+    color: "#ffffff",
     fontFamily: FONT_STACK,
+  } as React.CSSProperties,
+  receiptText: {
+    color: "#F3F4F6",
+  } as React.CSSProperties,
+  receiptMuted: {
+    color: "#D1D5DB",
+  } as React.CSSProperties,
+  receiptLink: {
+    color: "#ffffff",
+    textDecoration: "underline",
   } as React.CSSProperties,
   bankCard: {
     marginTop: "18px",
@@ -445,7 +456,7 @@ export const OrderPlacedEmailComponent = ({ order }: OrderPlacedEmailProps) => {
               </Link>
             </Section>
 
-            <Hr style={baseStyles.divider} />
+            <Hr style={{ ...baseStyles.divider, borderTop: "none" }} />
 
             {/* Content */}
             <Section style={baseStyles.content}>
@@ -517,27 +528,24 @@ export const OrderPlacedEmailComponent = ({ order }: OrderPlacedEmailProps) => {
                   <Text style={baseStyles.receiptTitle}>
                     {lang.receiptTitle}
                   </Text>
-                  <Text style={{ ...baseStyles.p, margin: 0 }}>
+                  <Text style={{ ...baseStyles.p, ...baseStyles.receiptText, margin: 0 }}>
                     {lang.receiptCopy}
                   </Text>
                   <Section style={{ marginTop: "12px" }}>
-                    <Button
-                      href={receiptUrl}
-                      style={{
-                        ...baseStyles.cta,
-                        backgroundColor: "#111111",
-                      }}
-                    >
+                    <Button href={receiptUrl} style={baseStyles.cta}>
                       {lang.receiptCta}
                     </Button>
-                    <Text style={{ ...baseStyles.muted, marginTop: "10px" }}>
+                    <Text
+                      style={{
+                        ...baseStyles.muted,
+                        ...baseStyles.receiptMuted,
+                        marginTop: "10px",
+                      }}
+                    >
                       {lang.code === "hu"
                         ? "Ha a gomb nem működik, nyisd meg ezt:"
                         : "Ak tlačidlo nefunguje, otvorte tento odkaz:"}{" "}
-                      <Link
-                        href={receiptUrl}
-                        style={baseStyles.secondaryLink}
-                      >
+                      <Link href={receiptUrl} style={baseStyles.receiptLink}>
                         {receiptUrl}
                       </Link>
                     </Text>

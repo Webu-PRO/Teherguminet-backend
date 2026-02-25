@@ -62,6 +62,7 @@ const styles = {
   } as React.CSSProperties,
   header: {
     padding: "28px 28px 16px",
+    backgroundColor: F1_RED,
   } as React.CSSProperties,
   brand: {
     fontSize: "16px",
@@ -69,7 +70,7 @@ const styles = {
     letterSpacing: "0.22em",
     textTransform: "uppercase",
     margin: 0,
-    color: "#111111",
+    color: "#ffffff",
     textDecoration: "none",
     display: "inline-block",
     fontFamily: FONT_STACK,
@@ -79,14 +80,14 @@ const styles = {
     fontSize: "26px",
     lineHeight: "1.15",
     fontWeight: 700,
-    color: "#111111",
+    color: "#ffffff",
     fontFamily: FONT_STACK,
   } as React.CSSProperties,
   subtitle: {
     margin: "10px 0 0",
     fontSize: "14px",
     lineHeight: "20px",
-    color: "#6B7280",
+    color: "#FEE2E2",
     fontFamily: FONT_STACK,
   } as React.CSSProperties,
   divider: {
@@ -271,7 +272,7 @@ export function UserInvitedEmailComponent({
               </Text>
             </Section>
 
-            <Hr style={styles.divider} />
+            <Hr style={{ ...styles.divider, borderTop: "none" }} />
 
             {/* Content */}
             <Section style={styles.content}>

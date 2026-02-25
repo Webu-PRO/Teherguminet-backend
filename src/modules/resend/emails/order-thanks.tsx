@@ -82,6 +82,7 @@ const styles = {
   } as React.CSSProperties,
   header: {
     padding: "28px 28px 10px",
+    backgroundColor: F1_RED,
   } as React.CSSProperties,
   brand: {
     fontSize: "16px",
@@ -89,7 +90,7 @@ const styles = {
     letterSpacing: "0.22em",
     textTransform: "uppercase",
     margin: 0,
-    color: "#111111",
+    color: "#ffffff",
     textDecoration: "none",
     display: "inline-block",
     fontFamily: FONT_STACK,
@@ -396,7 +397,7 @@ export const OrderThanksEmailComponent = ({ order }: OrderThanksEmailProps) => {
               </Link>
             </Section>
 
-            <Hr style={styles.divider} />
+            <Hr style={{ ...styles.divider, borderTop: "none" }} />
 
             {/* Content */}
             <Section style={styles.content}>

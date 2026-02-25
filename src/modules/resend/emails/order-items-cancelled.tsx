@@ -147,6 +147,7 @@ const styles = {
   } as Css,
   header: {
     padding: `${TOKENS.space.pad}px ${TOKENS.space.pad}px 14px`,
+    backgroundColor: TOKENS.color.brand,
   } as Css,
   headerTopRow: {
     width: "100%",
@@ -161,7 +162,7 @@ const styles = {
     letterSpacing: "0.22em",
     textTransform: "uppercase",
     margin: 0,
-    color: TOKENS.color.text,
+    color: "#ffffff",
     textDecoration: "none",
     display: "inline-block",
     fontFamily: FONT_STACK,
@@ -176,14 +177,14 @@ const styles = {
     fontSize: `${TOKENS.type.title}px`,
     lineHeight: "1.2",
     fontWeight: 900,
-    color: TOKENS.color.text,
+    color: "#ffffff",
     fontFamily: FONT_STACK,
   } as Css,
   p: {
     fontSize: `${TOKENS.type.body}px`,
     lineHeight: "22px",
     margin: "0 0 12px",
-    color: TOKENS.color.text,
+    color: "#FEE2E2",
     fontFamily: FONT_STACK,
   } as Css,
   muted: {
@@ -560,7 +561,7 @@ export const OrderItemsCancelledEmail = ({
               ) : null}
             </Section>
 
-            <Hr style={styles.divider} />
+            <Hr style={{ ...styles.divider, borderTop: "none" }} />
 
             <Section style={styles.content} className="content">
               <Section style={styles.listCard} className="subtle">

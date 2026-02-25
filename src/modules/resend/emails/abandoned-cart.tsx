@@ -159,25 +159,25 @@ export const AbandonedCartEmail = ({
         <Body className="m-0 bg-white px-4 py-10 font-sans text-[#111111]">
           <Container className="mx-auto w-full max-w-[620px] rounded-[24px] border border-[#E5E7EB] bg-white p-0">
             {/* Header */}
-            <Section className="px-10 pt-10">
+            <Section className="bg-[#E10600] px-10 pt-8 pb-5">
               <Link
                 href={brandUrl}
-                className="inline-block text-[16px] font-semibold uppercase tracking-[0.22em] text-[#111111] no-underline"
+                className="inline-block text-[16px] font-semibold uppercase tracking-[0.22em] text-white no-underline"
               >
                 TEHERGUMINET.HU
               </Link>
 
               {storefrontUrl ? (
-                <Text className="mt-2 text-[12px] text-[#6B7280]">
+                <Text className="mt-2 text-[12px] text-[#FEE2E2]">
                   <Link
                     href={storefrontUrl}
-                    className="text-[#111111] no-underline"
+                    className="text-white no-underline"
                   >
                     {storefrontUrl.replace(/^https?:\/\//, "")}
                   </Link>
                 </Text>
               ) : (
-                <Text className="mt-2 text-[12px] text-[#6B7280]">
+                <Text className="mt-2 text-[12px] text-[#FEE2E2]">
                   {lang.preview}
                 </Text>
               )}
