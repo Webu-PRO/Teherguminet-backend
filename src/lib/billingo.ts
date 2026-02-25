@@ -892,9 +892,7 @@ const resolveInvoiceBankAccountId = async (
     }
   }
 
-  throw new Error(
-    "Billingo: no bank account found. Configure BILLINGO_INVOICE_BANK_ACCOUNT_ID or add a bank account in Billingo."
-  )
+  return undefined
 }
 
 export const createBillingoDocument = async (
@@ -1497,8 +1495,11 @@ export const createBillingoDocument = async (
     language: config.invoiceLanguage,
     currency,
     electronic: config.electronic,
-    bank_account_id: invoiceBankAccountId,
     items,
+  }
+
+  if (invoiceBankAccountId) {
+    basePayload.bank_account_id = invoiceBankAccountId
   }
 
   if (usePercentDiscount) {
