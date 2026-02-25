@@ -1,6 +1,6 @@
 import {
-  createStep,
   createWorkflow,
+  transform,
   when,
   WorkflowResponse,
 } from "@medusajs/framework/workflows-sdk"
@@ -47,20 +47,27 @@ export const sendPaymentReceiptWorkflow = createWorkflow(
       },
     })
 
-    const payment = payments?.[0]
-    const order = payment?.payment_collection?.order
+    const payload = transform({ payments }, ({ payments }) => {
+      const payment = payments?.[0]
+      return {
+        payment,
+        order: payment?.payment_collection?.order,
+      }
+    })
 
     const notification = when(
-      { payment, order },
-      ({ order }) => Boolean(order?.email)
+      { payload },
+      ({ payload }) => Boolean(payload.order?.email)
     ).then(() => {
+      const { payment, order } = payload
+
       if (!order?.email) {
         return null
       }
 
-      const idempotencyKey = payment?.id
-        ? `payment-receipt-${payment.id}`
-        : undefined
+      const idempotencyKey = transform({ payment }, ({ payment }) =>
+        payment?.id ? `payment-receipt-${payment.id}` : undefined
+      )
 
       return sendNotificationStep([
         {
