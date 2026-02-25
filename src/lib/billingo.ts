@@ -453,7 +453,7 @@ const readString = (...values: unknown[]) => {
   return ""
 }
 
-const SHIPPING_TITLE_PATTERN = /\bshipping\b|szállítás/i
+const SHIPPING_TITLE_PATTERN = /\bshipping\b|\bdelivery\b|szállítás/i
 const TIRE_SIZE_PATTERN =
   /\b\d{3}\/\d{2}(?:\.\d+)?R\d{2}(?:\.\d+)?(?:-\d{1,3})?\b/i
 const KNOWN_TIRE_BRANDS = [
@@ -466,41 +466,61 @@ const KNOWN_TIRE_BRANDS = [
 const compactSpaces = (value: string) =>
   value.replace(/\s+/g, " ").trim()
 
+const asRecord = (value: unknown): Record<string, unknown> | null => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null
+  }
+  return value as Record<string, unknown>
+}
+
+const findKnownBrandInText = (text: string) =>
+  KNOWN_TIRE_BRANDS.find((brand) =>
+    new RegExp(`\\b${brand}\\b`, "i").test(text)
+  ) ?? ""
+
 const resolveKnownBrand = (
   record: Record<string, unknown>,
   detail: Record<string, unknown> | null,
   baseTitle: string
 ) => {
-  const fromTitle = KNOWN_TIRE_BRANDS.find((brand) =>
-    new RegExp(`\\b${brand}\\b`, "i").test(baseTitle)
-  )
+  const fromTitle = findKnownBrandInText(baseTitle)
   if (fromTitle) {
     return fromTitle
   }
 
+  const recordMetadata = asRecord(record.metadata)
+  const detailMetadata = asRecord(detail?.metadata)
   const metadataBrand =
-    typeof (record.metadata as Record<string, unknown> | undefined)?.brand ===
-    "string"
-      ? (
-          (record.metadata as Record<string, unknown> | undefined)
-            ?.brand as string
-        ).trim()
-      : typeof (detail?.metadata as Record<string, unknown> | undefined)
-            ?.brand === "string"
-        ? (
-            (detail?.metadata as Record<string, unknown> | undefined)
-              ?.brand as string
-          ).trim()
-        : ""
+    readString(
+      recordMetadata?.brand,
+      recordMetadata?.marka,
+      detailMetadata?.brand,
+      detailMetadata?.marka,
+      record.brand,
+      detail?.brand
+    ) || ""
 
-  if (!metadataBrand) {
-    return ""
+  if (metadataBrand) {
+    const normalized = metadataBrand.toUpperCase()
+    const known =
+      KNOWN_TIRE_BRANDS.find((brand) => brand === normalized) ?? ""
+    if (known) {
+      return known
+    }
   }
 
-  const normalized = metadataBrand.toUpperCase()
-  const known =
-    KNOWN_TIRE_BRANDS.find((brand) => brand === normalized) ?? ""
-  return known || normalized
+  const fromSkuOrVariant = findKnownBrandInText(
+    [
+      readString(record.variant_sku, detail?.variant_sku),
+      readString(record.sku, detail?.sku),
+      readString(record.variant_title, detail?.variant_title),
+      readString(record.product_title, detail?.product_title),
+    ]
+      .filter(Boolean)
+      .join(" ")
+  )
+
+  return fromSkuOrVariant
 }
 
 const resolveBillingoItemTitle = (
@@ -1547,7 +1567,7 @@ export const createBillingoDocument = async (
       if (fallbackItemTotal > 0) {
         baseItems = [
           {
-            title: "Order total",
+            title: "Rendelés összesen",
             quantity: 1,
             lineTotal: fallbackItemTotal,
             vat: resolveItemVat(shippingMethod?.tax_lines ?? null),
