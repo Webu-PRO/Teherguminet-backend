@@ -453,9 +453,55 @@ const readString = (...values: unknown[]) => {
   return ""
 }
 
-const SHIPPING_TITLE_PATTERN = /^(shipping|szállítás(?:i)?(?:\s+költség)?)$/i
+const SHIPPING_TITLE_PATTERN = /\bshipping\b|szállítás/i
 const TIRE_SIZE_PATTERN =
   /\b\d{3}\/\d{2}(?:\.\d+)?R\d{2}(?:\.\d+)?(?:-\d{1,3})?\b/i
+const KNOWN_TIRE_BRANDS = [
+  "HUBTRAC",
+  "AEROTYRE",
+  "SUPERWAY",
+  "GROUNDSPEED",
+] as const
+
+const compactSpaces = (value: string) =>
+  value.replace(/\s+/g, " ").trim()
+
+const resolveKnownBrand = (
+  record: Record<string, unknown>,
+  detail: Record<string, unknown> | null,
+  baseTitle: string
+) => {
+  const fromTitle = KNOWN_TIRE_BRANDS.find((brand) =>
+    new RegExp(`\\b${brand}\\b`, "i").test(baseTitle)
+  )
+  if (fromTitle) {
+    return fromTitle
+  }
+
+  const metadataBrand =
+    typeof (record.metadata as Record<string, unknown> | undefined)?.brand ===
+    "string"
+      ? (
+          (record.metadata as Record<string, unknown> | undefined)
+            ?.brand as string
+        ).trim()
+      : typeof (detail?.metadata as Record<string, unknown> | undefined)
+            ?.brand === "string"
+        ? (
+            (detail?.metadata as Record<string, unknown> | undefined)
+              ?.brand as string
+          ).trim()
+        : ""
+
+  if (!metadataBrand) {
+    return ""
+  }
+
+  const normalized = metadataBrand.toUpperCase()
+  const known =
+    KNOWN_TIRE_BRANDS.find((brand) => brand === normalized) ?? ""
+  return known || normalized
+}
 
 const resolveBillingoItemTitle = (
   record: Record<string, unknown>,
@@ -475,19 +521,32 @@ const resolveBillingoItemTitle = (
     return "Item"
   }
 
-  if (SHIPPING_TITLE_PATTERN.test(baseTitle)) {
+  const normalizedTitle = compactSpaces(baseTitle)
+
+  if (SHIPPING_TITLE_PATTERN.test(normalizedTitle)) {
     return "Szállítási költség"
   }
 
-  if (/^gumiabroncs\b/i.test(baseTitle)) {
-    return baseTitle
+  const sizeMatch = normalizedTitle.match(TIRE_SIZE_PATTERN)
+  const hasTirePrefix = /^gumiabroncs\b/i.test(normalizedTitle)
+
+  if (!sizeMatch && !hasTirePrefix) {
+    return normalizedTitle
   }
 
-  if (TIRE_SIZE_PATTERN.test(baseTitle)) {
-    return `GUMIABRONCS ${baseTitle}`
-  }
+  const detectedBrand = resolveKnownBrand(record, detail, normalizedTitle)
+  const withoutPrefix = compactSpaces(
+    normalizedTitle.replace(/^gumiabroncs\b/i, "")
+  )
+  const hasBrandAlready = detectedBrand
+    ? new RegExp(`\\b${detectedBrand}\\b`, "i").test(withoutPrefix)
+    : false
+  const withBrand =
+    detectedBrand && !hasBrandAlready
+      ? compactSpaces(`${withoutPrefix} ${detectedBrand}`)
+      : withoutPrefix
 
-  return baseTitle
+  return compactSpaces(`GUMIABRONCS ${withBrand}`)
 }
 
 const parsePositiveNumber = (value?: string | null) => {
