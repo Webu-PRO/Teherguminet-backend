@@ -55,6 +55,38 @@ export const DEFAULT_STOREFRONT_URL = "https://teherguminet.hu";
 export const CONTACT_EMAIL = "info@teherguminet.hu";
 export const CONTACT_PHONE = "+36 1 234 5678";
 
+const envOrDefault = (key: string, fallback: string) => {
+  const value = process.env[key];
+  if (typeof value === "string" && value.trim().length > 0) {
+    return value.trim();
+  }
+  return fallback;
+};
+
+export const INVOICE_COMPANY_DETAILS = {
+  companyName: envOrDefault("INVOICE_COMPANY_NAME", "TT World Hungary Kft"),
+  city: envOrDefault("INVOICE_COMPANY_CITY", "Bakonyszombathely"),
+  street: envOrDefault("INVOICE_COMPANY_STREET", "Bem u. 36."),
+  postCode: envOrDefault("INVOICE_COMPANY_POSTCODE", "2884"),
+  country: envOrDefault("INVOICE_COMPANY_COUNTRY", "Magyarország"),
+  taxNumber: envOrDefault("INVOICE_COMPANY_TAX_NUMBER", "32630871-2-11"),
+  registryNumber: envOrDefault(
+    "INVOICE_COMPANY_REGISTRY_NUMBER",
+    "11-09-031179"
+  ),
+  euTaxNumber: envOrDefault("INVOICE_COMPANY_EU_TAX_NUMBER", "HU32630871"),
+  bankAccount: envOrDefault(
+    "INVOICE_COMPANY_BANK_ACCOUNT",
+    "10402032-50527166-87671009"
+  ),
+  iban: envOrDefault(
+    "INVOICE_COMPANY_IBAN",
+    "HU09 1040 2032 5052 7166 8767 1009"
+  ),
+  bankName: envOrDefault("INVOICE_COMPANY_BANK_NAME", "K&H Bank Zrt"),
+  swift: envOrDefault("INVOICE_COMPANY_SWIFT", "OKHBHUHB"),
+} as const;
+
 export const F1_RED = "#e10600";
 export const PANEL_BG = "rgba(20,20,22,0.92)";
 export const TEXT_LIGHT = "#F5F5F7";

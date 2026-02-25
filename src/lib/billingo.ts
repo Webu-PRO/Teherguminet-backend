@@ -54,6 +54,14 @@ type BillingoPublicUrl = {
   public_url?: string
 }
 
+type BillingoBankAccount = {
+  id?: number
+}
+
+type BillingoBankAccountListResponse = {
+  data?: BillingoBankAccount[]
+}
+
 type BillingoReceiptItem = {
   name: string
   unit_price: number
@@ -724,7 +732,8 @@ export const getBillingoConfig = (): BillingoConfig | null => {
       ? "net"
       : DEFAULT_INVOICE_UNIT_PRICE_TYPE
   const invoiceBankAccountId = parsePositiveNumber(
-    process.env.BILLINGO_INVOICE_BANK_ACCOUNT_ID?.trim()
+    process.env.BILLINGO_INVOICE_BANK_ACCOUNT_ID?.trim() ??
+      process.env.BILLINGO_BANK_ACCOUNT_ID?.trim()
   )
   const timeoutMsRaw = process.env.BILLINGO_TIMEOUT_MS?.trim()
   const timeoutMs = timeoutMsRaw ? Number(timeoutMsRaw) : DEFAULT_TIMEOUT_MS
@@ -838,6 +847,54 @@ const applyPayloadOverrides = (
   }
 
   return merged as BillingoDocumentPayload
+}
+
+const parseBillingoBankAccounts = (payload: unknown) => {
+  if (Array.isArray(payload)) {
+    return payload.filter(
+      (entry): entry is BillingoBankAccount =>
+        Boolean(entry) && typeof entry === "object"
+    )
+  }
+
+  if (payload && typeof payload === "object") {
+    const data = (payload as BillingoBankAccountListResponse).data
+    if (Array.isArray(data)) {
+      return data.filter(
+        (entry): entry is BillingoBankAccount =>
+          Boolean(entry) && typeof entry === "object"
+      )
+    }
+  }
+
+  return []
+}
+
+const resolveInvoiceBankAccountId = async (
+  config: BillingoConfig
+) => {
+  if (config.invoiceBankAccountId) {
+    return config.invoiceBankAccountId
+  }
+
+  const response = await billingoRequest<unknown>(
+    config,
+    "/bank-accounts",
+    {
+      method: "GET",
+    }
+  )
+  const accounts = parseBillingoBankAccounts(response)
+  for (const account of accounts) {
+    const parsedId = readNumber(account.id)
+    if (parsedId && parsedId > 0) {
+      return parsedId
+    }
+  }
+
+  throw new Error(
+    "Billingo: no bank account found. Configure BILLINGO_INVOICE_BANK_ACCOUNT_ID or add a bank account in Billingo."
+  )
 }
 
 export const createBillingoDocument = async (
@@ -1420,6 +1477,13 @@ export const createBillingoDocument = async (
   const documentDate = toDateString(
     (order as OrderDTO & { created_at?: string | Date }).created_at
   )
+  const bankAccountIdOverride = readNumber(
+    extraPayload?.bank_account_id
+  )
+  const invoiceBankAccountId =
+    bankAccountIdOverride && bankAccountIdOverride > 0
+      ? bankAccountIdOverride
+      : await resolveInvoiceBankAccountId(config)
 
   const basePayload: BillingoInvoicePayload = {
     vendor_id: resolveVendorId(order, "invoice"),
@@ -1433,6 +1497,7 @@ export const createBillingoDocument = async (
     language: config.invoiceLanguage,
     currency,
     electronic: config.electronic,
+    bank_account_id: invoiceBankAccountId,
     items,
   }
 
@@ -1441,10 +1506,6 @@ export const createBillingoDocument = async (
       type: "percent",
       value: discountPercent!,
     }
-  }
-
-  if (config.invoiceBankAccountId) {
-    basePayload.bank_account_id = config.invoiceBankAccountId
   }
 
   const payload = applyPayloadOverrides(basePayload, extraPayload)

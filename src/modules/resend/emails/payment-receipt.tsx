@@ -13,6 +13,7 @@ import {
   Text,
 } from "@react-email/components";
 import { LanguageCode, resolveLanguageFromOrder } from "../email-language";
+import { INVOICE_COMPANY_DETAILS } from "./order-email-shared";
 
 type PaymentSummary = {
   id?: string | null;
@@ -225,6 +226,39 @@ const styles = {
     color: "#111111",
     fontWeight: 700,
     textDecoration: "underline",
+  } as React.CSSProperties,
+  bankCard: {
+    marginTop: "18px",
+    borderRadius: "16px",
+    border: "1px solid #E5E7EB",
+    backgroundColor: "#ffffff",
+    padding: "18px",
+  } as React.CSSProperties,
+  bankTitle: {
+    margin: "0 0 10px",
+    fontSize: "12px",
+    textTransform: "uppercase",
+    letterSpacing: "0.16em",
+    fontWeight: 800,
+    color: "#111111",
+    fontFamily: FONT_STACK,
+  } as React.CSSProperties,
+  bankLabel: {
+    margin: 0,
+    fontSize: "11px",
+    textTransform: "uppercase",
+    letterSpacing: "0.12em",
+    color: "#6B7280",
+    fontFamily: FONT_STACK,
+  } as React.CSSProperties,
+  bankValue: {
+    margin: "4px 0 0",
+    fontSize: "14px",
+    lineHeight: "20px",
+    color: "#111111",
+    fontWeight: 700,
+    fontFamily: FONT_STACK,
+    wordBreak: "break-word",
   } as React.CSSProperties,
   closing: {
     margin: "12px 0 0",
@@ -454,6 +488,24 @@ const resolveBillingoPublicUrl = (
   return "";
 };
 
+const resolveBillingoInvoiceNumber = (
+  metadata?: Record<string, unknown> | null
+) => {
+  const invoice = metadata?.billingo_invoice;
+  if (invoice && typeof invoice === "object") {
+    const invoiceNumber = (invoice as { invoice_number?: unknown })
+      .invoice_number;
+    if (typeof invoiceNumber === "string") {
+      const trimmed = invoiceNumber.trim();
+      if (trimmed) {
+        return trimmed;
+      }
+    }
+  }
+
+  return "";
+};
+
 const SummaryRow = ({
   label,
   value,
@@ -540,6 +592,9 @@ export const PaymentReceiptEmail = ({
         : paymentAmount,
   };
   const receiptUrl = resolveBillingoPublicUrl(
+    order?.metadata as Record<string, unknown> | null
+  );
+  const invoiceNumber = resolveBillingoInvoiceNumber(
     order?.metadata as Record<string, unknown> | null
   );
 
@@ -707,6 +762,104 @@ export const PaymentReceiptEmail = ({
                   </Section>
                 </Section>
               ) : null}
+
+              <Section style={styles.bankCard}>
+                <Text style={styles.bankTitle}>
+                  {lang.code === "hu"
+                    ? "Banki átutalási adatok"
+                    : "Bankove udaje na prevod"}
+                </Text>
+                <Text style={{ ...styles.note, margin: "0 0 12px" }}>
+                  {lang.code === "hu"
+                    ? "A számla kiegyenlítéséhez használd az alábbi adatokat."
+                    : "Na uhradu faktury pouzite prosim nasledujuce udaje."}
+                </Text>
+                <Text style={{ ...styles.bankValue, marginTop: 0 }}>
+                  {INVOICE_COMPANY_DETAILS.companyName}
+                </Text>
+                <Text style={{ ...styles.muted, marginTop: "6px" }}>
+                  {INVOICE_COMPANY_DETAILS.city}, {INVOICE_COMPANY_DETAILS.street}
+                  <br />
+                  {INVOICE_COMPANY_DETAILS.postCode},{" "}
+                  {INVOICE_COMPANY_DETAILS.country}
+                </Text>
+                <table
+                  role="presentation"
+                  width="100%"
+                  cellPadding="0"
+                  cellSpacing="0"
+                  style={{
+                    width: "100%",
+                    borderCollapse: "collapse",
+                    marginTop: "12px",
+                  }}
+                >
+                  <tbody>
+                    <tr>
+                      <td style={{ padding: "6px 0 4px" }}>
+                        <Text style={styles.bankLabel}>Adoszam</Text>
+                        <Text style={styles.bankValue}>
+                          {INVOICE_COMPANY_DETAILS.taxNumber}
+                        </Text>
+                      </td>
+                      <td style={{ padding: "6px 0 4px" }}>
+                        <Text style={styles.bankLabel}>Cegjegyzekszam</Text>
+                        <Text style={styles.bankValue}>
+                          {INVOICE_COMPANY_DETAILS.registryNumber}
+                        </Text>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style={{ padding: "6px 0 4px" }}>
+                        <Text style={styles.bankLabel}>EU adoszam</Text>
+                        <Text style={styles.bankValue}>
+                          {INVOICE_COMPANY_DETAILS.euTaxNumber}
+                        </Text>
+                      </td>
+                      <td style={{ padding: "6px 0 4px" }}>
+                        <Text style={styles.bankLabel}>Bank neve</Text>
+                        <Text style={styles.bankValue}>
+                          {INVOICE_COMPANY_DETAILS.bankName}
+                        </Text>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td colSpan={2} style={{ padding: "6px 0 4px" }}>
+                        <Text style={styles.bankLabel}>Bankszamlaszam</Text>
+                        <Text style={styles.bankValue}>
+                          {INVOICE_COMPANY_DETAILS.bankAccount}
+                        </Text>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style={{ padding: "6px 0 4px" }}>
+                        <Text style={styles.bankLabel}>IBAN</Text>
+                        <Text style={styles.bankValue}>
+                          {INVOICE_COMPANY_DETAILS.iban}
+                        </Text>
+                      </td>
+                      <td style={{ padding: "6px 0 4px" }}>
+                        <Text style={styles.bankLabel}>SWIFT/BIC</Text>
+                        <Text style={styles.bankValue}>
+                          {INVOICE_COMPANY_DETAILS.swift}
+                        </Text>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td colSpan={2} style={{ padding: "6px 0 0" }}>
+                        <Text style={styles.bankLabel}>
+                          {lang.code === "hu"
+                            ? "Kozlemenyben add meg"
+                            : "Do poznamky uvedte"}
+                        </Text>
+                        <Text style={styles.bankValue}>
+                          {invoiceNumber || orderId}
+                        </Text>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </Section>
 
               {/* Note + Closing */}
               <Text style={styles.note}>{lang.note}</Text>
