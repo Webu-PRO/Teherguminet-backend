@@ -756,7 +756,7 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
     },
   })
 
-  const fulfillment = fulfillments?.[0] as
+  const fulfillment = fulfillments?.[0] as unknown as
     | FulfillmentWithOrder
     | undefined
 

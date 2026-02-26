@@ -443,7 +443,7 @@ export default async function fulfillmentCreatedHandler({
     },
   })
 
-  const fulfillment = fulfillments?.[0] as FulfillmentDTO & {
+  const fulfillment = fulfillments?.[0] as unknown as FulfillmentDTO & {
     order?: OrderDTO
     shipping_option?: {
       id?: string | null

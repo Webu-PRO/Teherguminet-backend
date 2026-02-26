@@ -139,7 +139,7 @@ const fetchOrderForBillingo = async (
     },
   })
 
-  return orders?.[0] as OrderDTO | undefined
+  return orders?.[0] as unknown as OrderDTO | undefined
 }
 
 const maybeCreateBillingoInvoice = async (
@@ -317,7 +317,7 @@ const updateOrderItemThumbnails = async (
     },
   })
 
-  const order = orders?.[0] as OrderDTO | undefined
+  const order = orders?.[0] as unknown as OrderDTO | undefined
   if (!order?.items?.length) {
     return
   }

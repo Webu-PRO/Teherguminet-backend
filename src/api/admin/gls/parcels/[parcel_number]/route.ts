@@ -671,7 +671,7 @@ export async function DELETE(req: MedusaRequest, res: MedusaResponse) {
             id: fulfillmentId,
           },
         })
-        const fulfillment = fulfillments?.[0] as
+        const fulfillment = fulfillments?.[0] as unknown as
           | FulfillmentSummary
           | undefined
 

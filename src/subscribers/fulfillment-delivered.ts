@@ -112,7 +112,7 @@ export default async function fulfillmentDeliveredHandler({
     },
   })
 
-  const fulfillment = fulfillments?.[0] as
+  const fulfillment = fulfillments?.[0] as unknown as
     | (FulfillmentDTO & {
         order?: OrderDTO
         shipping_option?: { name?: string | null } | null

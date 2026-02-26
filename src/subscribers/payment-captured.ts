@@ -232,7 +232,7 @@ const fetchOrderForBillingo = async (
     },
   })
 
-  return orders?.[0] as OrderDTO | undefined
+  return orders?.[0] as unknown as OrderDTO | undefined
 }
 
 const maybeCreateBillingoReceipt = async (

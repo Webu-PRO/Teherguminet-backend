@@ -1,5 +1,8 @@
 import type { MedusaContainer } from "@medusajs/framework/types"
-import { sendAbandonedCartsWorkflow } from "../workflows/send-abandoned-carts"
+import {
+  sendAbandonedCartsWorkflow,
+  type SendAbandonedCartsWorkflowInput,
+} from "../workflows/send-abandoned-carts"
 
 const DEFAULT_THRESHOLD_MINUTES = 60 * 24 // 1 day
 
@@ -75,7 +78,7 @@ export default async function abandonedCartJob(
       try {
         await sendAbandonedCartsWorkflow(container).run({
           input: {
-            carts: cartsWithItems,
+            carts: cartsWithItems as SendAbandonedCartsWorkflowInput["carts"],
           },
         })
         processed += cartsWithItems.length

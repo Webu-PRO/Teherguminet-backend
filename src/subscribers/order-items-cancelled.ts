@@ -171,7 +171,7 @@ export default async function orderItemsCancelledHandler({
     },
   });
 
-  const order = orders?.[0] as OrderDTO | undefined;
+  const order = orders?.[0] as unknown as OrderDTO | undefined;
   if (!order || !Array.isArray(order.items)) {
     return;
   }
