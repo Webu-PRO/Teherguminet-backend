@@ -135,15 +135,16 @@ export const sendOrderConfirmationWorkflow = createWorkflow(
         return null
       }
 
+      const orderId = order?.id as unknown as string | null | undefined
       const confirmationKey = transform(
-        { order: order as any },
-        ({ order }: any) =>
-          order?.id ? `order-placed-${order.id}` : undefined
+        { orderId },
+        ({ orderId }) =>
+          orderId ? `order-placed-${orderId}` : undefined
       )
       const thanksKey = transform(
-        { order: order as any },
-        ({ order }: any) =>
-          order?.id ? `order-thanks-${order.id}` : undefined
+        { orderId },
+        ({ orderId }) =>
+          orderId ? `order-thanks-${orderId}` : undefined
       )
 
       return sendNotificationStep([
