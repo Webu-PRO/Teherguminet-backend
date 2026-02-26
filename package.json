@@ -62,14 +62,6 @@
     "vite": "^5.2.11",
     "yalc": "^1.0.0-pre.53"
   },
-  "resolutions": {
-    "@mikro-orm/cli": "6.4.16",
-    "@mikro-orm/core": "6.4.16",
-    "@mikro-orm/knex": "6.4.16",
-    "@mikro-orm/migrations": "6.4.16",
-    "@mikro-orm/postgresql": "6.4.16",
-    "mikro-orm": "6.4.16"
-  },
   "engines": {
     "node": ">=20"
   },
