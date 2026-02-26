@@ -65,9 +65,9 @@ export const sendPaymentReceiptWorkflow = createWorkflow(
         return null
       }
 
-      const idempotencyKey = transform({ payment }, ({ payment }) =>
-        payment?.id ? `payment-receipt-${payment.id}` : undefined
-      )
+      const idempotencyKey = payment?.id
+        ? `payment-receipt-${payment.id}`
+        : undefined
 
       return sendNotificationStep([
         {

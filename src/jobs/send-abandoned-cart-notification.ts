@@ -78,7 +78,8 @@ export default async function abandonedCartJob(
       try {
         await sendAbandonedCartsWorkflow(container).run({
           input: {
-            carts: cartsWithItems as SendAbandonedCartsWorkflowInput["carts"],
+            carts:
+              cartsWithItems as unknown as SendAbandonedCartsWorkflowInput["carts"],
           },
         })
         processed += cartsWithItems.length

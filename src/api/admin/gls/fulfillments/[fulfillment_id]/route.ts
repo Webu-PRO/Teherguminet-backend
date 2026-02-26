@@ -841,7 +841,7 @@ export async function DELETE(req: MedusaRequest, res: MedusaResponse) {
     },
   })
 
-  const fulfillment = fulfillments?.[0] as
+  const fulfillment = fulfillments?.[0] as unknown as
     | FulfillmentWithOrder
     | undefined
 
@@ -1230,7 +1230,7 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     },
   })
 
-  const fulfillment = fulfillments?.[0] as
+  const fulfillment = fulfillments?.[0] as unknown as
     | FulfillmentWithOrder
     | undefined
 

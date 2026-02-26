@@ -104,7 +104,7 @@ const fetchOrderForBillingo = async (
     },
   })
 
-  return orders?.[0] as OrderDTO | undefined
+  return orders?.[0] as unknown as OrderDTO | undefined
 }
 
 export async function GET(req: MedusaRequest, res: MedusaResponse) {
@@ -148,7 +148,7 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
       },
     })
 
-    const order = orders?.[0] as OrderDTO | undefined
+    const order = orders?.[0] as unknown as OrderDTO | undefined
     if (!order) {
       console.warn("[Billingo] order not found", { orderId })
       res.status(404).json({ message: "Order not found." })
