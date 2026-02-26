@@ -136,13 +136,13 @@ export const sendOrderConfirmationWorkflow = createWorkflow(
       }
 
       const confirmationKey = transform(
-        { order },
-        ({ order }: { order?: { id?: string | null } | null }) =>
+        { order: order as any },
+        ({ order }: any) =>
           order?.id ? `order-placed-${order.id}` : undefined
       )
       const thanksKey = transform(
-        { order },
-        ({ order }: { order?: { id?: string | null } | null }) =>
+        { order: order as any },
+        ({ order }: any) =>
           order?.id ? `order-thanks-${order.id}` : undefined
       )
 

@@ -66,8 +66,8 @@ export const sendPaymentReceiptWorkflow = createWorkflow(
       }
 
       const idempotencyKey = transform(
-        { payment },
-        ({ payment }: { payment?: { id?: string | null } | null }) =>
+        { payment: payment as any },
+        ({ payment }: any) =>
           payment?.id ? `payment-receipt-${payment.id}` : undefined
       )
 
