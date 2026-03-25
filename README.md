@@ -63,6 +63,169 @@ This backend exclusively uses the custom Resend notification provider defined in
 
 Every `order.placed` event now creates a notification linked to the order in Medusa, so you can audit the sent emails directly from the admin UI.
 
+## Store Analytics Plugin (`@rsc-labs/medusa-store-analytics-v2`)
+
+Medusa store-analytics is a plugin that shows analytics data for your store, including orders, sales, customers, products, and marketing insights.
+
+### Why?
+
+Knowledge about your store is crucial to take proper action and increase sales. Analytics data can show, for example, the most popular region or sales channel, and on which days customers buy the most. These insights can help identify problems and possible solutions.
+
+### Getting Started
+
+#### Plugin System
+
+1. Add the plugin to `package.json`:
+
+```json
+{
+  "dependencies": {
+    "@rsc-labs/medusa-store-analytics-v2": "0.1.3"
+  }
+}
+```
+
+Then install dependencies, for example:
+
+```bash
+yarn install
+```
+
+2. Add the plugin to `medusa-config.ts` (or `medusa-config.js`):
+
+```ts
+plugins: [
+  {
+    resolve: "@rsc-labs/medusa-store-analytics-v2",
+    options: {},
+  },
+]
+```
+
+#### Copy The Code (`/src`) Option
+
+You can also copy the code from `/src` into your Medusa project and load it as a local module in `medusa-config.ts` / `medusa-config.js`:
+
+```ts
+{
+  resolve: "./modules/store-analytics",
+}
+```
+
+If you copy the code, add these dependencies to `package.json`:
+
+```json
+{
+  "dependencies": {
+    "@medusajs/icons": "^2.1.3",
+    "@mui/material": "^6.1.2",
+    "react-hook-form": "^7.53.0",
+    "@emotion/react": "^11.13.3",
+    "@emotion/styled": "^11.13.0",
+    "pdfkit": "^0.15.1",
+    "recharts": "^2.13.3"
+  }
+}
+```
+
+### How Can I Use It?
+
+After installing the plugin, a new `Analytics` option appears in the admin sidebar. Open it to explore store data.
+
+_Medusa store-analytics-1_
+
+> Warning: Depending on the number of orders, customers, and other records, wider ranges like `Last year` or `All time` may take longer to load.
+
+### Configuration
+
+No configuration is required in code. Everything is controlled through the UI, including:
+
+- Date range selection
+- Order status filters used in calculations
+- Enabling/disabling comparison mode
+
+### Supported Statistics
+
+_Medusa store-analytics-2_
+
+#### General
+
+| Name | Status |
+| --- | --- |
+| 4 ranges of dates | ✅ |
+| Comparison across date ranges | ✅ |
+| Filtering by orders' status | ✅ |
+
+#### Orders
+
+| Name | Status |
+| --- | --- |
+| Orders by time | ✅ |
+| Orders chart | ✅ |
+| Regions popularity | ✅ |
+| Sales channel popularity | ✅ |
+| Orders frequency distribution | ✅ |
+| Payment provider popularity | ✅ |
+
+#### Sales
+
+| Name | Status |
+| --- | --- |
+| Sales by time | ✅ |
+| Sales by currency code | ✅ |
+| Sales chart | ✅ |
+| Refunds | ✅ |
+
+#### Customers
+
+| Name | Status |
+| --- | --- |
+| New customers by time | ✅ |
+| Repeat customer rate | ✅ |
+| Customers chart | ✅ |
+| Cumulative customers by time | ✅ |
+
+#### Products
+
+| Name | Status |
+| --- | --- |
+| Top variants | ✅ |
+| Top returned variants | ✅ |
+| Products sold count | ✅ |
+| Out of stock variants | BETA |
+
+#### Marketing
+
+| Name | Status |
+| --- | --- |
+| Top discounts | ✅ |
+
+### License
+
+MIT
+
+### Pro Version
+
+The Pro version of medusa-store-analytics expands on the free version with advanced capabilities such as:
+
+- Customizable dashboard (build your own dashboard with selected statistics)
+- Date range picker (choose any exact period)
+- 15+ advanced statistics (funnels, deeper promotion insights, and granular channel analytics)
+
+The Pro version is available under a commercial license. Contact `labs@rsoftcon.com` for more information.
+
+### Hide Pro Version Tab
+
+To hide the `Pro version` tab in admin, set:
+
+```bash
+VITE_MEDUSA_ADMIN_MEDUSA_STORE_ANALYTICS_HIDE_PRO=true
+```
+
+Restart the admin application after setting this variable.
+
+© 2024 RSC https://rsoftcon.com/
+
 ## What is Medusa
 
 Medusa is a set of commerce modules and tools that allow you to build rich, reliable, and performant commerce applications without reinventing core commerce logic. The modules can be customized and used to build advanced ecommerce stores, marketplaces, or any product that needs foundational commerce primitives. All modules are open-source and freely available on npm.

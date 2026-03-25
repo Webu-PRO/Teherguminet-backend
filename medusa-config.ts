@@ -287,6 +287,12 @@ module.exports = defineConfig({
       },
     },
   },
+  plugins: [
+    {
+      resolve: "@rsc-labs/medusa-store-analytics-v2",
+      options: {},
+    },
+  ],
   auth: {
     customer: {
       strategies: {
