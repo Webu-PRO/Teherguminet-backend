@@ -1,6 +1,10 @@
 import { Modules } from "@medusajs/framework/utils"
 import { createStep, StepResponse } from "@medusajs/framework/workflows-sdk"
-import type { CreateNotificationDTO, Logger } from "@medusajs/framework/types"
+import type {
+  CreateNotificationDTO,
+  INotificationModuleService,
+  Logger,
+} from "@medusajs/framework/types"
 
 import { dispatchNotificationsIndividually } from "../../lib/dispatch-notifications"
 
@@ -10,7 +14,8 @@ export const sendNotificationStep = createStep(
     data: CreateNotificationDTO | CreateNotificationDTO[],
     { container }
   ) => {
-    const notificationModuleService = container.resolve(Modules.NOTIFICATION)
+    const notificationModuleService =
+      container.resolve<INotificationModuleService>(Modules.NOTIFICATION)
     const payloads = Array.isArray(data) ? data : [data]
 
     let logger: Logger | undefined

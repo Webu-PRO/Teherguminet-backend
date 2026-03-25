@@ -4,6 +4,7 @@ import type {
   CartDTO,
   CartLineItemDTO,
   CustomerDTO,
+  INotificationModuleService,
   Logger,
 } from "@medusajs/framework/types";
 
@@ -41,7 +42,7 @@ type SendAbandonedNotificationsInput = {
 };
 
 const SUPPORT_EMAIL = process.env.SUPPORT_EMAIL || "info@teherguminet.hu";
-const SUPPORT_PHONE = process.env.SUPPORT_PHONE || "+36 1 234 5678";
+const SUPPORT_PHONE = process.env.SUPPORT_PHONE || "+36 30 204 0053";
 const TEMPLATE_NAME = "abandoned-cart";
 
 const normalizeStorefrontUrl = (raw?: string | null) => {
@@ -72,7 +73,8 @@ export const sendAbandonedNotificationsStep = createStep(
       process.env.STOREFRONT_URL
     );
 
-    const notificationModuleService = container.resolve(Modules.NOTIFICATION);
+    const notificationModuleService =
+      container.resolve<INotificationModuleService>(Modules.NOTIFICATION);
 
     const notificationsPayload = input.carts
       .filter((cart) => Boolean(cart.email))

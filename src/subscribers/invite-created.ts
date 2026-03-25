@@ -15,6 +15,7 @@ import type {
 } from "@medusajs/types"
 
 import { dispatchNotificationsIndividually } from "../lib/dispatch-notifications"
+import { resolveInviteLanguage } from "../modules/resend/invite-language"
 
 type InviteEventPayload = {
   id: string
@@ -22,6 +23,11 @@ type InviteEventPayload = {
   user_email?: string | null
   email?: string | null
   expires_at?: string | Date | null
+  language?: string | null
+  locale?: string | null
+  lang?: string | null
+  country_code?: string | null
+  countryCode?: string | null
 }
 
 type InviteRecord = {
@@ -29,6 +35,7 @@ type InviteRecord = {
   email: string
   token: string
   expiresAt?: Date
+  language: "hu" | "sk"
 }
 
 const parseDate = (value?: Date | string | null): Date | undefined => {
@@ -213,6 +220,24 @@ export default async function inviteCreatedHandler({
       undefined
     const token = entry.token ?? details?.token ?? undefined
     const expiresAt = parseDate(details?.expires_at ?? entry.expires_at)
+    const inviteMetadata = ((details as any)?.metadata ?? {}) as Record<
+      string,
+      unknown
+    >
+    const language = resolveInviteLanguage({
+      email,
+      language: entry.language ?? (details as any)?.language,
+      locale: entry.locale ?? (details as any)?.locale,
+      lang: entry.lang ?? (details as any)?.lang,
+      countryCode:
+        entry.countryCode ??
+        entry.country_code ??
+        (details as any)?.countryCode ??
+        (details as any)?.country_code,
+      currencyCode:
+        (details as any)?.currencyCode ?? (details as any)?.currency_code,
+      metadata: inviteMetadata,
+    })
 
     if (!email || !token) {
       logWarn(
@@ -227,6 +252,7 @@ export default async function inviteCreatedHandler({
       email,
       token,
       expiresAt,
+      language,
     })
   }
 
@@ -276,6 +302,9 @@ export default async function inviteCreatedHandler({
         email: invite.email,
         invite_link: inviteLink,
         invite_url: inviteLink,
+        language: invite.language,
+        locale: invite.language,
+        lang: invite.language,
         token: invite.token,
         encoded_token: encodedToken,
         expires_at: invite.expiresAt

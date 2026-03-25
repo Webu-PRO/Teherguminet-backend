@@ -63,6 +63,7 @@ import {
   resolveLanguageFromHints,
   resolveLanguageFromOrder,
 } from "./email-language";
+import { resolveInviteLanguage } from "./invite-language";
 
 type ResendOptions = {
   api_key: string;
@@ -233,6 +234,10 @@ const resolveNotificationLanguage = (
 
   if (template === Templates.PASSWORD_RESET) {
     return resolvePasswordResetLanguage();
+  }
+
+  if (template === Templates.USER_INVITED) {
+    return resolveInviteLanguage(data);
   }
 
   return "hu";
@@ -475,9 +480,15 @@ class ResendNotificationProviderService extends AbstractNotificationProviderServ
       }
       case Templates.USER_INVITED: {
         const email = (notification.data as any)?.email ?? notification.to;
+        if (language === "sk") {
+          return email
+            ? `Pozvánka do ${BRAND_NAME} – ${email}`
+            : `Pozvánka do ${BRAND_NAME}`;
+        }
+
         return email
-          ? `You're invited to ${BRAND_NAME} – ${email}`
-          : `You're invited to ${BRAND_NAME}`;
+          ? `Meghívó a ${BRAND_NAME} platformra – ${email}`
+          : `Meghívó a ${BRAND_NAME} platformra`;
       }
       case Templates.ABANDONED_CART:
         return language === "sk"

@@ -134,7 +134,7 @@ export const AbandonedCartEmail = ({
   countryCode,
   storefrontUrl,
   supportEmail = "info@teherguminet.hu",
-  supportPhone = "+36 1 234 5678",
+  supportPhone = "+36 30 204 0053",
   items = [],
 }: AbandonedCartEmailProps) => {
   const languageCode = resolveLanguageFromHints({

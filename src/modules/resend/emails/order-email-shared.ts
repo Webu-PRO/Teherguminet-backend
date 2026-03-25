@@ -53,7 +53,7 @@ export type OrderEmailProps = {
 
 export const DEFAULT_STOREFRONT_URL = "https://teherguminet.hu";
 export const CONTACT_EMAIL = "info@teherguminet.hu";
-export const CONTACT_PHONE = "+36 1 234 5678";
+export const CONTACT_PHONE = "+36 30 204 0053";
 
 const envOrDefault = (key: string, fallback: string) => {
   const value = process.env[key];

@@ -141,7 +141,7 @@ const styles = {
   card: {
     borderRadius: `${TOKENS.radius.outer}px`,
     backgroundColor: TOKENS.color.bg,
-    border: TOKENS.border.light,
+    border: "none",
     boxShadow: TOKENS.shadow.light,
     overflow: "hidden",
   } as Css,
@@ -220,7 +220,7 @@ const styles = {
     padding: "16px",
     borderRadius: `${TOKENS.radius.inner}px`,
     backgroundColor: TOKENS.color.subtle,
-    border: TOKENS.border.light,
+    border: "none",
   } as Css,
   listTitle: {
     fontSize: `${TOKENS.type.micro}px`,
@@ -299,14 +299,29 @@ const styles = {
   contactCard: {
     marginTop: TOKENS.space.gap,
     borderRadius: `${TOKENS.radius.inner}px`,
-    border: TOKENS.border.light,
-    backgroundColor: TOKENS.color.bg,
+    border: "none",
+    backgroundColor: TOKENS.color.subtle,
     padding: "16px",
   } as Css,
   contactTitle: {
     margin: 0,
     fontSize: "14px",
     fontWeight: 900,
+    color: TOKENS.color.text,
+    fontFamily: FONT_STACK,
+  } as Css,
+  contactText: {
+    fontSize: `${TOKENS.type.small}px`,
+    lineHeight: "20px",
+    color: "#374151",
+    marginTop: "8px",
+    marginBottom: 0,
+    fontFamily: FONT_STACK,
+  } as Css,
+  contactInline: {
+    marginTop: "10px",
+    fontSize: `${TOKENS.type.small}px`,
+    lineHeight: "20px",
     color: TOKENS.color.text,
     fontFamily: FONT_STACK,
   } as Css,
@@ -454,14 +469,18 @@ export const OrderItemsCancelledEmail = ({
         <style>{`
           @media (prefers-color-scheme: dark) {
             body { background: ${TOKENS.color.darkBg} !important; }
-            .card { background: ${TOKENS.color.darkCard} !important; border: ${TOKENS.border.dark} !important; box-shadow: ${TOKENS.shadow.dark} !important; }
+            .card { background: ${TOKENS.color.darkCard} !important; border: none !important; box-shadow: ${TOKENS.shadow.dark} !important; }
             .text { color: ${TOKENS.color.darkText} !important; }
             .muted { color: ${TOKENS.color.darkMuted} !important; }
-            .subtle { background: ${TOKENS.color.darkSubtle} !important; border: ${TOKENS.border.dark} !important; }
+            .subtle { background: ${TOKENS.color.darkSubtle} !important; border: none !important; }
             a { color: ${TOKENS.color.darkLink} !important; }
             .secondary { background: rgba(255,255,255,0.06) !important; border: ${TOKENS.border.dark} !important; color: ${TOKENS.color.darkText} !important; }
             .thumb { border: ${TOKENS.border.dark} !important; background: rgba(255,255,255,0.06) !important; }
             .qty { border: ${TOKENS.border.dark} !important; background: rgba(255,255,255,0.06) !important; color: ${TOKENS.color.darkText} !important; }
+            .contact-card { background: ${TOKENS.color.darkSubtle} !important; border: ${TOKENS.border.dark} !important; }
+            .contact-title { color: ${TOKENS.color.darkText} !important; }
+            .contact-text { color: #D1D5DB !important; }
+            .contact-inline { color: ${TOKENS.color.darkText} !important; }
           }
           @media (max-width: 520px) {
             .container { padding: 0 14px !important; }
@@ -688,10 +707,7 @@ export const OrderItemsCancelledEmail = ({
                   </tbody>
                 </table>
 
-                <Text
-                  style={{ ...styles.muted, marginTop: "10px" }}
-                  className="muted"
-                >
+                <Text style={styles.contactInline} className="contact-inline">
                   {block.contactTitle}:{" "}
                   <Link href={`mailto:${CONTACT_EMAIL}`} style={styles.link}>
                     {CONTACT_EMAIL}
@@ -703,14 +719,11 @@ export const OrderItemsCancelledEmail = ({
                 </Text>
               </Section>
 
-              <Section style={styles.contactCard}>
-                <Text style={styles.contactTitle} className="text">
+              <Section style={styles.contactCard} className="contact-card">
+                <Text style={styles.contactTitle} className="contact-title">
                   {block.contactTitle}
                 </Text>
-                <Text
-                  style={{ ...styles.muted, marginTop: "8px" }}
-                  className="muted"
-                >
+                <Text style={styles.contactText} className="contact-text">
                   {block.contactCopy}
                 </Text>
               </Section>

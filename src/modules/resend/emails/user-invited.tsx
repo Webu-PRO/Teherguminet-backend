@@ -13,10 +13,15 @@ import {
   Text,
 } from "@react-email/components";
 import { F1_RED } from "./order-email-shared";
+import { type LanguageCode } from "../email-language";
+import { resolveInviteLanguage } from "../invite-language";
 
 export type UserInvitedEmailProps = {
   invite_url: string;
   email?: string;
+  language?: string | null;
+  locale?: string | null;
+  lang?: string | null;
 };
 
 const BRAND = "Teherguminet.hu";
@@ -24,7 +29,7 @@ const FONT_STACK =
   '"SF Pro Text","SF Pro Display",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif';
 
 type LangSection = {
-  code: "hu" | "sk";
+  code: LanguageCode;
   languageLabel: string;
   heading: string;
   greeting: string;
@@ -34,6 +39,15 @@ type LangSection = {
   copyIntro: string;
   note: string;
   accent: string; // minimal accent, still white bg + black content
+};
+
+type InviteLocalizedCopy = {
+  previewText: string;
+  title: string;
+  subtitle: string;
+  emailLabel: string;
+  statusLabel: string;
+  statusValue: string;
 };
 
 const resolveGreeting = (prefix: string, email?: string) =>
@@ -207,13 +221,42 @@ const styles = {
 export function UserInvitedEmailComponent({
   invite_url,
   email,
+  language,
+  locale,
+  lang,
 }: UserInvitedEmailProps) {
-  const previewText = "Meghívó a platformunkra / Pozvánka na našu platformu";
+  const resolvedLanguage = resolveInviteLanguage({
+    language,
+    locale,
+    lang,
+    email,
+  });
 
-  const languageSections: LangSection[] = [
-    {
+  const localizedCopy: Record<LanguageCode, InviteLocalizedCopy> = {
+    hu: {
+      previewText: "Meghívó a Teherguminet.hu platformra",
+      title: "B2B meghívó partnereknek",
+      subtitle:
+        "Meghívunk, hogy csatlakozz a partnereinknek fenntartott felülethez.",
+      emailLabel: "E-mail",
+      statusLabel: "Állapot",
+      statusValue: "Aktív meghívó",
+    },
+    sk: {
+      previewText: "Pozvánka na platformu Teherguminet.hu",
+      title: "B2B pozvánka pre partnerov",
+      subtitle:
+        "Pozývame vás do partnerského rozhrania pre nákup a správu objednávok.",
+      emailLabel: "E-mail",
+      statusLabel: "Stav",
+      statusValue: "Aktívne pozvanie",
+    },
+  };
+
+  const languageSections: Record<LanguageCode, LangSection> = {
+    hu: {
       code: "hu",
-      languageLabel: "Magyar / Hungarian",
+      languageLabel: "Magyar",
       heading: "Meghívót kaptál a Teherguminet.hu platformra",
       greeting: resolveGreeting("Szia", email),
       lead: "Az alábbi gombbal aktiválhatod hozzáférésedet a flottakezelő és rendeléskövető felülethez.",
@@ -226,9 +269,9 @@ export function UserInvitedEmailComponent({
       note: "Ha nem számítottál erre a meghívóra, egyszerűen hagyd figyelmen kívül ezt az üzenetet.",
       accent: "#E10600",
     },
-    {
+    sk: {
       code: "sk",
-      languageLabel: "Slovenčina / Slovak",
+      languageLabel: "Slovenčina",
       heading: "Pozvánka na platformu Teherguminet.hu",
       greeting: resolveGreeting("Ahoj", email),
       lead: "Pomocou tlačidla nižšie aktivujete prístup do správy flotily a sledovania objednávok.",
@@ -242,17 +285,19 @@ export function UserInvitedEmailComponent({
       note: "Ak ste túto pozvánku neočakávali, môžete tento e-mail bezpečne ignorovať.",
       accent: "#3F8DFF",
     },
-  ];
+  };
 
+  const copy = localizedCopy[resolvedLanguage] ?? localizedCopy.hu;
+  const section = languageSections[resolvedLanguage] ?? languageSections.hu;
   const metaTiles = [
-    { label: "E-mail / Email", value: email ?? "—" },
-    { label: "Állapot / Stav", value: "Aktív meghívó / Aktívne pozvanie" },
+    { label: copy.emailLabel, value: email ?? "—" },
+    { label: copy.statusLabel, value: copy.statusValue },
   ];
 
   return (
-    <Html>
+    <Html lang={resolvedLanguage === "sk" ? "sk" : "hu"}>
       <Head />
-      <Preview>{previewText}</Preview>
+      <Preview>{copy.previewText}</Preview>
 
       <Body style={styles.body}>
         <Container style={styles.container}>
@@ -262,14 +307,8 @@ export function UserInvitedEmailComponent({
               <Link href="https://teherguminet.hu" style={styles.brand}>
                 {BRAND.toUpperCase()}
               </Link>
-              <Heading style={styles.title}>
-                B2B meghívó / Pozvánka pre partnerov
-              </Heading>
-              <Text style={styles.subtitle}>
-                Meghívunk, hogy csatlakozz a partnereinknek fenntartott
-                felülethez. / Pozývame vás do partnerského rozhrania pre nákup a
-                správu objednávok.
-              </Text>
+              <Heading style={styles.title}>{copy.title}</Heading>
+              <Text style={styles.subtitle}>{copy.subtitle}</Text>
             </Section>
 
             <Hr style={{ ...styles.divider, borderTop: "none" }} />
@@ -302,55 +341,44 @@ export function UserInvitedEmailComponent({
                 </tbody>
               </table>
 
-              {/* Language blocks */}
-              {languageSections.map((section) => (
-                <Section key={section.code} style={styles.sectionCard}>
-                  <Text style={{ ...styles.sectionTag, color: section.accent }}>
-                    {section.languageLabel}
-                  </Text>
-                  <Heading as="h2" style={styles.h2}>
-                    {section.heading}
-                  </Heading>
+              <Section key={section.code} style={styles.sectionCard}>
+                <Text style={{ ...styles.sectionTag, color: section.accent }}>
+                  {section.languageLabel}
+                </Text>
+                <Heading as="h2" style={styles.h2}>
+                  {section.heading}
+                </Heading>
 
-                  <Text style={styles.p}>{section.greeting}</Text>
-                  <Text style={styles.p}>{section.lead}</Text>
+                <Text style={styles.p}>{section.greeting}</Text>
+                <Text style={styles.p}>{section.lead}</Text>
 
-                  <Section style={{ marginTop: "10px" }}>
-                    {section.bulletPoints.map((item, idx) => (
-                      <Text
-                        key={`${section.code}-bp-${idx}`}
-                        style={styles.bullet}
-                      >
-                        • {item}
-                      </Text>
-                    ))}
-                  </Section>
-
-                  <Section style={{ marginTop: "14px" }}>
-                    <Button href={invite_url} style={styles.cta}>
-                      {section.buttonLabel}
-                    </Button>
-                  </Section>
-
-                  <Text style={styles.helper}>{section.copyIntro}</Text>
-                  <Link
-                    href={invite_url}
-                    style={{ ...styles.link, color: section.accent }}
-                  >
-                    {invite_url}
-                  </Link>
-
-                  <Section style={styles.noteBox}>
-                    <Text style={{ ...styles.muted, margin: 0 }}>
-                      {section.note}
+                <Section style={{ marginTop: "10px" }}>
+                  {section.bulletPoints.map((item, idx) => (
+                    <Text key={`${section.code}-bp-${idx}`} style={styles.bullet}>
+                      • {item}
                     </Text>
-                  </Section>
+                  ))}
                 </Section>
-              ))}
+
+                <Section style={{ marginTop: "14px" }}>
+                  <Button href={invite_url} style={styles.cta}>
+                    {section.buttonLabel}
+                  </Button>
+                </Section>
+
+                <Text style={styles.helper}>{section.copyIntro}</Text>
+                <Link href={invite_url} style={{ ...styles.link, color: section.accent }}>
+                  {invite_url}
+                </Link>
+
+                <Section style={styles.noteBox}>
+                  <Text style={{ ...styles.muted, margin: 0 }}>{section.note}</Text>
+                </Section>
+              </Section>
             </Section>
           </Section>
 
-          <Text style={styles.footer}>{previewText}</Text>
+          <Text style={styles.footer}>{copy.previewText}</Text>
         </Container>
       </Body>
     </Html>
