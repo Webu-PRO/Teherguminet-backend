@@ -208,7 +208,7 @@ class MagyarPostaFulfillmentService extends AbstractFulfillmentProviderService {
   async validateFulfillmentData(
     _optionData: Record<string, unknown>,
     data: Record<string, unknown>,
-    _context: ValidateFulfillmentDataContext
+    _context: any
   ): Promise<Record<string, unknown>> {
     return data;
   }
@@ -216,7 +216,7 @@ class MagyarPostaFulfillmentService extends AbstractFulfillmentProviderService {
   async calculatePrice(
     optionData: Record<string, unknown>,
     data: Record<string, unknown>,
-    context: CalculateShippingOptionPriceContext
+    context: any
   ): Promise<CalculatedShippingOptionPrice> {
     const tieredAmount = this.resolveTieredAmount(context, optionData);
     const calculatedAmount =

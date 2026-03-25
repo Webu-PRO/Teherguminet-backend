@@ -41,7 +41,7 @@ class TomketFulfillmentService extends AbstractFulfillmentProviderService {
   async validateFulfillmentData(
     _optionData: Record<string, unknown>,
     data: Record<string, unknown>,
-    _context: ValidateFulfillmentDataContext
+    _context: any
   ): Promise<Record<string, unknown>> {
     return data
   }
@@ -49,7 +49,7 @@ class TomketFulfillmentService extends AbstractFulfillmentProviderService {
   async calculatePrice(
     _optionData: Record<string, unknown>,
     _data: Record<string, unknown>,
-    _context: CalculateShippingOptionPriceContext
+    _context: any
   ): Promise<CalculatedShippingOptionPrice> {
     throw new Error(
       "Tomket fulfillment does not support price calculation"
