@@ -733,3 +733,5 @@ export const mockOrder: OrderPlacedEmailProps = {
     ],
   },
 };
+
+export default () => <OrderPlacedEmailComponent {...mockOrder} />;

@@ -23,6 +23,14 @@ import {
   type OrderDeliveredEmailProps,
 } from "./emails/order-delivered";
 import {
+  OrderPickupReadyEmail,
+  type OrderPickupReadyEmailProps,
+} from "./emails/order-pickup-ready";
+import {
+  OwnDeliveryPaymentNoticeEmail,
+  type OwnDeliveryPaymentNoticeEmailProps,
+} from "./emails/own-delivery-payment-notice";
+import {
   PaymentReceiptEmail,
   type PaymentReceiptEmailProps,
 } from "./emails/payment-receipt";
@@ -61,6 +69,7 @@ type ResendOptions = {
   from: string;
   from_name?: string;
   reply_to?: string;
+  template_ids?: Record<string, string>;
   html_templates?: Record<
     string,
     {
@@ -78,6 +87,8 @@ enum Templates {
   ORDER_PLACED = "order-placed",
   ORDER_THANKS = "order-thanks",
   ORDER_DELIVERED = "order-delivered",
+  ORDER_PICKUP_READY = "order-pickup-ready",
+  OWN_DELIVERY_PAYMENT_NOTICE = "own-delivery-payment-notice",
   PAYMENT_RECEIPT = "payment-receipt",
   USER_INVITED = "user-invited",
   ABANDONED_CART = "abandoned-cart",
@@ -96,6 +107,10 @@ const templates: Partial<Record<Templates, TemplateRenderer>> = {
     OrderThanksEmailComponent(props as OrderThanksEmailProps),
   [Templates.ORDER_DELIVERED]: (props) =>
     OrderDeliveredEmail(props as OrderDeliveredEmailProps),
+  [Templates.ORDER_PICKUP_READY]: (props) =>
+    OrderPickupReadyEmail(props as OrderPickupReadyEmailProps),
+  [Templates.OWN_DELIVERY_PAYMENT_NOTICE]: (props) =>
+    OwnDeliveryPaymentNoticeEmail(props as OwnDeliveryPaymentNoticeEmailProps),
   [Templates.PAYMENT_RECEIPT]: (props) =>
     PaymentReceiptEmail(props as PaymentReceiptEmailProps),
   [Templates.USER_INVITED]: (props) =>
@@ -193,6 +208,8 @@ const resolveNotificationLanguage = (
     template === Templates.ORDER_PLACED ||
     template === Templates.ORDER_THANKS ||
     template === Templates.ORDER_DELIVERED ||
+    template === Templates.ORDER_PICKUP_READY ||
+    template === Templates.OWN_DELIVERY_PAYMENT_NOTICE ||
     template === Templates.GLS_LABEL_CANCELLED ||
     template === Templates.ORDER_ITEMS_CANCELLED ||
     template === Templates.GLS_SHIPMENT_CREATED
@@ -278,6 +295,36 @@ const resolveAttachments = (notification: ProviderSendNotificationDTO) => {
     .filter((entry): entry is ResendAttachment => Boolean(entry));
 
   return normalized.length ? normalized : undefined;
+};
+
+const extractTemplateVariables = (
+  input: unknown
+): Record<string, string | number> | undefined => {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    return undefined;
+  }
+
+  const output: Record<string, string | number> = {};
+
+  for (const [key, raw] of Object.entries(input as Record<string, unknown>)) {
+    if (typeof raw === "string") {
+      if (raw.trim().length) {
+        output[key] = raw;
+      }
+      continue;
+    }
+
+    if (typeof raw === "number" && Number.isFinite(raw)) {
+      output[key] = raw;
+      continue;
+    }
+
+    if (typeof raw === "boolean") {
+      output[key] = raw ? "true" : "false";
+    }
+  }
+
+  return Object.keys(output).length ? output : undefined;
 };
 
 class ResendNotificationProviderService extends AbstractNotificationProviderService {
@@ -398,6 +445,34 @@ class ResendNotificationProviderService extends AbstractNotificationProviderServ
           ? `Rendelés #${orderRef} kiszállítva – ${BRAND_NAME}`
           : `Rendelés kiszállítva – ${BRAND_NAME}`;
       }
+      case Templates.ORDER_PICKUP_READY: {
+        const orderRef = resolveOrderReference(
+          (notification.data as any)?.order
+        );
+        if (language === "sk") {
+          return orderRef
+            ? `Objednávka #${orderRef} pripravená na osobný odber – ${BRAND_NAME}`
+            : `Objednávka pripravená na osobný odber – ${BRAND_NAME}`;
+        }
+
+        return orderRef
+          ? `Rendelés #${orderRef} átvehető telephelyünkön – ${BRAND_NAME}`
+          : `Megrendelésed a telephelyen átvehető – ${BRAND_NAME}`;
+      }
+      case Templates.OWN_DELIVERY_PAYMENT_NOTICE: {
+        const orderRef = resolveOrderReference(
+          (notification.data as any)?.order
+        );
+        if (language === "sk") {
+          return orderRef
+            ? `Objednávka #${orderRef}: vlastné doručenie potvrdené – ${BRAND_NAME}`
+            : `Vlastné doručenie potvrdené – ${BRAND_NAME}`;
+        }
+
+        return orderRef
+          ? `Rendelés #${orderRef}: saját szállítás visszaigazolva – ${BRAND_NAME}`
+          : `Saját szállítás visszaigazolva – ${BRAND_NAME}`;
+      }
       case Templates.USER_INVITED: {
         const email = (notification.data as any)?.email ?? notification.to;
         return email
@@ -462,26 +537,43 @@ class ResendNotificationProviderService extends AbstractNotificationProviderServ
   async send(
     notification: ProviderSendNotificationDTO
   ): Promise<ProviderSendNotificationResultsDTO> {
-    const subject =
-      notification.content?.subject ?? this.getTemplateSubject(notification);
-    const template = this.getTemplate(notification.template as Templates);
+    const selectedTemplate = notification.template as Templates;
+    const template = this.getTemplate(selectedTemplate);
+    const language = resolveNotificationLanguage(notification);
+    const configuredTemplateId =
+      this.options.template_ids?.[`${selectedTemplate}.${language}`] ??
+      this.options.template_ids?.[selectedTemplate];
     const commonOptions = {
       from: formatFrom(this.options.from, BRAND_NAME, this.options.from_name),
       to: [notification.to],
-      subject,
       ...(this.options.reply_to ? { reply_to: this.options.reply_to } : {}),
     };
 
     let emailOptions: CreateEmailOptions;
 
-    if (!template) {
+    if (configuredTemplateId?.trim()) {
+      const variables = extractTemplateVariables(notification.data);
+      emailOptions = {
+        ...commonOptions,
+        ...(notification.content?.subject
+          ? { subject: notification.content.subject }
+          : {}),
+        template: {
+          id: configuredTemplateId.trim(),
+          ...(variables ? { variables } : {}),
+        },
+      };
+    } else if (!template) {
       const html = notification.content?.html;
       const text = notification.content?.text;
       const hasRawContent = Boolean(html) || Boolean(text);
 
       if (hasRawContent) {
+        const subject =
+          notification.content?.subject ?? this.getTemplateSubject(notification);
         emailOptions = {
           ...commonOptions,
+          subject,
           ...(html ? { html } : {}),
           // Ensure at least one render key is present for Resend typings
           text: text ?? html ?? "",
@@ -495,13 +587,19 @@ class ResendNotificationProviderService extends AbstractNotificationProviderServ
         return {};
       }
     } else if (typeof template === "string") {
+      const subject =
+        notification.content?.subject ?? this.getTemplateSubject(notification);
       emailOptions = {
         ...commonOptions,
+        subject,
         html: template,
       };
     } else {
+      const subject =
+        notification.content?.subject ?? this.getTemplateSubject(notification);
       emailOptions = {
         ...commonOptions,
+        subject,
         react: template(notification.data),
       };
     }

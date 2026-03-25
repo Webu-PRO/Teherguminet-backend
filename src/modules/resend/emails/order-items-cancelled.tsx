@@ -739,4 +739,27 @@ export const OrderItemsCancelledEmail = ({
   );
 };
 
-export default OrderItemsCancelledEmail;
+const mockOrderItemsCancelled: OrderItemsCancelledEmailProps = {
+  order: {
+    id: "order_mock_1",
+    display_id: 42,
+    currency_code: "HUF",
+    email: "customer@example.com",
+    customer: { first_name: "Istvan" },
+    shipping_address: {
+      first_name: "Istvan",
+      last_name: "Teszt",
+      country_code: "hu",
+    },
+  },
+  cancelled_items: [
+    {
+      name: "Continental Conti Hybrid HS3 315/70 R22.5",
+      sku: "CONTI-HS3-315-70R22.5",
+      quantity: 2,
+    },
+  ],
+  template_version: "v2",
+};
+
+export default () => <OrderItemsCancelledEmail {...mockOrderItemsCancelled} />;

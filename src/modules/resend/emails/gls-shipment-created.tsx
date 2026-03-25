@@ -676,4 +676,20 @@ export const GlsShipmentCreatedEmail = ({
   );
 };
 
-export default GlsShipmentCreatedEmail;
+const mockGlsShipmentCreated: GlsShipmentCreatedEmailProps = {
+  order: {
+    id: "order_mock_2",
+    display_id: 314,
+    currency_code: "HUF",
+    email: "customer@example.com",
+    customer: { first_name: "Istvan" },
+    shipping_address: {
+      first_name: "Istvan",
+      last_name: "Teszt",
+      country_code: "hu",
+    },
+  },
+  parcelNumbers: ["123456789", "987654321"],
+};
+
+export default () => <GlsShipmentCreatedEmail {...mockGlsShipmentCreated} />;

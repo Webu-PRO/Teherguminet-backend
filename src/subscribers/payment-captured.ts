@@ -9,7 +9,9 @@ import {
 import { createOrderFulfillmentWorkflow } from "@medusajs/medusa/core-flows"
 import { PaymentEvents } from "@medusajs/utils"
 import type {
+  CreateNotificationDTO,
   ICustomerModuleService,
+  INotificationModuleService,
   IOrderModuleService,
   Logger,
   OrderDTO,
@@ -17,6 +19,7 @@ import type {
   Query,
 } from "@medusajs/types"
 
+import { dispatchNotificationsIndividually } from "../lib/dispatch-notifications"
 import { isGlsShippingMethod } from "../lib/gls"
 import {
   BILLINGO_ERROR_KEYS,
@@ -48,9 +51,122 @@ type PaymentOrder = {
 }
 
 type PaymentRecord = {
+  id?: string | null
+  amount?: number | null
+  currency_code?: string | null
+  captured_at?: string | Date | null
   payment_collection?: {
-    order?: PaymentOrder | null
+    order?: (PaymentOrder & OrderDTO) | null
   } | null
+}
+
+const OWN_DELIVERY_PAYMENT_TEMPLATE = "own-delivery-payment-notice"
+
+const normalizeToken = (value: unknown) => {
+  if (typeof value !== "string") {
+    return ""
+  }
+
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+}
+
+const collectStringValues = (value: unknown, target: string[]) => {
+  if (typeof value === "string") {
+    const normalized = normalizeToken(value)
+    if (normalized) {
+      target.push(normalized)
+    }
+    return
+  }
+
+  if (Array.isArray(value)) {
+    value.forEach((entry) => collectStringValues(entry, target))
+    return
+  }
+
+  if (value && typeof value === "object") {
+    Object.values(value).forEach((entry) =>
+      collectStringValues(entry, target)
+    )
+  }
+}
+
+const buildShippingMethodSearchText = (
+  method?: OrderShippingMethodDTO | null
+) => {
+  if (!method) {
+    return ""
+  }
+
+  const raw = method as Record<string, unknown>
+  const tokens: string[] = []
+  const rootValues = [
+    method.name,
+    raw.provider_id,
+    raw.shipping_option_id,
+    raw.shipping_option_type_id,
+    (raw.type as Record<string, unknown> | undefined)?.code,
+    (raw.type as Record<string, unknown> | undefined)?.label,
+    (raw.type as Record<string, unknown> | undefined)?.description,
+  ]
+
+  rootValues.forEach((value) => {
+    const normalized = normalizeToken(value)
+    if (normalized) {
+      tokens.push(normalized)
+    }
+  })
+
+  collectStringValues(raw.data ?? null, tokens)
+  collectStringValues(raw.metadata ?? null, tokens)
+
+  return tokens.join(" ")
+}
+
+const isPickupShippingMethod = (
+  method?: OrderShippingMethodDTO | null
+) => {
+  const text = buildShippingMethodSearchText(method)
+  return (
+    text.includes("pickup") ||
+    text.includes("helyszini atvetel") ||
+    text.includes("szemelyes atvetel")
+  )
+}
+
+const isOwnDeliveryShippingMethod = (
+  method?: OrderShippingMethodDTO | null
+) => {
+  if (!method) {
+    return false
+  }
+
+  const raw = method as Record<string, unknown>
+  const providerToken = normalizeToken(raw.provider_id)
+  const text = buildShippingMethodSearchText(method)
+
+  if (isPickupShippingMethod(method)) {
+    return false
+  }
+
+  if (
+    providerToken === "manual" ||
+    providerToken.startsWith("manual_") ||
+    providerToken.endsWith("_manual") ||
+    providerToken.includes("teherguminet")
+  ) {
+    return true
+  }
+
+  return (
+    text.includes("sajat szallitas") ||
+    (text.includes("sajat") &&
+      (text.includes("hazhoz") || text.includes("szallit")))
+  )
 }
 
 const resolveLogger = (container: SubscriberArgs["container"]) => {
@@ -390,6 +506,96 @@ const maybeCreateBillingoReceipt = async (
   }
 }
 
+const maybeSendOwnDeliveryPaymentNotice = async (
+  container: SubscriberArgs["container"],
+  paymentId: string
+) => {
+  const logger = resolveLogger(container)
+  const query = container.resolve<Query>(ContainerRegistrationKeys.QUERY)
+  const notificationModuleService =
+    container.resolve<INotificationModuleService>(Modules.NOTIFICATION)
+
+  try {
+    const { data: payments } = await query.graph({
+      entity: "payment",
+      fields: [
+        "id",
+        "amount",
+        "currency_code",
+        "captured_at",
+        "provider_id",
+        "payment_collection.order.id",
+        "payment_collection.order.display_id",
+        "payment_collection.order.email",
+        "payment_collection.order.metadata",
+        "payment_collection.order.currency_code",
+        "payment_collection.order.total",
+        "payment_collection.order.subtotal",
+        "payment_collection.order.shipping_total",
+        "payment_collection.order.item_total",
+        "payment_collection.order.items.*",
+        "payment_collection.order.shipping_address.*",
+        "payment_collection.order.billing_address.*",
+        "payment_collection.order.customer.*",
+        "payment_collection.order.shipping_methods.*",
+      ],
+      filters: {
+        id: paymentId,
+      },
+    })
+
+    const payment = payments?.[0] as PaymentRecord | undefined
+    const order = payment?.payment_collection?.order
+    const email = order?.email?.trim()
+    if (!order?.id || !email) {
+      return
+    }
+
+    const shippingMethods = (order.shipping_methods ?? []).filter(
+      Boolean
+    ) as OrderShippingMethodDTO[]
+    const isOwnDeliveryOrder = shippingMethods.some(
+      isOwnDeliveryShippingMethod
+    )
+    if (!isOwnDeliveryOrder) {
+      return
+    }
+
+    const notification: CreateNotificationDTO = {
+      to: email,
+      channel: "email",
+      template: OWN_DELIVERY_PAYMENT_TEMPLATE,
+      data: {
+        order,
+        payment: {
+          id: payment?.id ?? paymentId,
+          amount: payment?.amount ?? null,
+          currency_code: payment?.currency_code ?? null,
+          captured_at: payment?.captured_at ?? null,
+        },
+      },
+      resource_id: order.id,
+      resource_type: "order",
+      trigger_type: "payment.captured.own_delivery",
+      idempotency_key: `${OWN_DELIVERY_PAYMENT_TEMPLATE}-${paymentId}`,
+    }
+
+    await dispatchNotificationsIndividually(
+      notificationModuleService,
+      [notification],
+      logger
+    )
+  } catch (error) {
+    logger?.warn?.(
+      `payment-captured: failed to send own-delivery notice for payment ${paymentId}`
+    )
+    logger?.error?.(
+      `payment-captured: error sending own-delivery notice for payment ${paymentId}`,
+      error as Error
+    )
+  }
+}
+
 export default async function paymentCapturedHandler({
   event: { data },
   container,
@@ -406,6 +612,8 @@ export default async function paymentCapturedHandler({
       paymentId: data.id,
     },
   })
+
+  await maybeSendOwnDeliveryPaymentNotice(container, data.id)
 }
 
 export const config: SubscriberConfig = {

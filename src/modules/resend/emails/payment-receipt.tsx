@@ -748,3 +748,5 @@ export const mockPaymentReceipt: PaymentReceiptEmailProps = {
     ],
   },
 };
+
+export default () => <PaymentReceiptEmail {...mockPaymentReceipt} />;

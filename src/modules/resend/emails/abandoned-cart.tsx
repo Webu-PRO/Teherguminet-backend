@@ -152,10 +152,10 @@ export const AbandonedCartEmail = ({
 
   return (
     <Html>
-      <Head />
       <Preview>{lang.preview}</Preview>
 
       <Tailwind>
+        <Head />
         <Body className="m-0 bg-white px-4 py-10 font-sans text-[#111111]">
           <Container className="mx-auto w-full max-w-[620px] rounded-[24px] border border-[#E5E7EB] bg-white p-0">
             {/* Header */}

@@ -83,6 +83,60 @@ const notificationProviders: Array<Record<string, unknown>> = [
 const hasResendConfig =
   Boolean(process.env.RESEND_API_KEY) && Boolean(process.env.RESEND_FROM_EMAIL);
 
+const parseResendTemplateIdsJson = () => {
+  const raw = process.env.RESEND_TEMPLATE_IDS_JSON?.trim();
+  if (!raw) {
+    return {} as Record<string, string>;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const normalized = Object.entries(parsed).reduce<Record<string, string>>(
+      (acc, [key, value]) => {
+        if (typeof value === "string" && value.trim().length > 0) {
+          acc[key] = value.trim();
+        }
+        return acc;
+      },
+      {}
+    );
+    return normalized;
+  } catch {
+    return {} as Record<string, string>;
+  }
+};
+
+const resolveResendTemplateIds = () => {
+  const fromJson = parseResendTemplateIdsJson();
+  const fromEnv = {
+    "order-placed": process.env.RESEND_TEMPLATE_ID_ORDER_PLACED,
+    "order-thanks": process.env.RESEND_TEMPLATE_ID_ORDER_THANKS,
+    "order-delivered": process.env.RESEND_TEMPLATE_ID_ORDER_DELIVERED,
+    "order-pickup-ready": process.env.RESEND_TEMPLATE_ID_ORDER_PICKUP_READY,
+    "own-delivery-payment-notice":
+      process.env.RESEND_TEMPLATE_ID_OWN_DELIVERY_PAYMENT_NOTICE,
+    "payment-receipt": process.env.RESEND_TEMPLATE_ID_PAYMENT_RECEIPT,
+    "user-invited": process.env.RESEND_TEMPLATE_ID_USER_INVITED,
+    "abandoned-cart": process.env.RESEND_TEMPLATE_ID_ABANDONED_CART,
+    "password-reset": process.env.RESEND_TEMPLATE_ID_PASSWORD_RESET,
+    "gls-label-cancelled": process.env.RESEND_TEMPLATE_ID_GLS_LABEL_CANCELLED,
+    "order-items-cancelled":
+      process.env.RESEND_TEMPLATE_ID_ORDER_ITEMS_CANCELLED,
+    "gls-shipment-created": process.env.RESEND_TEMPLATE_ID_GLS_SHIPMENT_CREATED,
+  };
+
+  const normalizedFromEnv = Object.entries(fromEnv).reduce<
+    Record<string, string>
+  >((acc, [key, value]) => {
+    if (typeof value === "string" && value.trim().length > 0) {
+      acc[key] = value.trim();
+    }
+    return acc;
+  }, {});
+
+  return { ...fromJson, ...normalizedFromEnv };
+};
+
 if (hasResendConfig) {
   const resendOptions: Record<string, unknown> = {
     channels: ["email"],
@@ -96,6 +150,11 @@ if (hasResendConfig) {
 
   if (process.env.RESEND_REPLY_TO?.trim()) {
     resendOptions.reply_to = process.env.RESEND_REPLY_TO.trim();
+  }
+
+  const templateIds = resolveResendTemplateIds();
+  if (Object.keys(templateIds).length > 0) {
+    resendOptions.template_ids = templateIds;
   }
 
   notificationProviders.push({

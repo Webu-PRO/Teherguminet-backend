@@ -600,3 +600,5 @@ export const mockOrderThanks: OrderThanksEmailProps = {
     ],
   },
 };
+
+export default () => <OrderThanksEmailComponent {...mockOrderThanks} />;

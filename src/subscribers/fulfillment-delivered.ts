@@ -25,6 +25,8 @@ type FulfillmentEventPayload = {
 }
 
 const DELIVERY_EMAIL_METADATA_KEY = "delivery_email_sent_at"
+const DELIVERY_TEMPLATE_DEFAULT = "order-delivered"
+const DELIVERY_TEMPLATE_PICKUP_READY = "order-pickup-ready"
 
 const resolveLogger = (container: SubscriberArgs["container"]) => {
   try {
@@ -66,6 +68,27 @@ const resolveShippingMethod = (
   return methods.length === 1 ? methods[0] : methods.at(-1) ?? null
 }
 
+const normalizeForMatch = (value: string) =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim()
+
+const isPickupLike = (value?: string | null) => {
+  if (!value) {
+    return false
+  }
+
+  const normalized = normalizeForMatch(value)
+  return (
+    normalized.includes("pickup") ||
+    normalized.includes("helyszini atvetel") ||
+    normalized.includes("szemelyes atvetel") ||
+    normalized.includes("telephelyi atvetel")
+  )
+}
+
 export default async function fulfillmentDeliveredHandler({
   event,
   container,
@@ -92,6 +115,9 @@ export default async function fulfillmentDeliveredHandler({
       "metadata",
       "shipping_option_id",
       "shipping_option.name",
+      "shipping_option.type.code",
+      "shipping_option.type.label",
+      "shipping_option.type.description",
       "order.id",
       "order.display_id",
       "order.email",
@@ -115,7 +141,16 @@ export default async function fulfillmentDeliveredHandler({
   const fulfillment = fulfillments?.[0] as unknown as
     | (FulfillmentDTO & {
         order?: OrderDTO
-        shipping_option?: { name?: string | null } | null
+        shipping_option?:
+          | {
+              name?: string | null
+              type?: {
+                code?: string | null
+                label?: string | null
+                description?: string | null
+              } | null
+            }
+          | null
       })
     | undefined
 
@@ -142,6 +177,15 @@ export default async function fulfillmentDeliveredHandler({
     fulfillment.shipping_option?.name?.trim() ||
     shippingMethod?.name?.trim() ||
     null
+  const isPickupDelivery =
+    isPickupLike(shippingOptionName) ||
+    isPickupLike(shippingMethod?.name) ||
+    isPickupLike(fulfillment.shipping_option?.type?.code) ||
+    isPickupLike(fulfillment.shipping_option?.type?.label) ||
+    isPickupLike(fulfillment.shipping_option?.type?.description)
+  const selectedTemplate = isPickupDelivery
+    ? DELIVERY_TEMPLATE_PICKUP_READY
+    : DELIVERY_TEMPLATE_DEFAULT
 
   const trackingNumbers =
     "tracking_numbers" in fulfillment
@@ -154,7 +198,7 @@ export default async function fulfillmentDeliveredHandler({
   const payload: CreateNotificationDTO = {
     to: order.email,
     channel: "email",
-    template: "order-delivered",
+    template: selectedTemplate,
     data: {
       order,
       fulfillment: {
@@ -166,7 +210,7 @@ export default async function fulfillmentDeliveredHandler({
     trigger_type: event.name,
     resource_id: order.id,
     resource_type: "order",
-    idempotency_key: `order-delivered-${fulfillment.id}`,
+    idempotency_key: `${selectedTemplate}-${fulfillment.id}`,
   }
 
   try {
