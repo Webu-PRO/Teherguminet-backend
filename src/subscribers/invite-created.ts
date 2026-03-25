@@ -266,33 +266,58 @@ export default async function inviteCreatedHandler({
     const inviteLink = resolveInviteLink(invite.token)
     const expiresAtFormatted = formatExpiry(invite.expiresAt)
     const encodedToken = encodeURIComponent(invite.token)
+    const isSk = invite.language === "sk"
+    const fallbackSubject = isSk
+      ? `Pozvánka do ${storeName}`
+      : `Meghívó a ${storeName} platformra`
 
-    const textSections = [
-      `You've been invited to join ${storeName}.`,
-      `Accept your invitation: ${inviteLink}`,
-      `Invitation token: ${invite.token}`,
-    ]
-
-    if (expiresAtFormatted) {
-      textSections.push(`This invitation expires on ${expiresAtFormatted}.`)
-    }
-
-    const htmlSections = [
-      "<p>Hello,</p>",
-      `<p>You've been invited to join ${storeName}. Click the link below to accept your invitation:</p>`,
-      `<p><a href="${inviteLink}" target="_blank" rel="noopener noreferrer">Accept invitation</a></p>`,
-      "<p>If the link doesn't work, copy and paste this URL into your browser:</p>",
-      `<p><a href="${inviteLink}" target="_blank" rel="noopener noreferrer">${inviteLink}</a></p>`,
-      `<p>Your invitation token: <strong>${invite.token}</strong></p>`,
-    ]
+    const textSections = isSk
+      ? [
+          `Boli ste pozvaný na platformu ${storeName}.`,
+          `Prijať pozvánku: ${inviteLink}`,
+          `Token pozvánky: ${invite.token}`,
+        ]
+      : [
+          `Meghívót kaptál a(z) ${storeName} platformra.`,
+          `Meghívó elfogadása: ${inviteLink}`,
+          `Meghívó token: ${invite.token}`,
+        ]
 
     if (expiresAtFormatted) {
-      htmlSections.push(
-        `<p>This invitation expires on ${expiresAtFormatted}.</p>`
+      textSections.push(
+        isSk
+          ? `Platnosť pozvánky vyprší: ${expiresAtFormatted}.`
+          : `A meghívó érvényessége lejár: ${expiresAtFormatted}.`
       )
     }
 
-    htmlSections.push("<p>See you soon!</p>")
+    const htmlSections = isSk
+      ? [
+          "<p>Ahoj,</p>",
+          `<p>Boli ste pozvaný na platformu ${storeName}. Kliknite na odkaz nižšie pre prijatie pozvánky:</p>`,
+          `<p><a href="${inviteLink}" target="_blank" rel="noopener noreferrer">Prijať pozvánku</a></p>`,
+          "<p>Ak odkaz nefunguje, skopírujte túto URL adresu do prehliadača:</p>",
+          `<p><a href="${inviteLink}" target="_blank" rel="noopener noreferrer">${inviteLink}</a></p>`,
+          `<p>Token pozvánky: <strong>${invite.token}</strong></p>`,
+        ]
+      : [
+          "<p>Szia,</p>",
+          `<p>Meghívót kaptál a(z) ${storeName} platformra. Kattints az alábbi linkre a meghívás elfogadásához:</p>`,
+          `<p><a href="${inviteLink}" target="_blank" rel="noopener noreferrer">Meghívás elfogadása</a></p>`,
+          "<p>Ha a link nem működik, másold be ezt az URL-t a böngésződbe:</p>",
+          `<p><a href="${inviteLink}" target="_blank" rel="noopener noreferrer">${inviteLink}</a></p>`,
+          `<p>Meghívó token: <strong>${invite.token}</strong></p>`,
+        ]
+
+    if (expiresAtFormatted) {
+      htmlSections.push(
+        isSk
+          ? `<p>Platnosť pozvánky vyprší: ${expiresAtFormatted}.</p>`
+          : `<p>A meghívó érvényessége lejár: ${expiresAtFormatted}.</p>`
+      )
+    }
+
+    htmlSections.push(isSk ? "<p>Tešíme sa na vás!</p>" : "<p>Várunk szeretettel!</p>")
 
     return {
       to: invite.email,
@@ -312,7 +337,7 @@ export default async function inviteCreatedHandler({
           : null,
       },
       content: {
-        subject: `You're invited to ${storeName}`,
+        subject: fallbackSubject,
         html: htmlSections.join(""),
         text: textSections.join("\n\n"),
       },

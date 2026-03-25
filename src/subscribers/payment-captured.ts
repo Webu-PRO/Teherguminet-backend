@@ -102,7 +102,7 @@ const buildShippingMethodSearchText = (
     return ""
   }
 
-  const raw = method as Record<string, unknown>
+  const raw = method as unknown as Record<string, unknown>
   const tokens: string[] = []
   const rootValues = [
     method.name,
@@ -145,7 +145,7 @@ const isOwnDeliveryShippingMethod = (
     return false
   }
 
-  const raw = method as Record<string, unknown>
+  const raw = method as unknown as Record<string, unknown>
   const providerToken = normalizeToken(raw.provider_id)
   const text = buildShippingMethodSearchText(method)
 

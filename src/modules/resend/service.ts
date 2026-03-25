@@ -562,6 +562,11 @@ class ResendNotificationProviderService extends AbstractNotificationProviderServ
 
     let emailOptions: CreateEmailOptions;
 
+    type TemplateSendOptions = {
+      id: string;
+      variables?: Record<string, string | number>;
+    };
+
     if (configuredTemplateId?.trim()) {
       const variables = extractTemplateVariables(notification.data);
       emailOptions = {
@@ -573,7 +578,7 @@ class ResendNotificationProviderService extends AbstractNotificationProviderServ
           id: configuredTemplateId.trim(),
           ...(variables ? { variables } : {}),
         },
-      };
+      } as CreateEmailOptions & { template: TemplateSendOptions };
     } else if (!template) {
       const html = notification.content?.html;
       const text = notification.content?.text;
