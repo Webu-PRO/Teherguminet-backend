@@ -156,28 +156,28 @@ export const AbandonedCartEmail = ({
 
       <Tailwind>
         <Head />
-        <Body className="m-0 bg-white px-4 py-10 font-sans text-[#111111]">
+        <Body className="m-0 bg-[#eeeeee] px-4 py-10 font-sans text-[#111111]">
           <Container className="mx-auto w-full max-w-[620px] rounded-[24px] border border-[#E5E7EB] bg-white p-0">
             {/* Header */}
-            <Section className="bg-[#E10600] px-10 pt-8 pb-5">
+            <Section className="bg-white px-10 pt-6 pb-5 border-b border-[#E5E7EB]">
               <Link
                 href={brandUrl}
-                className="inline-block text-[16px] font-semibold uppercase tracking-[0.22em] text-white no-underline"
+                className="inline-block text-[16px] font-semibold uppercase tracking-[0.22em] text-[#111111] no-underline"
               >
                 TEHERGUMINET.HU
               </Link>
 
               {storefrontUrl ? (
-                <Text className="mt-2 text-[12px] text-[#FEE2E2]">
+                <Text className="mt-2 text-[12px] text-[#6B7280]">
                   <Link
                     href={storefrontUrl}
-                    className="text-white no-underline"
+                    className="text-[#111111] no-underline"
                   >
                     {storefrontUrl.replace(/^https?:\/\//, "")}
                   </Link>
                 </Text>
               ) : (
-                <Text className="mt-2 text-[12px] text-[#FEE2E2]">
+                <Text className="mt-2 text-[12px] text-[#6B7280]">
                   {lang.preview}
                 </Text>
               )}
@@ -195,7 +195,7 @@ export const AbandonedCartEmail = ({
               <Button
                 href={recoverUrl}
                 style={{ backgroundColor: F1_RED, color: "#ffffff" }}
-                className="mt-6 inline-block rounded-full px-8 py-3 text-[14px] font-semibold text-white no-underline"
+                className="mt-6 inline-block rounded-[4px] px-8 py-3 text-[14px] font-semibold text-white no-underline"
               >
                 {lang.ctaLabel}
               </Button>

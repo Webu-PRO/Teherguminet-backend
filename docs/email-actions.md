@@ -28,8 +28,10 @@ Language-aware keys are usually `hu` or `sk`.
 | Action / Event | Sends | Templates | To | Trigger Type | Idempotency Key | Source |
 |---|---:|---|---|---|---|---|
 | `order.fulfillment_created` / `fulfillment.created` (own delivery) | 2 | `own-delivery-fulfillment-created`, `own-delivery-shipped` | `order.email` | `event.name` | `{template}-{fulfillmentId}` | `src/subscribers/own-delivery-fulfillment-created.ts` |
+| `order.fulfillment_created` / `fulfillment.created` (pickup / helyszíni átvétel) | 1 | `order-pickup-ready` | `order.email` | `event.name` | `order-pickup-ready-{fulfillmentId}` | `src/subscribers/pickup-fulfillment-created.ts` |
 | `FulfillmentWorkflowEvents.SHIPMENT_CREATED` (own delivery) | 1 | `own-delivery-shipped` | `order.email` | `event.name` | `own-delivery-shipped-{fulfillmentId}` | `src/subscribers/own-delivery-shipment-created.ts` |
-| `FulfillmentEvents.FULFILLMENT_UPDATED` + `delivered_at` present | 1 | `order-delivered` OR `order-pickup-ready` OR `own-delivery-delivered` | `order.email` | `event.name` | `{selectedTemplate}-{fulfillmentId}` | `src/subscribers/fulfillment-delivered.ts` |
+| `FulfillmentWorkflowEvents.SHIPMENT_CREATED` (pickup / helyszíni átvétel) | 1 | `order-pickup-completed` | `order.email` | `event.name` | `order-pickup-completed-{fulfillmentId}` | `src/subscribers/pickup-shipment-created.ts` |
+| `FulfillmentEvents.FULFILLMENT_UPDATED` + `delivered_at` present | 1 | `order-delivered` OR `own-delivery-delivered` | `order.email` | `event.name` | `{selectedTemplate}-{fulfillmentId}` | `src/subscribers/fulfillment-delivered.ts` |
 | `order.fulfillment_created` / `fulfillment.created` (GLS shipment success path) | 1 | `gls-shipment-created` | `order.email` | `gls.shipment_created` | _(none)_ | `src/subscribers/fulfillment-created.ts` |
 | Admin API: GLS label cancel endpoint | 1 | `gls-label-cancelled` | `fulfillment.order.email` | `gls.label_cancelled` | _(none)_ | `src/api/admin/gls/fulfillments/[fulfillment_id]/route.ts` |
 
@@ -45,7 +47,6 @@ Language-aware keys are usually `hu` or `sk`.
 | Action / Event | Sends | Templates | To | Trigger Type | Idempotency Key | Source |
 |---|---:|---|---|---|---|---|
 | Scheduled job `abandoned-cart-notification` (daily) | 1 per cart | `abandoned-cart` | `cart.email` | _(not explicitly set)_ | _(none)_ | `src/jobs/send-abandoned-cart-notification.ts`, `src/workflows/send-abandoned-carts.ts`, `src/workflows/steps/send-abandoned-notifications.ts` |
-| `product.created` (demo/dev) | 1 | `product-created` | `test@gmail.com` | `product.created` | _(none)_ | `src/subscribers/product-created.ts`, `src/workflows/send-email.ts` |
 
 ## Quick Reading Notes
 
@@ -61,6 +62,7 @@ These env vars are mapped in `medusa-config.ts` to `template_ids` keys:
 - `RESEND_TEMPLATE_ID_ORDER_THANKS` -> `order-thanks`
 - `RESEND_TEMPLATE_ID_ORDER_DELIVERED` -> `order-delivered`
 - `RESEND_TEMPLATE_ID_ORDER_PICKUP_READY` -> `order-pickup-ready`
+- `RESEND_TEMPLATE_ID_ORDER_PICKUP_COMPLETED` -> `order-pickup-completed`
 - `RESEND_TEMPLATE_ID_OWN_DELIVERY_PAYMENT_NOTICE` -> `own-delivery-payment-notice`
 - `RESEND_TEMPLATE_ID_OWN_DELIVERY_SHIPPED` -> `own-delivery-shipped`
 - `RESEND_TEMPLATE_ID_OWN_DELIVERY_DELIVERED` -> `own-delivery-delivered`

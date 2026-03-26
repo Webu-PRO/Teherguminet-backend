@@ -96,13 +96,13 @@ const TOKENS = {
     cardDark: "0 16px 40px rgba(0,0,0,0.35)",
   },
   color: {
-    bg: "#ffffff",
+    bg: "#eeeeee",
     text: "#111111",
     muted: "#6B7280",
     subtle: "#F9FAFB",
     subtle2: "#F3F4F6",
     border: "#E5E7EB",
-    brand: F1_RED,
+    brand: "#ffffff",
     link: "#111111",
     ok: "#0EA5E9",
     warn: "#F59E0B",
@@ -159,16 +159,16 @@ const styles = {
   } as Css,
 
   card: {
-    borderRadius: `${TOKENS.radius.outer}px`,
+    borderRadius: "6px",
     backgroundColor: TOKENS.color.bg,
-    border: TOKENS.border.subtle,
-    boxShadow: TOKENS.shadow.card,
+    border: "1px solid #dedede",
     overflow: "hidden",
   } as Css,
 
   header: {
-    padding: `${TOKENS.space.cardPad}px ${TOKENS.space.cardPad}px 16px`,
+    padding: "20px 28px 14px",
     backgroundColor: TOKENS.color.brand,
+    borderBottom: "1px solid #F3F4F6",
   } as Css,
 
   headerTopRow: {
@@ -196,7 +196,7 @@ const styles = {
     letterSpacing: "0.22em",
     textTransform: "uppercase",
     margin: 0,
-    color: "#ffffff",
+    color: "#111111",
     textDecoration: "none",
     display: "inline-block",
     fontFamily: FONT_STACK,
@@ -206,9 +206,9 @@ const styles = {
     display: "inline-block",
     padding: "6px 10px",
     borderRadius: `${TOKENS.radius.pill}px`,
-    border: "1px solid rgba(239,68,68,0.35)",
-    backgroundColor: "rgba(239,68,68,0.08)",
-    color: TOKENS.color.danger,
+    border: "1px solid #E5E7EB",
+    backgroundColor: "#F3F4F6",
+    color: "#4B5563",
     fontSize: "12px",
     fontWeight: 700,
     letterSpacing: "0.08em",
@@ -221,7 +221,7 @@ const styles = {
     fontSize: `${TOKENS.type.title}px`,
     lineHeight: TOKENS.line.title,
     fontWeight: 800,
-    color: "#ffffff",
+    color: "#111111",
     fontFamily: FONT_STACK,
   } as Css,
 
@@ -229,7 +229,7 @@ const styles = {
     margin: "10px 0 0",
     fontSize: `${TOKENS.type.subtitle}px`,
     lineHeight: TOKENS.line.subtitle,
-    color: "#FEE2E2",
+    color: "#4B5563",
     fontFamily: FONT_STACK,
   } as Css,
 
@@ -306,8 +306,9 @@ const styles = {
   } as Css,
 
   cta: {
-    backgroundColor: TOKENS.color.brand,
-    borderRadius: `${TOKENS.radius.pill}px`,
+    backgroundColor: F1_RED,
+    borderRadius: "4px",
+    border: "1px solid #b70500",
     padding: "12px 18px",
     fontSize: "14px",
     fontWeight: 800,
@@ -319,7 +320,7 @@ const styles = {
 
   ctaSecondary: {
     backgroundColor: TOKENS.color.subtle2,
-    borderRadius: `${TOKENS.radius.pill}px`,
+    borderRadius: "4px",
     padding: "12px 18px",
     fontSize: "14px",
     fontWeight: 800,
@@ -341,7 +342,7 @@ const styles = {
     marginTop: `${TOKENS.space.sectionGap}px`,
     borderRadius: `${TOKENS.radius.inner}px`,
     border: TOKENS.border.subtle,
-    backgroundColor: TOKENS.color.bg,
+    backgroundColor: TOKENS.color.subtle,
     padding: "16px",
   } as Css,
 
@@ -660,18 +661,9 @@ export const GlsLabelCancelledEmail = ({
     <Html lang={copy.code}>
       <Head>
         <style>{`
-          @media (prefers-color-scheme: dark) {
-            body { background: ${TOKENS.color.darkBg} !important; }
-            .card { background: ${TOKENS.color.darkCard} !important; border: ${TOKENS.border.subtleDark} !important; box-shadow: ${TOKENS.shadow.cardDark} !important; }
-            .text { color: ${TOKENS.color.darkText} !important; }
-            .muted { color: ${TOKENS.color.darkMuted} !important; }
-            .subtle { background: ${TOKENS.color.darkSubtle} !important; border: ${TOKENS.border.subtleDark} !important; }
-            a { color: ${TOKENS.color.darkLink} !important; }
-            .secondaryCta { background: rgba(255,255,255,0.06) !important; border: ${TOKENS.border.subtleDark} !important; color: ${TOKENS.color.darkText} !important; }
-          }
           @media (max-width: 520px) {
             .container { padding: 0 14px !important; }
-            .header { padding: 22px 18px 14px !important; }
+            .header { padding: 22px 18px 18px !important; }
             .content { padding: 16px 18px 22px !important; }
             .title { font-size: 22px !important; }
           }
@@ -761,7 +753,7 @@ export const GlsLabelCancelledEmail = ({
               ) : null}
             </Section>
 
-            <Hr style={{ ...styles.divider, borderTop: "none" }} />
+            <Hr style={styles.divider} />
 
             {/* Content */}
             <Section style={styles.content} className="content">

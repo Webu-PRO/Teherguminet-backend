@@ -93,7 +93,7 @@ const TOKENS = {
     dark: "0 16px 40px rgba(0,0,0,0.35)",
   },
   color: {
-    bg: "#ffffff",
+    bg: "#eeeeee",
     text: "#111111",
     muted: "#6B7280",
     subtle: "#F9FAFB",
@@ -141,7 +141,7 @@ const styles = {
   } as Css,
   header: {
     padding: `${TOKENS.space.pad}px ${TOKENS.space.pad}px 14px`,
-    backgroundColor: TOKENS.color.brand,
+    backgroundColor: "#ffffff",
   } as Css,
   headerTopRow: {
     width: "100%",
@@ -156,7 +156,7 @@ const styles = {
     letterSpacing: "0.22em",
     textTransform: "uppercase",
     margin: 0,
-    color: "#ffffff",
+    color: "#111111",
     textDecoration: "none",
     display: "inline-block",
     fontFamily: FONT_STACK,
@@ -171,7 +171,7 @@ const styles = {
     fontSize: `${TOKENS.type.title}px`,
     lineHeight: "1.2",
     fontWeight: 900,
-    color: "#ffffff",
+    color: "#111111",
     fontFamily: FONT_STACK,
   } as Css,
   p: {

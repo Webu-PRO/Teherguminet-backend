@@ -23,11 +23,12 @@ import {
   type OrderEmailOrder,
 } from "./order-email-shared"
 
-export type OwnDeliveryShippedEmailProps = {
+export type OrderPickupCompletedEmailProps = {
   order: OrderEmailOrder
 }
 
 const BRAND_URL = "https://teherguminet.hu"
+const PICKUP_ADDRESS = "2884, Bakonyszombathely Bem utca 36."
 const CONTACT_PHONE_DISPLAY = "+36 30 204 0053"
 const CONTACT_PHONE_LINK = "+36302040053"
 const CONTACT_EMAIL = "info@teherguminet.hu"
@@ -223,11 +224,12 @@ type LanguageBlock = {
   heading: string
   intro: (name: string, orderId: string) => React.ReactNode
   promiseLine: string
-  trackingLabel: string
+  pickupRefLabel: string
   trackCtaLabel: string
   details: {
     customerLabel: string
     orderLabel: string
+    pickupAddressLabel: string
     contactLabel: string
   }
   phoneLabel: string
@@ -243,9 +245,9 @@ type LanguageBlock = {
   footer: string
 }
 
-export const OwnDeliveryShippedEmail = ({
+export const OrderPickupCompletedEmail = ({
   order,
-}: OwnDeliveryShippedEmailProps) => {
+}: OrderPickupCompletedEmailProps) => {
   const languageCode = resolveLanguageFromOrder(order)
   const orderId = resolveOrderId(order)
   const customerName = resolveCustomerName(order)
@@ -254,21 +256,22 @@ export const OwnDeliveryShippedEmail = ({
   const languageBlocks: Record<LanguageCode, LanguageBlock> = {
     hu: {
       code: "hu",
-      preview: (id) => `Elindult a szállítás: ${id}`,
-      heading: "Úton van.",
+      preview: (id) => `Átvétel sikeresen megtörtént: ${id}`,
+      heading: "Átvétel sikeres.",
       intro: (name, id) => (
         <>
-          Kedves {name}! A rendelésed (<strong>{id}</strong>) kiszállítása
-          elindult.
+          Kedves {name}! A rendelésed (<strong>{id}</strong>) átvétele sikeresen
+          megtörtént.
         </>
       ),
       promiseLine:
-        "Az állapotot a fenti gombra kattintva tudod követni, kérdés esetén pedig elérsz minket az alábbi kapcsolatokon.",
-      trackingLabel: "Követési azonosító",
-      trackCtaLabel: "Csomagkövetés",
+        "Köszönjük a vásárlást. Ha számlával vagy termékkel kapcsolatban kérdésed van, segítünk.",
+      pickupRefLabel: "Átvételi azonosító",
+      trackCtaLabel: "Rendelés megnyitása",
       details: {
-        customerLabel: "Szállítási címzett",
+        customerLabel: "Átvételi név",
         orderLabel: "Rendelési azonosító",
+        pickupAddressLabel: "Átvétel helye",
         contactLabel: "Kapcsolat",
       },
       phoneLabel: "Telefon",
@@ -277,36 +280,31 @@ export const OwnDeliveryShippedEmail = ({
       fallbackLinkLabel: "Ha a gomb nem működik, nyisd meg ezt:",
       helpTitle: "Segítség",
       helpLinks: [
-        {
-          label: "Szállítás állapota",
-          href: orderUrl,
-        },
-        {
-          label: "Kapcsolat",
-          href: `mailto:${CONTACT_EMAIL}`,
-        },
+        { label: "Rendelési előzmények", href: orderUrl },
+        { label: "Kapcsolat", href: `mailto:${CONTACT_EMAIL}` },
       ],
-      closing: ["Üdvözlettel,", "A Teherguminet.hu csapata"],
+      closing: ["Köszönjük a vásárlást!", "A Teherguminet.hu csapata"],
       footer:
         "Ez egy automatikusan generált üzenet, kérjük ne válaszolj rá közvetlenül.",
     },
     sk: {
       code: "sk",
-      preview: (id) => `Doručenie je na ceste: ${id}`,
-      heading: "Je na ceste.",
+      preview: (id) => `Prevzatie úspešne dokončené: ${id}`,
+      heading: "Odber úspešný.",
       intro: (name, id) => (
         <>
-          Dobrý deň {name}! Doručenie vašej objednávky (<strong>{id}</strong>)
-          sa začalo.
+          Dobrý deň {name}! Prevzatie vašej objednávky (<strong>{id}</strong>)
+          bolo úspešne dokončené.
         </>
       ),
       promiseLine:
-        "Stav zásielky môžete sledovať cez tlačidlo vyššie, a v prípade otázok nás kontaktujte cez údaje nižšie.",
-      trackingLabel: "Sledovacie číslo",
-      trackCtaLabel: "Sledovať zásielku",
+        "Ďakujeme za nákup. Ak máte otázky k faktúre alebo produktu, radi vám pomôžeme.",
+      pickupRefLabel: "Referenčné číslo odberu",
+      trackCtaLabel: "Otvoriť objednávku",
       details: {
-        customerLabel: "Príjemca zásielky",
+        customerLabel: "Meno príjemcu",
         orderLabel: "ID objednávky",
+        pickupAddressLabel: "Miesto odberu",
         contactLabel: "Kontakt",
       },
       phoneLabel: "Telefón",
@@ -315,16 +313,10 @@ export const OwnDeliveryShippedEmail = ({
       fallbackLinkLabel: "Ak tlačidlo nefunguje, otvorte tento odkaz:",
       helpTitle: "Pomoc",
       helpLinks: [
-        {
-          label: "Stav doručenia",
-          href: orderUrl,
-        },
-        {
-          label: "Kontakt",
-          href: `mailto:${CONTACT_EMAIL}`,
-        },
+        { label: "História objednávok", href: orderUrl },
+        { label: "Kontakt", href: `mailto:${CONTACT_EMAIL}` },
       ],
-      closing: ["S pozdravom,", "Tím Teherguminet.hu"],
+      closing: ["Ďakujeme za váš nákup!", "Tím Teherguminet.hu"],
       footer:
         "Toto je automaticky generovaná správa, prosím, neodpovedajte na ňu.",
     },
@@ -351,7 +343,7 @@ export const OwnDeliveryShippedEmail = ({
                 <tbody>
                   <tr>
                     <td valign="top" style={{ paddingRight: "8px" }}>
-                      <Text style={styles.topLabel}>{lang.trackingLabel}</Text>
+                      <Text style={styles.topLabel}>{lang.pickupRefLabel}</Text>
                       <Text style={styles.topValue}>{orderId}</Text>
                     </td>
                     <td align="right" valign="middle">
@@ -385,6 +377,11 @@ export const OwnDeliveryShippedEmail = ({
               </Section>
 
               <Section style={styles.panel}>
+                <Text style={styles.label}>{lang.details.pickupAddressLabel}</Text>
+                <Text style={styles.text}>{PICKUP_ADDRESS}</Text>
+              </Section>
+
+              <Section style={styles.panel}>
                 <Text style={styles.label}>{lang.details.contactLabel}</Text>
                 <Text style={styles.text}>
                   {lang.phoneLabel}:{" "}
@@ -415,7 +412,11 @@ export const OwnDeliveryShippedEmail = ({
               <Text style={styles.helpHeading}>{lang.helpTitle}</Text>
               <Section style={styles.helpGrid}>
                 {lang.helpLinks.map((help) => (
-                  <Link key={`${lang.code}-${help.label}`} href={help.href} style={styles.helpItem}>
+                  <Link
+                    key={`${lang.code}-${help.label}`}
+                    href={help.href}
+                    style={styles.helpItem}
+                  >
                     {help.label}
                   </Link>
                 ))}
@@ -439,10 +440,10 @@ export const OwnDeliveryShippedEmail = ({
   )
 }
 
-export const mockOwnDeliveryShipped: OwnDeliveryShippedEmailProps = {
+export const mockOrderPickupCompleted: OrderPickupCompletedEmailProps = {
   order: {
     id: "order_01JSNXDH9BPJWWKVW03B9E9KW8",
-    display_id: 19,
+    display_id: 27,
     email: "partner@teherguminet.hu",
     customer: {
       first_name: "Partner",
@@ -451,4 +452,4 @@ export const mockOwnDeliveryShipped: OwnDeliveryShippedEmailProps = {
 }
 
 // @ts-ignore - consumed by React Email dev server
-export default () => <OwnDeliveryShippedEmail {...mockOwnDeliveryShipped} />
+export default () => <OrderPickupCompletedEmail {...mockOrderPickupCompleted} />

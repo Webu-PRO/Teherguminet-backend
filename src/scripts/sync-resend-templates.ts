@@ -25,6 +25,20 @@ import {
   mockOwnDeliveryDelivered,
   type OwnDeliveryDeliveredEmailProps,
 } from "../modules/resend/emails/own-delivery-delivered"
+import {
+  OrderPickupReadyEmail,
+  mockOrderPickupReady,
+  type OrderPickupReadyEmailProps,
+} from "../modules/resend/emails/order-pickup-ready"
+import {
+  OrderPickupCompletedEmail,
+  mockOrderPickupCompleted,
+  type OrderPickupCompletedEmailProps,
+} from "../modules/resend/emails/order-pickup-completed"
+import {
+  GlsLabelCancelledEmail,
+  type GlsLabelCancelledEmailProps,
+} from "../modules/resend/emails/gls-label-cancelled"
 import { buildOrderUrl } from "../modules/resend/emails/order-email-shared"
 
 type ScriptArgs = ExecArgs & {
@@ -39,6 +53,9 @@ type ResendTemplateDefinition = {
     | "own-delivery-fulfillment-created"
     | "own-delivery-shipped"
     | "own-delivery-delivered"
+    | "order-pickup-ready"
+    | "order-pickup-completed"
+    | "gls-label-cancelled"
   language: TemplateLanguage
   name: string
   alias: string
@@ -156,7 +173,10 @@ const withLanguage = <
     | OwnDeliveryPaymentNoticeEmailProps
     | OwnDeliveryFulfillmentCreatedEmailProps
     | OwnDeliveryShippedEmailProps
-    | OwnDeliveryDeliveredEmailProps,
+    | OwnDeliveryDeliveredEmailProps
+    | OrderPickupReadyEmailProps
+    | OrderPickupCompletedEmailProps
+    | GlsLabelCancelledEmailProps,
 >(
   props: T,
   language: TemplateLanguage
@@ -178,7 +198,10 @@ const withTemplatePlaceholders = <
     | OwnDeliveryPaymentNoticeEmailProps
     | OwnDeliveryFulfillmentCreatedEmailProps
     | OwnDeliveryShippedEmailProps
-    | OwnDeliveryDeliveredEmailProps,
+    | OwnDeliveryDeliveredEmailProps
+    | OrderPickupReadyEmailProps
+    | OrderPickupCompletedEmailProps
+    | GlsLabelCancelledEmailProps,
 >(
   props: T
 ): T => {
@@ -380,6 +403,44 @@ export default async function syncResendTemplates({
   const deliveredSkProps = withTemplatePlaceholders(
     withLanguage(mockOwnDeliveryDelivered, "sk")
   )
+  const pickupReadyHuProps = withTemplatePlaceholders(
+    withLanguage(mockOrderPickupReady, "hu")
+  )
+  const pickupReadySkProps = withTemplatePlaceholders(
+    withLanguage(mockOrderPickupReady, "sk")
+  )
+  const pickupCompletedHuProps = withTemplatePlaceholders(
+    withLanguage(mockOrderPickupCompleted, "hu")
+  )
+  const pickupCompletedSkProps = withTemplatePlaceholders(
+    withLanguage(mockOrderPickupCompleted, "sk")
+  )
+  const glsBaseProps: GlsLabelCancelledEmailProps = {
+    order: {
+      id: "order_123",
+      display_id: 42,
+      email: "partner@teherguminet.hu",
+      currency_code: "HUF",
+      shipping_address: {
+        first_name: "Partner",
+        country_code: "hu",
+      },
+    },
+    parcelNumbers: ["987654321"],
+    showSupportCta: true,
+    brand: {
+      name: "TEHERGUMINET",
+      domain: "Teherguminet.hu",
+      logoUrl: "https://teherguminet.hu/assets/email/teherguminet-mark.png",
+      logoAlt: "Teherguminet",
+    },
+  }
+  const glsCancelledHuProps = withTemplatePlaceholders(
+    withLanguage(glsBaseProps, "hu")
+  )
+  const glsCancelledSkProps = withTemplatePlaceholders(
+    withLanguage(glsBaseProps, "sk")
+  )
 
   const definitions: ResendTemplateDefinition[] = [
     {
@@ -430,7 +491,7 @@ export default async function syncResendTemplates({
     {
       key: "own-delivery-fulfillment-created",
       language: "sk",
-      name: "Teherguminet - own-delivery-fulfillment-created (SK)",
+      name: "Teherguminet - own-delivery-fulfillment (SK)",
       alias: "teherguminet-own-delivery-fulfillment-created-sk",
       subject: "Vlastná doprava pripravená – Teherguminet.hu",
       html: normalizeHtmlForResendVariables(
@@ -495,6 +556,86 @@ export default async function syncResendTemplates({
       html: normalizeHtmlForResendVariables(
         await render(
           React.createElement(OwnDeliveryDeliveredEmail, deliveredSkProps)
+        ),
+        "sk"
+      ),
+      variables: TEMPLATE_VARIABLES,
+    },
+    {
+      key: "order-pickup-ready",
+      language: "hu",
+      name: "Teherguminet - order-pickup-ready",
+      alias: "teherguminet-order-pickup-ready",
+      subject: "A rendelésed átvehető – Teherguminet.hu",
+      html: normalizeHtmlForResendVariables(
+        await render(React.createElement(OrderPickupReadyEmail, pickupReadyHuProps)),
+        "hu"
+      ),
+      variables: TEMPLATE_VARIABLES,
+    },
+    {
+      key: "order-pickup-ready",
+      language: "sk",
+      name: "Teherguminet - order-pickup-ready (SK)",
+      alias: "teherguminet-order-pickup-ready-sk",
+      subject: "Objednávka je pripravená na odber – Teherguminet.hu",
+      html: normalizeHtmlForResendVariables(
+        await render(React.createElement(OrderPickupReadyEmail, pickupReadySkProps)),
+        "sk"
+      ),
+      variables: TEMPLATE_VARIABLES,
+    },
+    {
+      key: "order-pickup-completed",
+      language: "hu",
+      name: "Teherguminet - pickup-completed",
+      alias: "teherguminet-pickup-completed",
+      subject: "Átvétel sikeresen megtörtént – Teherguminet.hu",
+      html: normalizeHtmlForResendVariables(
+        await render(
+          React.createElement(OrderPickupCompletedEmail, pickupCompletedHuProps)
+        ),
+        "hu"
+      ),
+      variables: TEMPLATE_VARIABLES,
+    },
+    {
+      key: "order-pickup-completed",
+      language: "sk",
+      name: "Teherguminet - pickup-completed (SK)",
+      alias: "teherguminet-pickup-completed-sk",
+      subject: "Prevzatie bolo úspešne dokončené – Teherguminet.hu",
+      html: normalizeHtmlForResendVariables(
+        await render(
+          React.createElement(OrderPickupCompletedEmail, pickupCompletedSkProps)
+        ),
+        "sk"
+      ),
+      variables: TEMPLATE_VARIABLES,
+    },
+    {
+      key: "gls-label-cancelled",
+      language: "hu",
+      name: "Teherguminet - gls-label-cancelled",
+      alias: "teherguminet-gls-label-cancelled",
+      subject: "GLS címke törölve – Teherguminet.hu",
+      html: normalizeHtmlForResendVariables(
+        await render(
+          React.createElement(GlsLabelCancelledEmail, glsCancelledHuProps)
+        ),
+        "hu"
+      ),
+      variables: TEMPLATE_VARIABLES,
+    },
+    {
+      key: "gls-label-cancelled",
+      language: "sk",
+      name: "Teherguminet - gls-label-cancelled (SK)",
+      alias: "teherguminet-gls-label-cancelled-sk",
+      subject: "GLS štítok bol zrušený – Teherguminet.hu",
+      html: normalizeHtmlForResendVariables(
+        await render(
+          React.createElement(GlsLabelCancelledEmail, glsCancelledSkProps)
         ),
         "sk"
       ),

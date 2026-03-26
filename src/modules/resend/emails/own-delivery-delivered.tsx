@@ -55,9 +55,14 @@ const styles = {
     boxShadow: "0 16px 40px rgba(17,17,17,0.08)",
     overflow: "hidden",
   } as React.CSSProperties,
-  header: {
-    padding: "28px 28px 16px",
+  headerAccent: {
+    height: "6px",
     backgroundColor: F1_RED,
+  } as React.CSSProperties,
+  header: {
+    padding: "20px 28px 14px",
+    backgroundColor: "#ffffff",
+    borderBottom: "1px solid #F3F4F6",
   } as React.CSSProperties,
   brand: {
     fontSize: "16px",
@@ -65,7 +70,7 @@ const styles = {
     letterSpacing: "0.22em",
     textTransform: "uppercase",
     margin: 0,
-    color: "#ffffff",
+    color: "#111111",
     textDecoration: "none",
     display: "inline-block",
     fontFamily: FONT_STACK,
@@ -75,7 +80,7 @@ const styles = {
     fontSize: "26px",
     lineHeight: "1.15",
     fontWeight: 700,
-    color: "#ffffff",
+    color: F1_RED,
     fontFamily: FONT_STACK,
   } as React.CSSProperties,
   content: {
@@ -243,6 +248,7 @@ export const OwnDeliveryDeliveredEmail = ({
       <Body style={styles.body}>
         <Container style={styles.container}>
           <Section style={styles.card}>
+            <Section style={styles.headerAccent} />
             <Section style={styles.header}>
               <Link href={BRAND_URL} style={styles.brand}>
                 TEHERGUMINET.HU
@@ -321,4 +327,3 @@ export const mockOwnDeliveryDelivered: OwnDeliveryDeliveredEmailProps = {
 export default () => (
   <OwnDeliveryDeliveredEmail {...mockOwnDeliveryDelivered} />
 )
-

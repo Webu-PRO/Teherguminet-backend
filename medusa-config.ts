@@ -142,6 +142,8 @@ const resolveResendTemplateIds = () => {
     "order-thanks": process.env.RESEND_TEMPLATE_ID_ORDER_THANKS,
     "order-delivered": process.env.RESEND_TEMPLATE_ID_ORDER_DELIVERED,
     "order-pickup-ready": process.env.RESEND_TEMPLATE_ID_ORDER_PICKUP_READY,
+    "order-pickup-completed":
+      process.env.RESEND_TEMPLATE_ID_ORDER_PICKUP_COMPLETED,
     "own-delivery-payment-notice":
       process.env.RESEND_TEMPLATE_ID_OWN_DELIVERY_PAYMENT_NOTICE,
     "own-delivery-shipped":

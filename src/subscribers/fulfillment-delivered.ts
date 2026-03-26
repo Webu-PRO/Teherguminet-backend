@@ -27,7 +27,6 @@ type FulfillmentEventPayload = {
 
 const DELIVERY_EMAIL_METADATA_KEY = "delivery_email_sent_at"
 const DELIVERY_TEMPLATE_DEFAULT = "order-delivered"
-const DELIVERY_TEMPLATE_PICKUP_READY = "order-pickup-ready"
 const DELIVERY_TEMPLATE_OWN_DELIVERY = "own-delivery-delivered"
 
 const resolveLogger = (container: SubscriberArgs["container"]) => {
@@ -202,11 +201,12 @@ export default async function fulfillmentDeliveredHandler({
   const isOwnDelivery = isOwnDeliveryShippingMethod(
     shippingMethod ?? shippingMethodFallback
   )
-  const selectedTemplate = isPickupDelivery
-    ? DELIVERY_TEMPLATE_PICKUP_READY
-    : isOwnDelivery
-      ? DELIVERY_TEMPLATE_OWN_DELIVERY
-      : DELIVERY_TEMPLATE_DEFAULT
+  if (isPickupDelivery) {
+    return
+  }
+  const selectedTemplate = isOwnDelivery
+    ? DELIVERY_TEMPLATE_OWN_DELIVERY
+    : DELIVERY_TEMPLATE_DEFAULT
 
   const trackingNumbers =
     "tracking_numbers" in fulfillment

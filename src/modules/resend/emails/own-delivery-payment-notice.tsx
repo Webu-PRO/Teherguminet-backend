@@ -40,9 +40,9 @@ const FONT_STACK =
 
 const styles = {
   body: {
-    backgroundColor: "#ffffff",
+    backgroundColor: "#eeeeee",
     margin: 0,
-    padding: "36px 0",
+    padding: "20px 0",
     fontFamily: FONT_STACK,
     color: "#111111",
   } as React.CSSProperties,
@@ -50,18 +50,18 @@ const styles = {
     width: "100%",
     maxWidth: "640px",
     margin: "0 auto",
-    padding: "0 20px",
+    padding: "0 14px",
   } as React.CSSProperties,
   card: {
-    borderRadius: "24px",
+    borderRadius: "6px",
     backgroundColor: "#ffffff",
-    border: "1px solid #E5E7EB",
-    boxShadow: "0 16px 40px rgba(17,17,17,0.08)",
+    border: "1px solid #dedede",
     overflow: "hidden",
   } as React.CSSProperties,
   header: {
-    padding: "28px 28px 16px",
-    backgroundColor: F1_RED,
+    padding: "20px 28px 14px",
+    backgroundColor: "#ffffff",
+    borderBottom: "1px solid #F3F4F6",
   } as React.CSSProperties,
   brand: {
     fontSize: "16px",
@@ -69,7 +69,7 @@ const styles = {
     letterSpacing: "0.22em",
     textTransform: "uppercase",
     margin: 0,
-    color: "#ffffff",
+    color: "#111111",
     textDecoration: "none",
     display: "inline-block",
     fontFamily: FONT_STACK,
@@ -79,7 +79,7 @@ const styles = {
     fontSize: "26px",
     lineHeight: "1.15",
     fontWeight: 700,
-    color: "#ffffff",
+    color: "#111111",
     fontFamily: FONT_STACK,
   } as React.CSSProperties,
   content: {
@@ -124,7 +124,8 @@ const styles = {
   } as React.CSSProperties,
   cta: {
     backgroundColor: F1_RED,
-    borderRadius: "999px",
+    borderRadius: "4px",
+    border: "1px solid #b70500",
     padding: "12px 18px",
     fontSize: "14px",
     fontWeight: 700,

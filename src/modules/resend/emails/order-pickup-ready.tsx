@@ -37,9 +37,9 @@ const FONT_STACK =
 
 const styles = {
   body: {
-    backgroundColor: "#ffffff",
+    backgroundColor: "#eeeeee",
     margin: 0,
-    padding: "36px 0",
+    padding: "20px 0",
     fontFamily: FONT_STACK,
     color: "#111111",
   } as React.CSSProperties,
@@ -47,108 +47,173 @@ const styles = {
     width: "100%",
     maxWidth: "640px",
     margin: "0 auto",
-    padding: "0 20px",
+    padding: "0 14px",
   } as React.CSSProperties,
   card: {
-    borderRadius: "24px",
+    borderRadius: "6px",
     backgroundColor: "#ffffff",
-    border: "1px solid #E5E7EB",
-    boxShadow: "0 16px 40px rgba(17,17,17,0.08)",
+    border: "1px solid #dedede",
     overflow: "hidden",
   } as React.CSSProperties,
-  header: {
-    padding: "28px 28px 16px",
+  topRow: {
+    backgroundColor: "#f6f6f6",
+    borderBottom: "1px solid #e5e5e5",
+    padding: "18px 22px",
+  } as React.CSSProperties,
+  topLabel: {
+    margin: 0,
+    fontSize: "14px",
+    lineHeight: "20px",
+    fontWeight: 700,
+    color: "#1a1a1a",
+    fontFamily: FONT_STACK,
+  } as React.CSSProperties,
+  topValue: {
+    margin: "8px 0 0",
+    fontSize: "16px",
+    lineHeight: "22px",
+    fontWeight: 600,
+    color: "#7a7a7a",
+    letterSpacing: "0.01em",
+    fontFamily: FONT_STACK,
+  } as React.CSSProperties,
+  topButton: {
     backgroundColor: F1_RED,
+    borderRadius: "4px",
+    border: "1px solid #b70500",
+    color: "#ffffff",
+    fontSize: "18px",
+    fontWeight: 700,
+    textDecoration: "none",
+    display: "inline-block",
+    padding: "14px 28px",
+    fontFamily: FONT_STACK,
+    whiteSpace: "nowrap",
+  } as React.CSSProperties,
+  hero: {
+    padding: "34px 22px 28px",
+    textAlign: "center",
+    borderBottom: "1px solid #e8e8e8",
   } as React.CSSProperties,
   brand: {
-    fontSize: "16px",
-    fontWeight: 700,
-    letterSpacing: "0.22em",
-    textTransform: "uppercase",
     margin: 0,
-    color: "#ffffff",
+    fontSize: "28px",
+    lineHeight: "32px",
+    fontWeight: 700,
+    color: "#111111",
     textDecoration: "none",
     display: "inline-block",
     fontFamily: FONT_STACK,
   } as React.CSSProperties,
-  title: {
-    margin: "12px 0 0",
-    fontSize: "26px",
-    lineHeight: "1.15",
-    fontWeight: 700,
-    color: "#ffffff",
+  heading: {
+    margin: "16px 0 0",
+    fontSize: "42px",
+    lineHeight: "46px",
+    letterSpacing: "-0.02em",
+    fontWeight: 800,
+    color: "#111111",
+    fontFamily: FONT_STACK,
+  } as React.CSSProperties,
+  heroText: {
+    margin: "16px auto 0",
+    maxWidth: "510px",
+    fontSize: "22px",
+    lineHeight: "32px",
+    fontWeight: 500,
+    color: "#666666",
     fontFamily: FONT_STACK,
   } as React.CSSProperties,
   content: {
-    padding: "20px 28px 28px",
+    padding: "20px 22px 22px",
   } as React.CSSProperties,
-  text: {
-    margin: "0 0 12px",
-    fontSize: "15px",
-    lineHeight: "23px",
-    color: "#111111",
-    fontFamily: FONT_STACK,
-  } as React.CSSProperties,
-  strong: {
-    fontWeight: 700,
-    color: "#111111",
-  } as React.CSSProperties,
-  detailCard: {
-    marginTop: "8px",
-    borderRadius: "16px",
-    border: "1px solid #E5E7EB",
-    backgroundColor: "#F9FAFB",
-    padding: "16px",
+  panel: {
+    borderTop: "1px solid #ececec",
+    paddingTop: "16px",
+    marginTop: "16px",
   } as React.CSSProperties,
   label: {
-    fontSize: "11px",
+    margin: 0,
+    fontSize: "13px",
+    lineHeight: "18px",
+    letterSpacing: "0.12em",
     textTransform: "uppercase",
-    letterSpacing: "0.16em",
-    color: "#6B7280",
-    margin: "0 0 6px",
+    color: "#8a8a8a",
     fontFamily: FONT_STACK,
+    fontWeight: 700,
   } as React.CSSProperties,
   value: {
-    fontSize: "15px",
+    margin: "8px 0 0",
+    fontSize: "20px",
+    lineHeight: "28px",
     fontWeight: 700,
-    color: "#111111",
-    margin: "0 0 12px",
-    fontFamily: FONT_STACK,
-    wordBreak: "break-word",
-  } as React.CSSProperties,
-  ctaWrap: {
-    marginTop: "18px",
-  } as React.CSSProperties,
-  cta: {
-    backgroundColor: F1_RED,
-    borderRadius: "999px",
-    padding: "12px 18px",
-    fontSize: "14px",
-    fontWeight: 700,
-    color: "#ffffff",
-    textDecoration: "none",
-    display: "inline-block",
+    color: "#171717",
     fontFamily: FONT_STACK,
   } as React.CSSProperties,
-  muted: {
+  text: {
     margin: "10px 0 0",
-    fontSize: "12px",
-    lineHeight: "18px",
-    color: "#6B7280",
+    fontSize: "18px",
+    lineHeight: "28px",
+    color: "#2a2a2a",
     fontFamily: FONT_STACK,
   } as React.CSSProperties,
   link: {
     color: "#111111",
     textDecoration: "underline",
+    wordBreak: "break-word",
+    fontFamily: FONT_STACK,
+  } as React.CSSProperties,
+  ctaWrap: {
+    marginTop: "20px",
+  } as React.CSSProperties,
+  cta: {
+    backgroundColor: F1_RED,
+    borderRadius: "4px",
+    border: "1px solid #b70500",
+    color: "#ffffff",
+    fontSize: "18px",
+    fontWeight: 700,
+    textDecoration: "none",
+    display: "inline-block",
+    padding: "14px 26px",
+    fontFamily: FONT_STACK,
+  } as React.CSSProperties,
+  muted: {
+    margin: "12px 0 0",
+    fontSize: "14px",
+    lineHeight: "22px",
+    color: "#6a6a6a",
     fontFamily: FONT_STACK,
     wordBreak: "break-word",
   } as React.CSSProperties,
+  helpHeading: {
+    margin: "22px 0 0",
+    fontSize: "20px",
+    lineHeight: "24px",
+    fontWeight: 700,
+    color: "#171717",
+    fontFamily: FONT_STACK,
+  } as React.CSSProperties,
+  helpGrid: {
+    marginTop: "10px",
+    borderTop: "1px solid #ededed",
+    paddingTop: "12px",
+  } as React.CSSProperties,
+  helpItem: {
+    margin: "0 16px 8px 0",
+    display: "inline-block",
+    fontSize: "16px",
+    lineHeight: "22px",
+    fontWeight: 600,
+    color: "#1f1f1f",
+    textDecoration: "none",
+    fontFamily: FONT_STACK,
+  } as React.CSSProperties,
   footer: {
     textAlign: "center",
-    fontSize: "12px",
-    lineHeight: "18px",
-    color: "#6B7280",
-    margin: "16px 0 0",
+    fontSize: "13px",
+    lineHeight: "20px",
+    color: "#7a7a7a",
+    margin: "14px 0 0",
     fontFamily: FONT_STACK,
   } as React.CSSProperties,
 }
@@ -158,20 +223,29 @@ type LanguageBlock = {
   preview: (orderId: string) => string
   heading: string
   intro: (name: string, orderId: string) => React.ReactNode
-  addressLabel: string
-  contactsLabel: string
-  contactIntro: string
+  promiseLine: string
+  pickupRefLabel: string
+  trackCtaLabel: string
+  details: {
+    customerLabel: string
+    orderLabel: string
+    pickupAddressLabel: string
+    contactLabel: string
+  }
   phoneLabel: string
   emailLabel: string
   ctaLabel: string
   fallbackLinkLabel: string
+  helpTitle: string
+  helpLinks: Array<{
+    label: string
+    href: string
+  }>
   closing: string[]
   footer: string
 }
 
-export const OrderPickupReadyEmail = ({
-  order,
-}: OrderPickupReadyEmailProps) => {
+export const OrderPickupReadyEmail = ({ order }: OrderPickupReadyEmailProps) => {
   const languageCode = resolveLanguageFromOrder(order)
   const orderId = resolveOrderId(order)
   const customerName = resolveCustomerName(order)
@@ -181,22 +255,32 @@ export const OrderPickupReadyEmail = ({
     hu: {
       code: "hu",
       preview: (id) => `Megrendelésed átvehető: ${id}`,
-      heading: "Megrendelésed a telephelyen átvehető",
+      heading: "Átvehető.",
       intro: (name, id) => (
         <>
-          Jó hírünk van, {name}! A{" "}
-          <strong style={styles.strong}>{id}</strong> rendelésed átvehető
-          telephelyünkön.
+          Jó hír, {name}! A rendelésed (<strong>{id}</strong>) készen áll
+          személyes átvételre.
         </>
       ),
-      addressLabel: "Átvételi cím",
-      contactsLabel: "Kapcsolat",
-      contactIntro:
-        "További információért keress minket az alábbi elérhetőségek egyikén:",
+      promiseLine:
+        "Az átvétel helyszínét és kapcsolatot lent találod. Kérdés esetén hívj minket bizalommal.",
+      pickupRefLabel: "Átvételi azonosító",
+      trackCtaLabel: "Rendelés megnyitása",
+      details: {
+        customerLabel: "Átvételi név",
+        orderLabel: "Rendelési azonosító",
+        pickupAddressLabel: "Átvételi cím",
+        contactLabel: "Kapcsolat",
+      },
       phoneLabel: "Telefon",
       emailLabel: "Email",
       ctaLabel: "Rendelés megtekintése",
       fallbackLinkLabel: "Ha a gomb nem működik, nyisd meg ezt:",
+      helpTitle: "Segítség",
+      helpLinks: [
+        { label: "Átvételi információk", href: orderUrl },
+        { label: "Kapcsolat", href: `mailto:${PICKUP_EMAIL}` },
+      ],
       closing: ["Üdvözlettel,", "A Teherguminet.hu csapata"],
       footer:
         "Ez egy automatikusan generált üzenet, kérjük ne válaszolj rá közvetlenül.",
@@ -204,22 +288,32 @@ export const OrderPickupReadyEmail = ({
     sk: {
       code: "sk",
       preview: (id) => `Objednávka pripravená na odber: ${id}`,
-      heading: "Objednávka je pripravená na osobný odber",
+      heading: "Pripravené na odber.",
       intro: (name, id) => (
         <>
-          Dobrá správa, {name}! Vaša objednávka{" "}
-          <strong style={styles.strong}>{id}</strong> je pripravená na odber
-          na našej pobočke.
+          Dobrá správa, {name}! Vaša objednávka (<strong>{id}</strong>) je
+          pripravená na osobný odber.
         </>
       ),
-      addressLabel: "Adresa odberu",
-      contactsLabel: "Kontakt",
-      contactIntro:
-        "Pre ďalšie informácie nás kontaktujte na jednej z nasledujúcich adries:",
+      promiseLine:
+        "Miesto odberu a kontakty nájdete nižšie. V prípade otázok nás neváhajte kontaktovať.",
+      pickupRefLabel: "Referenčné číslo odberu",
+      trackCtaLabel: "Otvoriť objednávku",
+      details: {
+        customerLabel: "Meno príjemcu",
+        orderLabel: "ID objednávky",
+        pickupAddressLabel: "Adresa odberu",
+        contactLabel: "Kontakt",
+      },
       phoneLabel: "Telefón",
       emailLabel: "Email",
       ctaLabel: "Zobraziť objednávku",
       fallbackLinkLabel: "Ak tlačidlo nefunguje, otvorte tento odkaz:",
+      helpTitle: "Pomoc",
+      helpLinks: [
+        { label: "Informácie o odbere", href: orderUrl },
+        { label: "Kontakt", href: `mailto:${PICKUP_EMAIL}` },
+      ],
       closing: ["S pozdravom,", "Tím Teherguminet.hu"],
       footer:
         "Toto je automaticky generovaná správa, prosím, neodpovedajte na ňu.",
@@ -236,29 +330,64 @@ export const OrderPickupReadyEmail = ({
       <Body style={styles.body}>
         <Container style={styles.container}>
           <Section style={styles.card}>
-            <Section style={styles.header}>
+            <Section style={styles.topRow}>
+              <table
+                width="100%"
+                border={0}
+                cellPadding={0}
+                cellSpacing={0}
+                role="presentation"
+              >
+                <tbody>
+                  <tr>
+                    <td valign="top" style={{ paddingRight: "8px" }}>
+                      <Text style={styles.topLabel}>{lang.pickupRefLabel}</Text>
+                      <Text style={styles.topValue}>{orderId}</Text>
+                    </td>
+                    <td align="right" valign="middle">
+                      <Button href={orderUrl} style={styles.topButton}>
+                        {lang.trackCtaLabel}
+                      </Button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </Section>
+
+            <Section style={styles.hero}>
               <Link href={BRAND_URL} style={styles.brand}>
-                TEHERGUMINET.HU
+                Teherguminet
               </Link>
-              <Heading style={styles.title}>{lang.heading}</Heading>
+              <Heading style={styles.heading}>{lang.heading}</Heading>
+              <Text style={styles.heroText}>{lang.intro(customerName, orderId)}</Text>
+              <Text style={styles.heroText}>{lang.promiseLine}</Text>
             </Section>
 
             <Section style={styles.content}>
-              <Text style={styles.text}>{lang.intro(customerName, orderId)}</Text>
+              <Section style={styles.panel}>
+                <Text style={styles.label}>{lang.details.customerLabel}</Text>
+                <Text style={styles.value}>{customerName}</Text>
+              </Section>
 
-              <Section style={styles.detailCard}>
-                <Text style={styles.label}>{lang.addressLabel}</Text>
-                <Text style={styles.value}>{PICKUP_ADDRESS}</Text>
+              <Section style={styles.panel}>
+                <Text style={styles.label}>{lang.details.orderLabel}</Text>
+                <Text style={styles.value}>{orderId}</Text>
+              </Section>
 
-                <Text style={styles.label}>{lang.contactsLabel}</Text>
-                <Text style={styles.text}>{lang.contactIntro}</Text>
-                <Text style={{ ...styles.text, marginBottom: "6px" }}>
+              <Section style={styles.panel}>
+                <Text style={styles.label}>{lang.details.pickupAddressLabel}</Text>
+                <Text style={styles.text}>{PICKUP_ADDRESS}</Text>
+              </Section>
+
+              <Section style={styles.panel}>
+                <Text style={styles.label}>{lang.details.contactLabel}</Text>
+                <Text style={styles.text}>
                   {lang.phoneLabel}:{" "}
                   <Link href={`tel:${PICKUP_PHONE_LINK}`} style={styles.link}>
                     {PICKUP_PHONE_DISPLAY}
                   </Link>
                 </Text>
-                <Text style={{ ...styles.text, marginBottom: 0 }}>
+                <Text style={styles.text}>
                   {lang.emailLabel}:{" "}
                   <Link href={`mailto:${PICKUP_EMAIL}`} style={styles.link}>
                     {PICKUP_EMAIL}
@@ -278,7 +407,20 @@ export const OrderPickupReadyEmail = ({
                 </Text>
               </Section>
 
-              <Text style={{ ...styles.text, marginTop: "14px" }}>
+              <Text style={styles.helpHeading}>{lang.helpTitle}</Text>
+              <Section style={styles.helpGrid}>
+                {lang.helpLinks.map((help) => (
+                  <Link
+                    key={`${lang.code}-${help.label}`}
+                    href={help.href}
+                    style={styles.helpItem}
+                  >
+                    {help.label}
+                  </Link>
+                ))}
+              </Section>
+
+              <Text style={styles.text}>
                 {lang.closing.map((line, index) => (
                   <React.Fragment key={`${lang.code}-closing-${index}`}>
                     {line}

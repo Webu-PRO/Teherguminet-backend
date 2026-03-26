@@ -27,6 +27,10 @@ import {
   type OrderPickupReadyEmailProps,
 } from "./emails/order-pickup-ready";
 import {
+  OrderPickupCompletedEmail,
+  type OrderPickupCompletedEmailProps,
+} from "./emails/order-pickup-completed";
+import {
   OwnDeliveryPaymentNoticeEmail,
   type OwnDeliveryPaymentNoticeEmailProps,
 } from "./emails/own-delivery-payment-notice";
@@ -107,6 +111,7 @@ enum Templates {
   ORDER_THANKS = "order-thanks",
   ORDER_DELIVERED = "order-delivered",
   ORDER_PICKUP_READY = "order-pickup-ready",
+  ORDER_PICKUP_COMPLETED = "order-pickup-completed",
   OWN_DELIVERY_PAYMENT_NOTICE = "own-delivery-payment-notice",
   OWN_DELIVERY_FULFILLMENT_CREATED = "own-delivery-fulfillment-created",
   OWN_DELIVERY_SHIPPED = "own-delivery-shipped",
@@ -131,6 +136,8 @@ const templates: Partial<Record<Templates, TemplateRenderer>> = {
     OrderDeliveredEmail(props as OrderDeliveredEmailProps),
   [Templates.ORDER_PICKUP_READY]: (props) =>
     OrderPickupReadyEmail(props as OrderPickupReadyEmailProps),
+  [Templates.ORDER_PICKUP_COMPLETED]: (props) =>
+    OrderPickupCompletedEmail(props as OrderPickupCompletedEmailProps),
   [Templates.OWN_DELIVERY_PAYMENT_NOTICE]: (props) =>
     OwnDeliveryPaymentNoticeEmail(props as OwnDeliveryPaymentNoticeEmailProps),
   [Templates.OWN_DELIVERY_FULFILLMENT_CREATED]: (props) =>
@@ -239,6 +246,7 @@ const resolveNotificationLanguage = (
     template === Templates.ORDER_THANKS ||
     template === Templates.ORDER_DELIVERED ||
     template === Templates.ORDER_PICKUP_READY ||
+    template === Templates.ORDER_PICKUP_COMPLETED ||
     template === Templates.OWN_DELIVERY_PAYMENT_NOTICE ||
     template === Templates.OWN_DELIVERY_FULFILLMENT_CREATED ||
     template === Templates.OWN_DELIVERY_SHIPPED ||
@@ -543,6 +551,20 @@ class ResendNotificationProviderService extends AbstractNotificationProviderServ
         return orderRef
           ? `Rendelés #${orderRef} átvehető telephelyünkön – ${BRAND_NAME}`
           : `Megrendelésed a telephelyen átvehető – ${BRAND_NAME}`;
+      }
+      case Templates.ORDER_PICKUP_COMPLETED: {
+        const orderRef = resolveOrderReference(
+          (notification.data as any)?.order
+        );
+        if (language === "sk") {
+          return orderRef
+            ? `Objednávka #${orderRef}: prevzatie úspešne dokončené – ${BRAND_NAME}`
+            : `Prevzatie úspešne dokončené – ${BRAND_NAME}`;
+        }
+
+        return orderRef
+          ? `Rendelés #${orderRef}: átvétel sikeresen megtörtént – ${BRAND_NAME}`
+          : `Átvétel sikeresen megtörtént – ${BRAND_NAME}`;
       }
       case Templates.OWN_DELIVERY_PAYMENT_NOTICE: {
         const orderRef = resolveOrderReference(

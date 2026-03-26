@@ -21,7 +21,9 @@ import type {
 
 import { dispatchNotificationsIndividually } from "../lib/dispatch-notifications"
 import { isGlsShippingMethod } from "../lib/gls"
-import { isOwnDeliveryShippingMethod } from "../lib/own-delivery-shipping"
+import {
+  isOwnDeliveryShippingMethod,
+} from "../lib/own-delivery-shipping"
 import {
   BILLINGO_ERROR_KEYS,
   BILLINGO_METADATA_KEYS,

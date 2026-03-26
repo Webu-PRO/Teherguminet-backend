@@ -66,7 +66,7 @@ npx medusa exec ./src/scripts/my-script.ts arg1 arg2
 
 ## Resend Template Sync
 
-To upload/update own-delivery email templates in Resend (HU + SK), run:
+To upload/update email templates in Resend (own-delivery + GLS label cancelled, HU + SK), run:
 
 ```bash
 npm run resend:templates:sync
