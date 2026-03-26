@@ -48,6 +48,55 @@ type TemplateListItem = {
   alias?: string | null
 }
 
+type ResendTemplateApiResponse<T> = {
+  data?: T
+  error?: unknown
+}
+
+type ResendTemplatesApi = {
+  list: (options?: {
+    limit?: number
+    after?: string
+    before?: string
+  }) => Promise<
+    ResendTemplateApiResponse<{
+      object: "list"
+      data: TemplateListItem[]
+      has_more: boolean
+    }>
+  >
+  publish: (id: string) => Promise<ResendTemplateApiResponse<{ id: string }>>
+  update: (
+    id: string,
+    payload: {
+      name?: string
+      alias?: string
+      subject?: string
+      html?: string
+      from?: string
+      replyTo?: string
+      variables?: Array<{
+        key: string
+        type: "string"
+        fallbackValue?: string | null
+      }>
+    }
+  ) => Promise<ResendTemplateApiResponse<{ id: string }>>
+  create: (payload: {
+    name: string
+    alias: string
+    subject: string
+    html: string
+    from: string
+    replyTo?: string
+    variables?: Array<{
+      key: string
+      type: "string"
+      fallbackValue?: string | null
+    }>
+  }) => Promise<ResendTemplateApiResponse<{ id: string }>>
+}
+
 const TEMPLATE_IDS_FILE = ".resend-template-ids.json"
 const ORDER_ID_PLACEHOLDER = "{{{order_id}}}"
 const CUSTOMER_NAME_PLACEHOLDER = "{{{customer_name}}}"
@@ -78,6 +127,19 @@ const requireEnv = (name: string) => {
     throw new Error(`${name} environment variable is required`)
   }
   return value
+}
+
+const getTemplatesApi = (resend: Resend): ResendTemplatesApi => {
+  const maybeTemplates = (resend as unknown as { templates?: ResendTemplatesApi })
+    .templates
+
+  if (!maybeTemplates) {
+    throw new Error(
+      "This Resend SDK build does not expose templates API at runtime."
+    )
+  }
+
+  return maybeTemplates
 }
 
 const withLanguage = <
@@ -136,12 +198,12 @@ const normalizeHtmlForResendVariables = (
     .join(ORDER_ID_PLACEHOLDER)
 }
 
-const listAllTemplates = async (resend: Resend) => {
+const listAllTemplates = async (templatesApi: ResendTemplatesApi) => {
   const all: TemplateListItem[] = []
   let cursor: string | undefined
 
   while (true) {
-    const response = await resend.templates.list({
+    const response = await templatesApi.list({
       limit: 100,
       ...(cursor ? { after: cursor } : {}),
     })
@@ -169,7 +231,8 @@ const listAllTemplates = async (resend: Resend) => {
 }
 
 const tryPublishTemplate = async (resend: Resend, id: string) => {
-  const response = await resend.templates.publish(id)
+  const templatesApi = getTemplatesApi(resend)
+  const response = await templatesApi.publish(id)
   if (response.error) {
     // Template may already be published, or has no draft changes.
     console.warn(
@@ -191,7 +254,8 @@ const syncTemplate = async (
   const match = byAlias ?? byName
 
   if (match) {
-    const updateResponse = await resend.templates.update(match.id, {
+    const templatesApi = getTemplatesApi(resend)
+    const updateResponse = await templatesApi.update(match.id, {
       name: definition.name,
       alias: definition.alias,
       subject: definition.subject,
@@ -213,7 +277,8 @@ const syncTemplate = async (
     return { id: match.id, action: "updated" as const }
   }
 
-  const createResponse = await resend.templates.create({
+  const templatesApi = getTemplatesApi(resend)
+  const createResponse = await templatesApi.create({
     name: definition.name,
     alias: definition.alias,
     subject: definition.subject,
@@ -272,6 +337,7 @@ export default async function syncResendTemplates({
   const noWriteIds = args.includes("--no-write-ids")
 
   const resend = new Resend(apiKey)
+  const templatesApi = getTemplatesApi(resend)
 
   const paymentHuProps = withTemplatePlaceholders(
     withLanguage(mockOwnDeliveryPaymentNotice, "hu")
@@ -379,7 +445,7 @@ export default async function syncResendTemplates({
     },
   ]
 
-  const existingTemplates = await listAllTemplates(resend)
+  const existingTemplates = await listAllTemplates(templatesApi)
   const idMap: Record<string, string> = {}
 
   for (const definition of definitions) {
