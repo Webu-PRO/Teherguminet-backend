@@ -1,4 +1,5 @@
 import { loadEnv, defineConfig } from "@medusajs/utils";
+import fs from "fs";
 import path from "path";
 
 const DEFAULT_STORE_CORS = [
@@ -106,7 +107,35 @@ const parseResendTemplateIdsJson = () => {
   }
 };
 
+const parseResendTemplateIdsFile = () => {
+  const filePath = process.env.RESEND_TEMPLATE_IDS_FILE?.trim()
+    ? path.resolve(process.cwd(), process.env.RESEND_TEMPLATE_IDS_FILE.trim())
+    : path.resolve(process.cwd(), ".resend-template-ids.json");
+
+  if (!fs.existsSync(filePath)) {
+    return {} as Record<string, string>;
+  }
+
+  try {
+    const raw = fs.readFileSync(filePath, "utf-8");
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const normalized = Object.entries(parsed).reduce<Record<string, string>>(
+      (acc, [key, value]) => {
+        if (typeof value === "string" && value.trim().length > 0) {
+          acc[key] = value.trim();
+        }
+        return acc;
+      },
+      {}
+    );
+    return normalized;
+  } catch {
+    return {} as Record<string, string>;
+  }
+};
+
 const resolveResendTemplateIds = () => {
+  const fromFile = parseResendTemplateIdsFile();
   const fromJson = parseResendTemplateIdsJson();
   const fromEnv = {
     "order-placed": process.env.RESEND_TEMPLATE_ID_ORDER_PLACED,
@@ -115,6 +144,10 @@ const resolveResendTemplateIds = () => {
     "order-pickup-ready": process.env.RESEND_TEMPLATE_ID_ORDER_PICKUP_READY,
     "own-delivery-payment-notice":
       process.env.RESEND_TEMPLATE_ID_OWN_DELIVERY_PAYMENT_NOTICE,
+    "own-delivery-shipped":
+      process.env.RESEND_TEMPLATE_ID_OWN_DELIVERY_SHIPPED,
+    "own-delivery-delivered":
+      process.env.RESEND_TEMPLATE_ID_OWN_DELIVERY_DELIVERED,
     "payment-receipt": process.env.RESEND_TEMPLATE_ID_PAYMENT_RECEIPT,
     "user-invited": process.env.RESEND_TEMPLATE_ID_USER_INVITED,
     "abandoned-cart": process.env.RESEND_TEMPLATE_ID_ABANDONED_CART,
@@ -134,7 +167,7 @@ const resolveResendTemplateIds = () => {
     return acc;
   }, {});
 
-  return { ...fromJson, ...normalizedFromEnv };
+  return { ...fromFile, ...fromJson, ...normalizedFromEnv };
 };
 
 if (hasResendConfig) {

@@ -61,3 +61,21 @@ Then, pass the arguments in the `exec` command after the file path:
 ```bash
 npx medusa exec ./src/scripts/my-script.ts arg1 arg2
 ```
+
+---
+
+## Resend Template Sync
+
+To upload/update own-delivery email templates in Resend (HU + SK), run:
+
+```bash
+npm run resend:templates:sync
+```
+
+The script will:
+
+- create or update templates in Resend Dashboard
+- publish updated templates
+- write template IDs into `.resend-template-ids.json` (used automatically by `medusa-config.ts`)
+
+Use this to skip manual `RESEND_TEMPLATE_ID_*` env setup for these templates.

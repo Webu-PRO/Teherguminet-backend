@@ -15,6 +15,7 @@
   "scripts": {
     "build": "medusa build",
     "seed": "medusa exec ./src/scripts/seed.ts",
+    "resend:templates:sync": "ts-node --transpile-only ./src/scripts/sync-resend-templates.ts",
     "start": "medusa start",
     "dev": "medusa develop",
     "dev:email": "email dev --dir ./src/modules/resend/emails",

@@ -1,0 +1,320 @@
+import fs from "fs"
+import path from "path"
+import React from "react"
+import type { ExecArgs } from "@medusajs/types"
+import { loadEnv } from "@medusajs/utils"
+import { Resend } from "resend"
+import { render } from "@react-email/render"
+import {
+  OwnDeliveryPaymentNoticeEmail,
+  mockOwnDeliveryPaymentNotice,
+  type OwnDeliveryPaymentNoticeEmailProps,
+} from "../modules/resend/emails/own-delivery-payment-notice"
+import {
+  OwnDeliveryShippedEmail,
+  mockOwnDeliveryShipped,
+  type OwnDeliveryShippedEmailProps,
+} from "../modules/resend/emails/own-delivery-shipped"
+import {
+  OwnDeliveryDeliveredEmail,
+  mockOwnDeliveryDelivered,
+  type OwnDeliveryDeliveredEmailProps,
+} from "../modules/resend/emails/own-delivery-delivered"
+
+type ScriptArgs = ExecArgs & {
+  args?: string[]
+}
+
+type TemplateLanguage = "hu" | "sk"
+
+type ResendTemplateDefinition = {
+  key: "own-delivery-payment-notice" | "own-delivery-shipped" | "own-delivery-delivered"
+  language: TemplateLanguage
+  name: string
+  alias: string
+  subject: string
+  html: string
+}
+
+type TemplateListItem = {
+  id: string
+  name: string
+  alias?: string | null
+}
+
+const TEMPLATE_IDS_FILE = ".resend-template-ids.json"
+
+loadEnv(process.env.NODE_ENV || "development", process.cwd())
+
+const requireEnv = (name: string) => {
+  const value = process.env[name]?.trim()
+  if (!value) {
+    throw new Error(`${name} environment variable is required`)
+  }
+  return value
+}
+
+const withLanguage = <
+  T extends OwnDeliveryPaymentNoticeEmailProps | OwnDeliveryShippedEmailProps | OwnDeliveryDeliveredEmailProps,
+>(
+  props: T,
+  language: TemplateLanguage
+): T => {
+  return {
+    ...props,
+    order: {
+      ...props.order,
+      metadata: {
+        ...(props.order.metadata ?? {}),
+        language,
+      },
+    },
+  } as T
+}
+
+const listAllTemplates = async (resend: Resend) => {
+  const all: TemplateListItem[] = []
+  let cursor: string | undefined
+
+  while (true) {
+    const response = await resend.templates.list({
+      limit: 100,
+      ...(cursor ? { after: cursor } : {}),
+    })
+
+    if (response.error) {
+      throw new Error(
+        `Failed to list Resend templates: ${JSON.stringify(response.error)}`
+      )
+    }
+
+    const chunk = (response.data?.data ?? []) as TemplateListItem[]
+    all.push(...chunk)
+
+    if (!response.data?.has_more || !chunk.length) {
+      break
+    }
+
+    cursor = chunk[chunk.length - 1]?.id
+    if (!cursor) {
+      break
+    }
+  }
+
+  return all
+}
+
+const tryPublishTemplate = async (resend: Resend, id: string) => {
+  const response = await resend.templates.publish(id)
+  if (response.error) {
+    // Template may already be published, or has no draft changes.
+    console.warn(
+      `Publish warning for template ${id}: ${JSON.stringify(response.error)}`
+    )
+    return
+  }
+}
+
+const syncTemplate = async (
+  resend: Resend,
+  existing: TemplateListItem[],
+  definition: ResendTemplateDefinition,
+  from: string,
+  replyTo?: string
+) => {
+  const byAlias = existing.find((entry) => entry.alias === definition.alias)
+  const byName = existing.find((entry) => entry.name === definition.name)
+  const match = byAlias ?? byName
+
+  if (match) {
+    const updateResponse = await resend.templates.update(match.id, {
+      name: definition.name,
+      alias: definition.alias,
+      subject: definition.subject,
+      html: definition.html,
+      from,
+      ...(replyTo ? { replyTo } : {}),
+    })
+
+    if (updateResponse.error) {
+      throw new Error(
+        `Failed to update template ${definition.alias}: ${JSON.stringify(
+          updateResponse.error
+        )}`
+      )
+    }
+
+    await tryPublishTemplate(resend, match.id)
+    return { id: match.id, action: "updated" as const }
+  }
+
+  const createResponse = await resend.templates.create({
+    name: definition.name,
+    alias: definition.alias,
+    subject: definition.subject,
+    html: definition.html,
+    from,
+    ...(replyTo ? { replyTo } : {}),
+  })
+
+  if (createResponse.error || !createResponse.data?.id) {
+    throw new Error(
+      `Failed to create template ${definition.alias}: ${JSON.stringify(
+        createResponse.error
+      )}`
+    )
+  }
+
+  await tryPublishTemplate(resend, createResponse.data.id)
+  return { id: createResponse.data.id, action: "created" as const }
+}
+
+const writeTemplateIdsFile = (
+  filePath: string,
+  updates: Record<string, string>
+) => {
+  let existing: Record<string, string> = {}
+
+  if (fs.existsSync(filePath)) {
+    try {
+      const raw = fs.readFileSync(filePath, "utf8")
+      const parsed = JSON.parse(raw) as Record<string, unknown>
+      existing = Object.fromEntries(
+        Object.entries(parsed).filter(
+          ([, value]) => typeof value === "string" && value.trim().length > 0
+        )
+      ) as Record<string, string>
+    } catch {
+      existing = {}
+    }
+  }
+
+  const merged = {
+    ...existing,
+    ...updates,
+  }
+
+  fs.writeFileSync(filePath, `${JSON.stringify(merged, null, 2)}\n`, "utf8")
+}
+
+export default async function syncResendTemplates({
+  args = [],
+}: ScriptArgs) {
+  const apiKey = requireEnv("RESEND_API_KEY")
+  const from = requireEnv("RESEND_FROM_EMAIL")
+  const replyTo = process.env.RESEND_REPLY_TO?.trim()
+  const noWriteIds = args.includes("--no-write-ids")
+
+  const resend = new Resend(apiKey)
+
+  const paymentHuProps = withLanguage(mockOwnDeliveryPaymentNotice, "hu")
+  const paymentSkProps = withLanguage(mockOwnDeliveryPaymentNotice, "sk")
+  const shippedHuProps = withLanguage(mockOwnDeliveryShipped, "hu")
+  const shippedSkProps = withLanguage(mockOwnDeliveryShipped, "sk")
+  const deliveredHuProps = withLanguage(mockOwnDeliveryDelivered, "hu")
+  const deliveredSkProps = withLanguage(mockOwnDeliveryDelivered, "sk")
+
+  const definitions: ResendTemplateDefinition[] = [
+    {
+      key: "own-delivery-payment-notice",
+      language: "hu",
+      name: "Teherguminet - own-delivery-payment-notice",
+      alias: "teherguminet-own-delivery-payment-notice",
+      subject: "Saját szállítás visszaigazolva – Teherguminet.hu",
+      html: await render(
+        React.createElement(OwnDeliveryPaymentNoticeEmail, paymentHuProps)
+      ),
+    },
+    {
+      key: "own-delivery-payment-notice",
+      language: "sk",
+      name: "Teherguminet - own-delivery-payment-notice (SK)",
+      alias: "teherguminet-own-delivery-payment-notice-sk",
+      subject: "Vlastné doručenie potvrdené – Teherguminet.hu",
+      html: await render(
+        React.createElement(OwnDeliveryPaymentNoticeEmail, paymentSkProps)
+      ),
+    },
+    {
+      key: "own-delivery-shipped",
+      language: "hu",
+      name: "Teherguminet - own-delivery-shipped",
+      alias: "teherguminet-own-delivery-shipped",
+      subject: "A szállítás elindult – Teherguminet.hu",
+      html: await render(
+        React.createElement(OwnDeliveryShippedEmail, shippedHuProps)
+      ),
+    },
+    {
+      key: "own-delivery-shipped",
+      language: "sk",
+      name: "Teherguminet - own-delivery-shipped (SK)",
+      alias: "teherguminet-own-delivery-shipped-sk",
+      subject: "Doručenie je na ceste – Teherguminet.hu",
+      html: await render(
+        React.createElement(OwnDeliveryShippedEmail, shippedSkProps)
+      ),
+    },
+    {
+      key: "own-delivery-delivered",
+      language: "hu",
+      name: "Teherguminet - own-delivery-delivered",
+      alias: "teherguminet-own-delivery-delivered",
+      subject: "A szállítás sikeresen megtörtént – Teherguminet.hu",
+      html: await render(
+        React.createElement(OwnDeliveryDeliveredEmail, deliveredHuProps)
+      ),
+    },
+    {
+      key: "own-delivery-delivered",
+      language: "sk",
+      name: "Teherguminet - own-delivery-delivered (SK)",
+      alias: "teherguminet-own-delivery-delivered-sk",
+      subject: "Doručenie prebehlo úspešne – Teherguminet.hu",
+      html: await render(
+        React.createElement(OwnDeliveryDeliveredEmail, deliveredSkProps)
+      ),
+    },
+  ]
+
+  const existingTemplates = await listAllTemplates(resend)
+  const idMap: Record<string, string> = {}
+
+  for (const definition of definitions) {
+    const result = await syncTemplate(
+      resend,
+      existingTemplates,
+      definition,
+      from,
+      replyTo
+    )
+
+    const mapKey =
+      definition.language === "sk"
+        ? `${definition.key}.sk`
+        : definition.key
+    idMap[mapKey] = result.id
+    console.log(
+      `${result.action.toUpperCase()} ${definition.name} (${definition.alias}) -> ${result.id}`
+    )
+  }
+
+  if (!noWriteIds) {
+    const target = path.resolve(process.cwd(), TEMPLATE_IDS_FILE)
+    writeTemplateIdsFile(target, idMap)
+    console.log(`Template IDs written to ${target}`)
+  } else {
+    console.log("Skipped writing .resend-template-ids.json (--no-write-ids).")
+  }
+}
+
+if (require.main === module) {
+  syncResendTemplates({
+    args: process.argv.slice(2),
+  } as ScriptArgs).catch((error) => {
+    const message =
+      error instanceof Error ? error.message : String(error)
+    console.error(`Template sync failed: ${message}`)
+    process.exitCode = 1
+  })
+}
