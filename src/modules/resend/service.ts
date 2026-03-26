@@ -31,6 +31,14 @@ import {
   type OwnDeliveryPaymentNoticeEmailProps,
 } from "./emails/own-delivery-payment-notice";
 import {
+  OwnDeliveryShippedEmail,
+  type OwnDeliveryShippedEmailProps,
+} from "./emails/own-delivery-shipped";
+import {
+  OwnDeliveryDeliveredEmail,
+  type OwnDeliveryDeliveredEmailProps,
+} from "./emails/own-delivery-delivered";
+import {
   PaymentReceiptEmail,
   type PaymentReceiptEmailProps,
 } from "./emails/payment-receipt";
@@ -90,6 +98,8 @@ enum Templates {
   ORDER_DELIVERED = "order-delivered",
   ORDER_PICKUP_READY = "order-pickup-ready",
   OWN_DELIVERY_PAYMENT_NOTICE = "own-delivery-payment-notice",
+  OWN_DELIVERY_SHIPPED = "own-delivery-shipped",
+  OWN_DELIVERY_DELIVERED = "own-delivery-delivered",
   PAYMENT_RECEIPT = "payment-receipt",
   USER_INVITED = "user-invited",
   ABANDONED_CART = "abandoned-cart",
@@ -112,6 +122,10 @@ const templates: Partial<Record<Templates, TemplateRenderer>> = {
     OrderPickupReadyEmail(props as OrderPickupReadyEmailProps),
   [Templates.OWN_DELIVERY_PAYMENT_NOTICE]: (props) =>
     OwnDeliveryPaymentNoticeEmail(props as OwnDeliveryPaymentNoticeEmailProps),
+  [Templates.OWN_DELIVERY_SHIPPED]: (props) =>
+    OwnDeliveryShippedEmail(props as OwnDeliveryShippedEmailProps),
+  [Templates.OWN_DELIVERY_DELIVERED]: (props) =>
+    OwnDeliveryDeliveredEmail(props as OwnDeliveryDeliveredEmailProps),
   [Templates.PAYMENT_RECEIPT]: (props) =>
     PaymentReceiptEmail(props as PaymentReceiptEmailProps),
   [Templates.USER_INVITED]: (props) =>
@@ -211,6 +225,8 @@ const resolveNotificationLanguage = (
     template === Templates.ORDER_DELIVERED ||
     template === Templates.ORDER_PICKUP_READY ||
     template === Templates.OWN_DELIVERY_PAYMENT_NOTICE ||
+    template === Templates.OWN_DELIVERY_SHIPPED ||
+    template === Templates.OWN_DELIVERY_DELIVERED ||
     template === Templates.GLS_LABEL_CANCELLED ||
     template === Templates.ORDER_ITEMS_CANCELLED ||
     template === Templates.GLS_SHIPMENT_CREATED
@@ -477,6 +493,34 @@ class ResendNotificationProviderService extends AbstractNotificationProviderServ
         return orderRef
           ? `Rendelés #${orderRef}: saját szállítás visszaigazolva – ${BRAND_NAME}`
           : `Saját szállítás visszaigazolva – ${BRAND_NAME}`;
+      }
+      case Templates.OWN_DELIVERY_SHIPPED: {
+        const orderRef = resolveOrderReference(
+          (notification.data as any)?.order
+        );
+        if (language === "sk") {
+          return orderRef
+            ? `Objednávka #${orderRef}: doručenie je na ceste – ${BRAND_NAME}`
+            : `Doručenie je na ceste – ${BRAND_NAME}`;
+        }
+
+        return orderRef
+          ? `Rendelés #${orderRef}: a szállítás elindult – ${BRAND_NAME}`
+          : `A szállítás elindult – ${BRAND_NAME}`;
+      }
+      case Templates.OWN_DELIVERY_DELIVERED: {
+        const orderRef = resolveOrderReference(
+          (notification.data as any)?.order
+        );
+        if (language === "sk") {
+          return orderRef
+            ? `Objednávka #${orderRef}: doručenie úspešne dokončené – ${BRAND_NAME}`
+            : `Doručenie úspešne dokončené – ${BRAND_NAME}`;
+        }
+
+        return orderRef
+          ? `Rendelés #${orderRef}: a szállítás sikeresen megtörtént – ${BRAND_NAME}`
+          : `A szállítás sikeresen megtörtént – ${BRAND_NAME}`;
       }
       case Templates.USER_INVITED: {
         const email = (notification.data as any)?.email ?? notification.to;

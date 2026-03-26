@@ -195,7 +195,7 @@ export const OwnDeliveryPaymentNoticeEmail = ({
       ),
       promiseLines: [
         "A rendelést 2-6 munkanapon belül kiszállítjuk.",
-        "A szállítás napján megerősítő emailt küldünk, majd még egy emailt kapsz aznap, amikor a csomag útnak indul.",
+        "A szállítás napján megerősítő emailt küldünk arról, hogy a csomag úton van.",
       ],
       details: {
         orderLabel: "Rendelés azonosító",
@@ -222,7 +222,7 @@ export const OwnDeliveryPaymentNoticeEmail = ({
       ),
       promiseLines: [
         "Objednávku doručíme do 2-6 pracovných dní.",
-        "V deň doručenia vám pošleme potvrdzovací email a následne ešte jeden email v deň odoslania.",
+        "V deň doručenia vám pošleme potvrdzovací email, že balík je na ceste.",
       ],
       details: {
         orderLabel: "ID objednávky",

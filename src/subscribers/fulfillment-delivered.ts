@@ -19,6 +19,7 @@ import type {
 } from "@medusajs/types"
 
 import { dispatchNotificationsIndividually } from "../lib/dispatch-notifications"
+import { isOwnDeliveryShippingMethod } from "../lib/own-delivery-shipping"
 
 type FulfillmentEventPayload = {
   id: string
@@ -27,6 +28,7 @@ type FulfillmentEventPayload = {
 const DELIVERY_EMAIL_METADATA_KEY = "delivery_email_sent_at"
 const DELIVERY_TEMPLATE_DEFAULT = "order-delivered"
 const DELIVERY_TEMPLATE_PICKUP_READY = "order-pickup-ready"
+const DELIVERY_TEMPLATE_OWN_DELIVERY = "own-delivery-delivered"
 
 const resolveLogger = (container: SubscriberArgs["container"]) => {
   try {
@@ -177,15 +179,34 @@ export default async function fulfillmentDeliveredHandler({
     fulfillment.shipping_option?.name?.trim() ||
     shippingMethod?.name?.trim() ||
     null
+  const shippingMethodFallback = shippingOptionName
+    ? ({
+        id: fulfillment.id,
+        name: shippingOptionName,
+        metadata: {
+          shipping_option_type_code:
+            fulfillment.shipping_option?.type?.code ?? null,
+          shipping_option_type_label:
+            fulfillment.shipping_option?.type?.label ?? null,
+          shipping_option_type_description:
+            fulfillment.shipping_option?.type?.description ?? null,
+        },
+      } as unknown as OrderShippingMethodDTO)
+    : null
   const isPickupDelivery =
     isPickupLike(shippingOptionName) ||
     isPickupLike(shippingMethod?.name) ||
     isPickupLike(fulfillment.shipping_option?.type?.code) ||
     isPickupLike(fulfillment.shipping_option?.type?.label) ||
     isPickupLike(fulfillment.shipping_option?.type?.description)
+  const isOwnDelivery = isOwnDeliveryShippingMethod(
+    shippingMethod ?? shippingMethodFallback
+  )
   const selectedTemplate = isPickupDelivery
     ? DELIVERY_TEMPLATE_PICKUP_READY
-    : DELIVERY_TEMPLATE_DEFAULT
+    : isOwnDelivery
+      ? DELIVERY_TEMPLATE_OWN_DELIVERY
+      : DELIVERY_TEMPLATE_DEFAULT
 
   const trackingNumbers =
     "tracking_numbers" in fulfillment
