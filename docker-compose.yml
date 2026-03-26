@@ -42,6 +42,9 @@ services:
     build:
       context: ../..
       dockerfile: apps/backend/Dockerfile.turbo
+      args:
+        TURBO_TEAM: ${TURBO_TEAM:-}
+        TURBO_TOKEN: ${TURBO_TOKEN:-}
     container_name: medusa_backend
     restart: unless-stopped
     depends_on:

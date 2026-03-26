@@ -2,21 +2,33 @@
 
 FROM node:20-alpine AS base
 WORKDIR /repo
-ENV COREPACK_ENABLE_STRICT=0
-RUN apk add --no-cache python3 make g++ \
+ENV COREPACK_ENABLE_STRICT=0 \
+    PNPM_HOME=/pnpm
+ENV PATH="${PNPM_HOME}:${PATH}"
+RUN apk add --no-cache libc6-compat python3 make g++ \
   && corepack enable \
   && corepack prepare pnpm@10.12.3 --activate
 
+FROM base AS pruner
+COPY . .
+RUN pnpm dlx turbo@2.8.20 prune --scope=medusa-starter-default --docker
+
 FROM base AS deps
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
-COPY apps/backend/package.json apps/backend/package.json
-COPY apps/storefront/package.json apps/storefront/package.json
-RUN pnpm install --frozen-lockfile
+COPY --from=pruner /repo/out/json/ ./
+RUN --mount=type=cache,id=pnpm-store-backend,target=/pnpm/store \
+  pnpm install --frozen-lockfile
 
 FROM deps AS builder
-COPY . .
-ENV NODE_ENV=production
-RUN pnpm turbo run build --filter=./apps/backend
+COPY --from=pruner /repo/out/full/ ./
+
+ARG TURBO_TEAM
+ARG TURBO_TOKEN
+ENV NODE_ENV=production \
+    TURBO_TEAM=${TURBO_TEAM} \
+    TURBO_TOKEN=${TURBO_TOKEN}
+
+RUN --mount=type=cache,id=turbo-cache-backend,target=/repo/.turbo \
+  pnpm turbo run build --filter=medusa-starter-default
 
 FROM base AS runner
 WORKDIR /repo
