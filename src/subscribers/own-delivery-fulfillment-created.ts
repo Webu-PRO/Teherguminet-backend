@@ -49,6 +49,36 @@ const resolveMetadata = (value: unknown): Record<string, unknown> => {
   return value as Record<string, unknown>
 }
 
+const shouldSkipBecauseEmailAlreadySent = (
+  sentAtValue: unknown,
+  fulfillmentCreatedAtValue: unknown
+) => {
+  if (!sentAtValue) {
+    return false
+  }
+
+  const sentAt =
+    typeof sentAtValue === "string"
+      ? Date.parse(sentAtValue)
+      : sentAtValue instanceof Date
+        ? sentAtValue.getTime()
+        : Number.NaN
+  const createdAt =
+    typeof fulfillmentCreatedAtValue === "string"
+      ? Date.parse(fulfillmentCreatedAtValue)
+      : fulfillmentCreatedAtValue instanceof Date
+        ? fulfillmentCreatedAtValue.getTime()
+        : Number.NaN
+
+  // If timestamps are not comparable, preserve current idempotent behavior.
+  if (Number.isNaN(sentAt) || Number.isNaN(createdAt)) {
+    return true
+  }
+
+  // Replacement fulfillments can inherit old metadata; resend when marker predates creation.
+  return sentAt >= createdAt
+}
+
 const resolveShippingMethod = (
   order: OrderDTO,
   fulfillment: FulfillmentDTO
@@ -97,6 +127,7 @@ export default async function ownDeliveryFulfillmentCreatedHandler({
     entity: "fulfillment",
     fields: [
       "id",
+      "created_at",
       "metadata",
       "shipping_option_id",
       "order.id",
@@ -128,7 +159,12 @@ export default async function ownDeliveryFulfillmentCreatedHandler({
   }
 
   const metadata = resolveMetadata(fulfillment.metadata)
-  if (metadata[OWN_DELIVERY_FULFILLMENT_CREATED_EMAIL_METADATA_KEY]) {
+  if (
+    shouldSkipBecauseEmailAlreadySent(
+      metadata[OWN_DELIVERY_FULFILLMENT_CREATED_EMAIL_METADATA_KEY],
+      fulfillment.created_at
+    )
+  ) {
     return
   }
 
