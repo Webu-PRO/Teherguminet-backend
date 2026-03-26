@@ -1,0 +1,32 @@
+# syntax=docker/dockerfile:1.7
+
+FROM node:20-alpine AS base
+WORKDIR /repo
+ENV COREPACK_ENABLE_STRICT=0
+RUN apk add --no-cache python3 make g++ \
+  && corepack enable \
+  && corepack prepare pnpm@10.12.3 --activate
+
+FROM base AS deps
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+COPY apps/backend/package.json apps/backend/package.json
+COPY apps/storefront/package.json apps/storefront/package.json
+RUN pnpm install --frozen-lockfile
+
+FROM deps AS builder
+COPY . .
+ENV NODE_ENV=production
+RUN pnpm turbo run build --filter=./apps/backend
+
+FROM base AS runner
+WORKDIR /repo
+ENV NODE_ENV=production \
+    HOST=0.0.0.0 \
+    PORT=9000
+
+COPY --from=builder /repo /repo
+WORKDIR /repo/apps/backend
+
+EXPOSE 9000
+
+CMD ["sh", "-lc", "pnpm exec medusa db:migrate && if [ \"$RUN_SEED\" = \"true\" ]; then pnpm seed || true; fi && pnpm start"]
