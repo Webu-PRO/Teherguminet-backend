@@ -29,6 +29,9 @@ const OWN_DELIVERY_FULFILLMENT_CREATED_TEMPLATE =
   "own-delivery-fulfillment-created"
 const OWN_DELIVERY_FULFILLMENT_CREATED_EMAIL_METADATA_KEY =
   "own_delivery_fulfillment_created_email_sent_at"
+const OWN_DELIVERY_SHIPPED_TEMPLATE = "own-delivery-shipped"
+const OWN_DELIVERY_SHIPPED_EMAIL_METADATA_KEY =
+  "own_delivery_shipped_email_sent_at"
 
 const resolveLogger = (container: SubscriberArgs["container"]) => {
   try {
@@ -140,31 +143,36 @@ export default async function ownDeliveryFulfillmentCreatedHandler({
     return
   }
 
-  const payload: CreateNotificationDTO = {
+  const notifications: CreateNotificationDTO[] = [
+    OWN_DELIVERY_FULFILLMENT_CREATED_TEMPLATE,
+    OWN_DELIVERY_SHIPPED_TEMPLATE,
+  ].map((template) => ({
     to: email,
     channel: "email",
-    template: OWN_DELIVERY_FULFILLMENT_CREATED_TEMPLATE,
+    template,
     data: {
       order,
     },
     trigger_type: event.name,
     resource_id: order.id,
     resource_type: "order",
-    idempotency_key: `${OWN_DELIVERY_FULFILLMENT_CREATED_TEMPLATE}-${fulfillment.id}`,
-  }
+    idempotency_key: `${template}-${fulfillment.id}`,
+  }))
 
   try {
+    const sentAt = new Date().toISOString()
+
     await dispatchNotificationsIndividually(
       notificationModuleService,
-      [payload],
+      notifications,
       logger
     )
 
     await fulfillmentModuleService.updateFulfillment(fulfillment.id, {
       metadata: {
         ...metadata,
-        [OWN_DELIVERY_FULFILLMENT_CREATED_EMAIL_METADATA_KEY]:
-          new Date().toISOString(),
+        [OWN_DELIVERY_FULFILLMENT_CREATED_EMAIL_METADATA_KEY]: sentAt,
+        [OWN_DELIVERY_SHIPPED_EMAIL_METADATA_KEY]: sentAt,
       },
     })
   } catch (error) {
