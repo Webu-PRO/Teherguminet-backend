@@ -1,3 +1,4 @@
+import { describe, expect, it, jest } from "@jest/globals"
 import ResendNotificationProviderService from "../service"
 
 const createService = (options: Record<string, unknown> = {}) =>
