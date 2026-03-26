@@ -165,7 +165,11 @@ export default async function ownDeliveryFulfillmentCreatedHandler({
     await dispatchNotificationsIndividually(
       notificationModuleService,
       notifications,
-      logger
+      logger,
+      {
+        concurrency: 1,
+        failOnError: true,
+      }
     )
 
     await fulfillmentModuleService.updateFulfillment(fulfillment.id, {
