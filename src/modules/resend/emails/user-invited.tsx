@@ -26,7 +26,7 @@ export type UserInvitedEmailProps = {
 
 const BRAND = "Teherguminet.hu";
 const FONT_STACK =
-  '"SF Pro Text","SF Pro Display",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif';
+  '"Helvetica Neue",Helvetica,Arial,"Nimbus Sans L",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';
 
 type LangSection = {
   code: LanguageCode;

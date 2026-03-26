@@ -16,6 +16,9 @@ import {
 import { LanguageCode, resolveLanguageFromHints } from "../email-language";
 import { F1_RED } from "./order-email-shared";
 
+const FONT_STACK =
+  '"Helvetica Neue",Helvetica,Arial,"Nimbus Sans L",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';
+
 export type AbandonedCartEmailProps = {
   customerName?: string | null;
   recoverUrl: string;
@@ -156,7 +159,10 @@ export const AbandonedCartEmail = ({
 
       <Tailwind>
         <Head />
-        <Body className="m-0 bg-[#eeeeee] px-4 py-10 font-sans text-[#111111]">
+        <Body
+          className="m-0 bg-[#eeeeee] px-4 py-10 font-sans text-[#111111]"
+          style={{ fontFamily: FONT_STACK }}
+        >
           <Container className="mx-auto w-full max-w-[620px] rounded-[24px] border border-[#E5E7EB] bg-white p-0">
             {/* Header */}
             <Section className="bg-white px-10 pt-6 pb-5 border-b border-[#E5E7EB]">

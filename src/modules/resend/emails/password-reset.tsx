@@ -28,7 +28,7 @@ const BRAND_NAME = "Teherguminet.hu";
 const DEFAULT_EXPIRY_MINUTES = 15;
 
 const FONT_STACK =
-  '"SF Pro Text","SF Pro Display",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif';
+  '"Helvetica Neue",Helvetica,Arial,"Nimbus Sans L",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';
 
 const resolveAccountLabel = (actorType?: string | null) => {
   const normalized = (actorType ?? "").toLowerCase();
