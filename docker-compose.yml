@@ -40,8 +40,8 @@ services:
   # Medusa Server
   medusa:
     build:
-      context: ../..
-      dockerfile: apps/backend/Dockerfile.turbo
+      context: .
+      dockerfile: Dockerfile.turbo
       args:
         TURBO_TEAM: ${TURBO_TEAM:-}
         TURBO_TOKEN: ${TURBO_TOKEN:-}

@@ -1,44 +1,36 @@
 # syntax=docker/dockerfile:1.7
 
 FROM node:20-alpine AS base
-WORKDIR /repo
-ENV COREPACK_ENABLE_STRICT=0 \
-    PNPM_HOME=/pnpm
-ENV PATH="${PNPM_HOME}:${PATH}"
+WORKDIR /server
+ENV COREPACK_ENABLE_STRICT=0
+
 RUN apk add --no-cache libc6-compat python3 make g++ \
   && corepack enable \
-  && corepack prepare pnpm@10.12.3 --activate
-
-FROM base AS pruner
-COPY . .
-RUN pnpm dlx turbo@2.8.20 prune --scope=medusa-starter-default --docker
+  && corepack prepare yarn@1.22.22 --activate
 
 FROM base AS deps
-COPY --from=pruner /repo/out/json/ ./
-RUN --mount=type=cache,id=pnpm-store-backend,target=/pnpm/store \
-  pnpm install --frozen-lockfile
+COPY package.json yarn.lock .yarnrc.yml ./
+
+RUN --mount=type=cache,id=yarn-cache-backend,target=/usr/local/share/.cache/yarn \
+  yarn install --frozen-lockfile --production=false
 
 FROM deps AS builder
-COPY --from=pruner /repo/out/full/ ./
+COPY . .
+ENV NODE_ENV=production
 
-ARG TURBO_TEAM
-ARG TURBO_TOKEN
-ENV NODE_ENV=production \
-    TURBO_TEAM=${TURBO_TEAM} \
-    TURBO_TOKEN=${TURBO_TOKEN}
-
-RUN --mount=type=cache,id=turbo-cache-backend,target=/repo/.turbo \
-  pnpm turbo run build --filter=medusa-starter-default
+RUN yarn build \
+  && if [ -d ".medusa/server/public" ]; then \
+    mkdir -p public && cp -R .medusa/server/public/* public/; \
+  fi
 
 FROM base AS runner
-WORKDIR /repo
+WORKDIR /server
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \
     PORT=9000
 
-COPY --from=builder /repo /repo
-WORKDIR /repo/apps/backend
+COPY --from=builder /server /server
 
 EXPOSE 9000
 
-CMD ["sh", "-lc", "pnpm exec medusa db:migrate && if [ \"$RUN_SEED\" = \"true\" ]; then pnpm seed || true; fi && pnpm start"]
+CMD ["sh", "-lc", "yarn medusa db:migrate && if [ \"$RUN_SEED\" = \"true\" ]; then yarn seed || true; fi && yarn start"]
