@@ -71,6 +71,12 @@ import {
   resolveLanguageFromHints,
   resolveLanguageFromOrder,
 } from "./email-language";
+import {
+  buildOrderUrl,
+  resolveCustomerName,
+  resolveOrderId,
+  type OrderEmailOrder,
+} from "./emails/order-email-shared";
 import { resolveInviteLanguage } from "./invite-language";
 
 type ResendOptions = {
@@ -348,6 +354,53 @@ const extractTemplateVariables = (
   return Object.keys(output).length ? output : undefined;
 };
 
+const resolveOrderForTemplateVariables = (
+  notification: ProviderSendNotificationDTO
+): OrderEmailOrder | null => {
+  const data = notification.data as any;
+  const order = data?.order ?? data;
+
+  if (!order || typeof order !== "object") {
+    return null;
+  }
+
+  return order as OrderEmailOrder;
+};
+
+const resolveTemplateVariables = (
+  notification: ProviderSendNotificationDTO,
+  language: LanguageCode
+): Record<string, string | number> | undefined => {
+  const template = notification.template as Templates;
+  const base = extractTemplateVariables(notification.data) ?? {};
+
+  if (
+    template !== Templates.OWN_DELIVERY_PAYMENT_NOTICE &&
+    template !== Templates.OWN_DELIVERY_SHIPPED &&
+    template !== Templates.OWN_DELIVERY_DELIVERED
+  ) {
+    return Object.keys(base).length ? base : undefined;
+  }
+
+  const order = resolveOrderForTemplateVariables(notification);
+  if (!order) {
+    return Object.keys(base).length ? base : undefined;
+  }
+
+  const orderId = resolveOrderId(order);
+  const customerName = resolveCustomerName(order);
+  const orderUrl = buildOrderUrl(orderId, language);
+
+  const enriched = {
+    ...base,
+    order_id: orderId,
+    customer_name: customerName,
+    order_url: orderUrl,
+  };
+
+  return Object.keys(enriched).length ? enriched : undefined;
+};
+
 class ResendNotificationProviderService extends AbstractNotificationProviderService {
   static identifier = "notification-resend";
 
@@ -612,7 +665,7 @@ class ResendNotificationProviderService extends AbstractNotificationProviderServ
     };
 
     if (configuredTemplateId?.trim()) {
-      const variables = extractTemplateVariables(notification.data);
+      const variables = resolveTemplateVariables(notification, language);
       emailOptions = {
         ...commonOptions,
         ...(notification.content?.subject

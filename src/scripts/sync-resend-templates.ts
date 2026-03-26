@@ -20,6 +20,7 @@ import {
   mockOwnDeliveryDelivered,
   type OwnDeliveryDeliveredEmailProps,
 } from "../modules/resend/emails/own-delivery-delivered"
+import { buildOrderUrl } from "../modules/resend/emails/order-email-shared"
 
 type ScriptArgs = ExecArgs & {
   args?: string[]
@@ -34,6 +35,11 @@ type ResendTemplateDefinition = {
   alias: string
   subject: string
   html: string
+  variables: Array<{
+    key: string
+    type: "string"
+    fallbackValue?: string | null
+  }>
 }
 
 type TemplateListItem = {
@@ -43,6 +49,26 @@ type TemplateListItem = {
 }
 
 const TEMPLATE_IDS_FILE = ".resend-template-ids.json"
+const ORDER_ID_PLACEHOLDER = "{{{order_id}}}"
+const CUSTOMER_NAME_PLACEHOLDER = "{{{customer_name}}}"
+const ORDER_URL_PLACEHOLDER = "{{{order_url}}}"
+const TEMPLATE_VARIABLES: ResendTemplateDefinition["variables"] = [
+  {
+    key: "order_id",
+    type: "string",
+    fallbackValue: "TG-000019",
+  },
+  {
+    key: "customer_name",
+    type: "string",
+    fallbackValue: "Partner",
+  },
+  {
+    key: "order_url",
+    type: "string",
+    fallbackValue: "https://teherguminet.hu/hu/store/orders/TG-000019",
+  },
+]
 
 loadEnv(process.env.NODE_ENV || "development", process.cwd())
 
@@ -70,6 +96,44 @@ const withLanguage = <
       },
     },
   } as T
+}
+
+const withTemplatePlaceholders = <
+  T extends OwnDeliveryPaymentNoticeEmailProps | OwnDeliveryShippedEmailProps | OwnDeliveryDeliveredEmailProps,
+>(
+  props: T
+): T => {
+  return {
+    ...props,
+    order: {
+      ...props.order,
+      display_id: ORDER_ID_PLACEHOLDER,
+      customer: {
+        ...(props.order.customer ?? {}),
+        first_name: CUSTOMER_NAME_PLACEHOLDER,
+      },
+      shipping_address: {
+        ...(props.order.shipping_address ?? {}),
+        first_name: CUSTOMER_NAME_PLACEHOLDER,
+      },
+      billing_address: {
+        ...(props.order.billing_address ?? {}),
+        first_name: CUSTOMER_NAME_PLACEHOLDER,
+      },
+    },
+  } as T
+}
+
+const normalizeHtmlForResendVariables = (
+  html: string,
+  language: TemplateLanguage
+) => {
+  const orderUrlMarker = buildOrderUrl(ORDER_ID_PLACEHOLDER, language)
+  return html
+    .split(orderUrlMarker)
+    .join(ORDER_URL_PLACEHOLDER)
+    .split(encodeURIComponent(ORDER_ID_PLACEHOLDER))
+    .join(ORDER_ID_PLACEHOLDER)
 }
 
 const listAllTemplates = async (resend: Resend) => {
@@ -134,6 +198,7 @@ const syncTemplate = async (
       html: definition.html,
       from,
       ...(replyTo ? { replyTo } : {}),
+      variables: definition.variables,
     })
 
     if (updateResponse.error) {
@@ -155,6 +220,7 @@ const syncTemplate = async (
     html: definition.html,
     from,
     ...(replyTo ? { replyTo } : {}),
+    variables: definition.variables,
   })
 
   if (createResponse.error || !createResponse.data?.id) {
@@ -207,12 +273,24 @@ export default async function syncResendTemplates({
 
   const resend = new Resend(apiKey)
 
-  const paymentHuProps = withLanguage(mockOwnDeliveryPaymentNotice, "hu")
-  const paymentSkProps = withLanguage(mockOwnDeliveryPaymentNotice, "sk")
-  const shippedHuProps = withLanguage(mockOwnDeliveryShipped, "hu")
-  const shippedSkProps = withLanguage(mockOwnDeliveryShipped, "sk")
-  const deliveredHuProps = withLanguage(mockOwnDeliveryDelivered, "hu")
-  const deliveredSkProps = withLanguage(mockOwnDeliveryDelivered, "sk")
+  const paymentHuProps = withTemplatePlaceholders(
+    withLanguage(mockOwnDeliveryPaymentNotice, "hu")
+  )
+  const paymentSkProps = withTemplatePlaceholders(
+    withLanguage(mockOwnDeliveryPaymentNotice, "sk")
+  )
+  const shippedHuProps = withTemplatePlaceholders(
+    withLanguage(mockOwnDeliveryShipped, "hu")
+  )
+  const shippedSkProps = withTemplatePlaceholders(
+    withLanguage(mockOwnDeliveryShipped, "sk")
+  )
+  const deliveredHuProps = withTemplatePlaceholders(
+    withLanguage(mockOwnDeliveryDelivered, "hu")
+  )
+  const deliveredSkProps = withTemplatePlaceholders(
+    withLanguage(mockOwnDeliveryDelivered, "sk")
+  )
 
   const definitions: ResendTemplateDefinition[] = [
     {
@@ -221,9 +299,13 @@ export default async function syncResendTemplates({
       name: "Teherguminet - own-delivery-payment-notice",
       alias: "teherguminet-own-delivery-payment-notice",
       subject: "Saját szállítás visszaigazolva – Teherguminet.hu",
-      html: await render(
-        React.createElement(OwnDeliveryPaymentNoticeEmail, paymentHuProps)
+      html: normalizeHtmlForResendVariables(
+        await render(
+          React.createElement(OwnDeliveryPaymentNoticeEmail, paymentHuProps)
+        ),
+        "hu"
       ),
+      variables: TEMPLATE_VARIABLES,
     },
     {
       key: "own-delivery-payment-notice",
@@ -231,9 +313,13 @@ export default async function syncResendTemplates({
       name: "Teherguminet - own-delivery-payment-notice (SK)",
       alias: "teherguminet-own-delivery-payment-notice-sk",
       subject: "Vlastné doručenie potvrdené – Teherguminet.hu",
-      html: await render(
-        React.createElement(OwnDeliveryPaymentNoticeEmail, paymentSkProps)
+      html: normalizeHtmlForResendVariables(
+        await render(
+          React.createElement(OwnDeliveryPaymentNoticeEmail, paymentSkProps)
+        ),
+        "sk"
       ),
+      variables: TEMPLATE_VARIABLES,
     },
     {
       key: "own-delivery-shipped",
@@ -241,9 +327,13 @@ export default async function syncResendTemplates({
       name: "Teherguminet - own-delivery-shipped",
       alias: "teherguminet-own-delivery-shipped",
       subject: "A szállítás elindult – Teherguminet.hu",
-      html: await render(
-        React.createElement(OwnDeliveryShippedEmail, shippedHuProps)
+      html: normalizeHtmlForResendVariables(
+        await render(
+          React.createElement(OwnDeliveryShippedEmail, shippedHuProps)
+        ),
+        "hu"
       ),
+      variables: TEMPLATE_VARIABLES,
     },
     {
       key: "own-delivery-shipped",
@@ -251,9 +341,13 @@ export default async function syncResendTemplates({
       name: "Teherguminet - own-delivery-shipped (SK)",
       alias: "teherguminet-own-delivery-shipped-sk",
       subject: "Doručenie je na ceste – Teherguminet.hu",
-      html: await render(
-        React.createElement(OwnDeliveryShippedEmail, shippedSkProps)
+      html: normalizeHtmlForResendVariables(
+        await render(
+          React.createElement(OwnDeliveryShippedEmail, shippedSkProps)
+        ),
+        "sk"
       ),
+      variables: TEMPLATE_VARIABLES,
     },
     {
       key: "own-delivery-delivered",
@@ -261,9 +355,13 @@ export default async function syncResendTemplates({
       name: "Teherguminet - own-delivery-delivered",
       alias: "teherguminet-own-delivery-delivered",
       subject: "A szállítás sikeresen megtörtént – Teherguminet.hu",
-      html: await render(
-        React.createElement(OwnDeliveryDeliveredEmail, deliveredHuProps)
+      html: normalizeHtmlForResendVariables(
+        await render(
+          React.createElement(OwnDeliveryDeliveredEmail, deliveredHuProps)
+        ),
+        "hu"
       ),
+      variables: TEMPLATE_VARIABLES,
     },
     {
       key: "own-delivery-delivered",
@@ -271,9 +369,13 @@ export default async function syncResendTemplates({
       name: "Teherguminet - own-delivery-delivered (SK)",
       alias: "teherguminet-own-delivery-delivered-sk",
       subject: "Doručenie prebehlo úspešne – Teherguminet.hu",
-      html: await render(
-        React.createElement(OwnDeliveryDeliveredEmail, deliveredSkProps)
+      html: normalizeHtmlForResendVariables(
+        await render(
+          React.createElement(OwnDeliveryDeliveredEmail, deliveredSkProps)
+        ),
+        "sk"
       ),
+      variables: TEMPLATE_VARIABLES,
     },
   ]
 

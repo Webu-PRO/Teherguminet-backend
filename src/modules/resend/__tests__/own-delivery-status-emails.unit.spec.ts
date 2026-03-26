@@ -1,6 +1,6 @@
 import ResendNotificationProviderService from "../service"
 
-const createService = () =>
+const createService = (options: Record<string, unknown> = {}) =>
   new ResendNotificationProviderService(
     {
       logger: {
@@ -13,6 +13,7 @@ const createService = () =>
     {
       api_key: "test_key",
       from: "noreply@teherguminet.hu",
+      ...options,
     }
   )
 
@@ -79,5 +80,46 @@ describe("own delivery status templates", () => {
     expect(huSubject).toContain("sikeresen")
     expect(skSubject).toContain("úspešne")
     expect(service.getTemplate("own-delivery-delivered" as any)).toBeTruthy()
+  })
+
+  it("passes dynamic variables to Resend template IDs for own-delivery templates", async () => {
+    const service = createService({
+      template_ids: {
+        "own-delivery-shipped": "tpl_shipped_hu",
+      },
+    })
+
+    const sendMock = jest.fn().mockResolvedValue({
+      data: { id: "email_1" },
+      error: null,
+    })
+
+    ;(service as any).resendClient = {
+      emails: {
+        send: sendMock,
+      },
+    }
+
+    await service.send({
+      to: "partner@teherguminet.hu",
+      template: "own-delivery-shipped",
+      data: {
+        order: {
+          id: "order_1",
+          display_id: 19,
+          metadata: { language: "hu" },
+          customer: { first_name: "Péter" },
+        },
+      },
+    } as any)
+
+    expect(sendMock).toHaveBeenCalledTimes(1)
+    const sent = sendMock.mock.calls[0][0]
+    expect(sent.template.id).toBe("tpl_shipped_hu")
+    expect(sent.template.variables.order_id).toBe("TG-000019")
+    expect(sent.template.variables.customer_name).toBe("Péter")
+    expect(sent.template.variables.order_url).toContain(
+      "/hu/store/orders/TG-000019"
+    )
   })
 })
