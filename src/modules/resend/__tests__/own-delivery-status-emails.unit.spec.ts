@@ -19,6 +19,40 @@ const createService = (options: Record<string, unknown> = {}) =>
   )
 
 describe("own delivery status templates", () => {
+  it("resolves Hungarian and Slovak subjects for own-delivery fulfillment-created template", () => {
+    const service = createService()
+
+    const huSubject = service.getTemplateSubject({
+      template: "own-delivery-fulfillment-created",
+      to: "partner@teherguminet.hu",
+      data: {
+        order: {
+          id: "order_0",
+          display_id: 41,
+          metadata: { language: "hu" },
+        },
+      },
+    } as any)
+
+    const skSubject = service.getTemplateSubject({
+      template: "own-delivery-fulfillment-created",
+      to: "partner@teherguminet.sk",
+      data: {
+        order: {
+          id: "order_0b",
+          display_id: 410,
+          metadata: { language: "sk" },
+        },
+      },
+    } as any)
+
+    expect(huSubject).toContain("előkészítve")
+    expect(skSubject).toContain("pripravená")
+    expect(
+      service.getTemplate("own-delivery-fulfillment-created" as any)
+    ).toBeTruthy()
+  })
+
   it("resolves Hungarian and Slovak subjects for own-delivery shipped template", () => {
     const service = createService()
 

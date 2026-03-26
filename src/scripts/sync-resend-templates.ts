@@ -11,6 +11,11 @@ import {
   type OwnDeliveryPaymentNoticeEmailProps,
 } from "../modules/resend/emails/own-delivery-payment-notice"
 import {
+  OwnDeliveryFulfillmentCreatedEmail,
+  mockOwnDeliveryFulfillmentCreated,
+  type OwnDeliveryFulfillmentCreatedEmailProps,
+} from "../modules/resend/emails/own-delivery-fulfillment-created"
+import {
   OwnDeliveryShippedEmail,
   mockOwnDeliveryShipped,
   type OwnDeliveryShippedEmailProps,
@@ -29,7 +34,11 @@ type ScriptArgs = ExecArgs & {
 type TemplateLanguage = "hu" | "sk"
 
 type ResendTemplateDefinition = {
-  key: "own-delivery-payment-notice" | "own-delivery-shipped" | "own-delivery-delivered"
+  key:
+    | "own-delivery-payment-notice"
+    | "own-delivery-fulfillment-created"
+    | "own-delivery-shipped"
+    | "own-delivery-delivered"
   language: TemplateLanguage
   name: string
   alias: string
@@ -143,7 +152,11 @@ const getTemplatesApi = (resend: Resend): ResendTemplatesApi => {
 }
 
 const withLanguage = <
-  T extends OwnDeliveryPaymentNoticeEmailProps | OwnDeliveryShippedEmailProps | OwnDeliveryDeliveredEmailProps,
+  T extends
+    | OwnDeliveryPaymentNoticeEmailProps
+    | OwnDeliveryFulfillmentCreatedEmailProps
+    | OwnDeliveryShippedEmailProps
+    | OwnDeliveryDeliveredEmailProps,
 >(
   props: T,
   language: TemplateLanguage
@@ -161,7 +174,11 @@ const withLanguage = <
 }
 
 const withTemplatePlaceholders = <
-  T extends OwnDeliveryPaymentNoticeEmailProps | OwnDeliveryShippedEmailProps | OwnDeliveryDeliveredEmailProps,
+  T extends
+    | OwnDeliveryPaymentNoticeEmailProps
+    | OwnDeliveryFulfillmentCreatedEmailProps
+    | OwnDeliveryShippedEmailProps
+    | OwnDeliveryDeliveredEmailProps,
 >(
   props: T
 ): T => {
@@ -345,6 +362,12 @@ export default async function syncResendTemplates({
   const paymentSkProps = withTemplatePlaceholders(
     withLanguage(mockOwnDeliveryPaymentNotice, "sk")
   )
+  const fulfillmentCreatedHuProps = withTemplatePlaceholders(
+    withLanguage(mockOwnDeliveryFulfillmentCreated, "hu")
+  )
+  const fulfillmentCreatedSkProps = withTemplatePlaceholders(
+    withLanguage(mockOwnDeliveryFulfillmentCreated, "sk")
+  )
   const shippedHuProps = withTemplatePlaceholders(
     withLanguage(mockOwnDeliveryShipped, "hu")
   )
@@ -382,6 +405,40 @@ export default async function syncResendTemplates({
       html: normalizeHtmlForResendVariables(
         await render(
           React.createElement(OwnDeliveryPaymentNoticeEmail, paymentSkProps)
+        ),
+        "sk"
+      ),
+      variables: TEMPLATE_VARIABLES,
+    },
+    {
+      key: "own-delivery-fulfillment-created",
+      language: "hu",
+      name: "Teherguminet - own-delivery-fulfillment-created",
+      alias: "teherguminet-own-delivery-fulfillment-created",
+      subject: "Saját szállítás előkészítve – Teherguminet.hu",
+      html: normalizeHtmlForResendVariables(
+        await render(
+          React.createElement(
+            OwnDeliveryFulfillmentCreatedEmail,
+            fulfillmentCreatedHuProps
+          )
+        ),
+        "hu"
+      ),
+      variables: TEMPLATE_VARIABLES,
+    },
+    {
+      key: "own-delivery-fulfillment-created",
+      language: "sk",
+      name: "Teherguminet - own-delivery-fulfillment-created (SK)",
+      alias: "teherguminet-own-delivery-fulfillment-created-sk",
+      subject: "Vlastná doprava pripravená – Teherguminet.hu",
+      html: normalizeHtmlForResendVariables(
+        await render(
+          React.createElement(
+            OwnDeliveryFulfillmentCreatedEmail,
+            fulfillmentCreatedSkProps
+          )
         ),
         "sk"
       ),
