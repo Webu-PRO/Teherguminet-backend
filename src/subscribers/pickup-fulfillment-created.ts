@@ -23,6 +23,7 @@ import { isPickupShippingMethod } from "../lib/own-delivery-shipping"
 
 type FulfillmentCreatedEventPayload = {
   id?: string
+  fulfillment_id?: string
   no_notification?: boolean
 }
 
@@ -187,7 +188,7 @@ export default async function pickupFulfillmentCreatedHandler({
   event,
   container,
 }: SubscriberArgs<FulfillmentCreatedEventPayload>) {
-  const fulfillmentId = event?.data?.id
+  const fulfillmentId = event?.data?.fulfillment_id ?? event?.data?.id
   if (!fulfillmentId || event?.data?.no_notification) {
     return
   }

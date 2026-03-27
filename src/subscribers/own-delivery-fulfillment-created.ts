@@ -22,6 +22,7 @@ import { isOwnDeliveryShippingMethod } from "../lib/own-delivery-shipping"
 
 type FulfillmentCreatedEventPayload = {
   id?: string
+  fulfillment_id?: string
   no_notification?: boolean
 }
 
@@ -107,7 +108,7 @@ export default async function ownDeliveryFulfillmentCreatedHandler({
   event,
   container,
 }: SubscriberArgs<FulfillmentCreatedEventPayload>) {
-  const fulfillmentId = event?.data?.id
+  const fulfillmentId = event?.data?.fulfillment_id ?? event?.data?.id
   if (!fulfillmentId) {
     return
   }

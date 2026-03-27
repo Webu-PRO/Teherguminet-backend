@@ -27,7 +27,8 @@ import {
 } from "../lib/tomket"
 
 type FulfillmentEventPayload = {
-  id: string
+  id?: string
+  fulfillment_id?: string
 }
 
 const TOMKET_FULFILLMENT_METADATA_KEY = "tomket_orders"
@@ -99,6 +100,11 @@ export default async function tomketFulfillmentCreated({
   event: { data },
   container,
 }: SubscriberArgs<FulfillmentEventPayload>) {
+  const fulfillmentId = data.fulfillment_id ?? data.id
+  if (!fulfillmentId) {
+    return
+  }
+
   const logger = resolveLogger(container)
   const query = container.resolve<Query>(ContainerRegistrationKeys.QUERY)
   const fulfillmentModuleService =
@@ -133,7 +139,7 @@ export default async function tomketFulfillmentCreated({
       "order.shipping_methods.*",
     ],
     filters: {
-      id: data.id,
+      id: fulfillmentId,
     },
   })
 
@@ -157,7 +163,7 @@ export default async function tomketFulfillmentCreated({
 
   if (!fulfillment || !fulfillment.order) {
     logger?.warn?.(
-      `Tomket: fulfillment ${data.id} missing order relation`
+      `Tomket: fulfillment ${fulfillmentId} missing order relation`
     )
     return
   }
