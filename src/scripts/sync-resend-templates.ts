@@ -36,6 +36,11 @@ import {
   type OrderPickupCompletedEmailProps,
 } from "../modules/resend/emails/order-pickup-completed"
 import {
+  OrderPickupCancelledEmail,
+  mockOrderPickupCancelled,
+  type OrderPickupCancelledEmailProps,
+} from "../modules/resend/emails/order-pickup-cancelled"
+import {
   GlsLabelCancelledEmail,
   type GlsLabelCancelledEmailProps,
 } from "../modules/resend/emails/gls-label-cancelled"
@@ -55,6 +60,7 @@ type ResendTemplateDefinition = {
     | "own-delivery-delivered"
     | "order-pickup-ready"
     | "order-pickup-completed"
+    | "order-pickup-cancelled"
     | "gls-label-cancelled"
   language: TemplateLanguage
   name: string
@@ -415,6 +421,12 @@ export default async function syncResendTemplates({
   const pickupCompletedSkProps = withTemplatePlaceholders(
     withLanguage(mockOrderPickupCompleted, "sk")
   )
+  const pickupCancelledHuProps = withTemplatePlaceholders(
+    withLanguage(mockOrderPickupCancelled, "hu")
+  )
+  const pickupCancelledSkProps = withTemplatePlaceholders(
+    withLanguage(mockOrderPickupCancelled, "sk")
+  )
   const glsBaseProps: GlsLabelCancelledEmailProps = {
     order: {
       id: "order_123",
@@ -608,6 +620,40 @@ export default async function syncResendTemplates({
       html: normalizeHtmlForResendVariables(
         await render(
           React.createElement(OrderPickupCompletedEmail, pickupCompletedSkProps)
+        ),
+        "sk"
+      ),
+      variables: TEMPLATE_VARIABLES,
+    },
+    {
+      key: "order-pickup-cancelled",
+      language: "hu",
+      name: "Teherguminet - pickup-cancelled",
+      alias: "teherguminet-pickup-cancelled",
+      subject: "Személyes átvétel visszavonva – Teherguminet.hu",
+      html: normalizeHtmlForResendVariables(
+        await render(
+          React.createElement(
+            OrderPickupCancelledEmail,
+            pickupCancelledHuProps as OrderPickupCancelledEmailProps
+          )
+        ),
+        "hu"
+      ),
+      variables: TEMPLATE_VARIABLES,
+    },
+    {
+      key: "order-pickup-cancelled",
+      language: "sk",
+      name: "Teherguminet - pickup-cancelled (SK)",
+      alias: "teherguminet-pickup-cancelled-sk",
+      subject: "Osobný odber bol zrušený – Teherguminet.hu",
+      html: normalizeHtmlForResendVariables(
+        await render(
+          React.createElement(
+            OrderPickupCancelledEmail,
+            pickupCancelledSkProps as OrderPickupCancelledEmailProps
+          )
         ),
         "sk"
       ),

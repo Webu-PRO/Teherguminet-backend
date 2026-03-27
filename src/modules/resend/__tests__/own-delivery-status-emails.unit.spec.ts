@@ -44,6 +44,26 @@ describe("own delivery status templates", () => {
     expect(subject).toContain("pripravená na osobný odber")
   })
 
+  it("resolves Hungarian pickup-cancelled subject from order metadata", () => {
+    const service = createService()
+
+    const subject = service.getTemplateSubject({
+      template: "order-pickup-cancelled",
+      to: "partner@example.com",
+      data: {
+        order: {
+          id: "order_pickup_cancel_hu",
+          display_id: 89,
+          metadata: {
+            language: "hu",
+          },
+        },
+      },
+    } as any)
+
+    expect(subject).toContain("átvétel visszavonva")
+  })
+
   it("resolves Hungarian and Slovak subjects for own-delivery fulfillment-created template", () => {
     const service = createService()
 

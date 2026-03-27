@@ -12,6 +12,7 @@ type UpdateFulfillmentFn = (
   fulfillmentId: string,
   payload: unknown
 ) => Promise<void>
+type UpdateOrdersFn = (orderId: string, payload: unknown) => Promise<void>
 
 describe("pickup-fulfillment-created subscriber", () => {
   it("sends pickup-ready email when fulfillment shipping option is pickup even if order methods are stale", async () => {
@@ -84,6 +85,7 @@ describe("pickup-fulfillment-created subscriber", () => {
     const updateFulfillment = jest
       .fn<UpdateFulfillmentFn>()
       .mockResolvedValue(undefined)
+    const updateOrders = jest.fn<UpdateOrdersFn>().mockResolvedValue(undefined)
     const logger = {
       warn: jest.fn(),
       error: jest.fn(),
@@ -101,6 +103,10 @@ describe("pickup-fulfillment-created subscriber", () => {
 
         if (token === Modules.FULFILLMENT) {
           return { updateFulfillment }
+        }
+
+        if (token === Modules.ORDER) {
+          return { updateOrders }
         }
 
         if (token === ContainerRegistrationKeys.LOGGER) {
@@ -130,6 +136,16 @@ describe("pickup-fulfillment-created subscriber", () => {
       expect.objectContaining({
         metadata: expect.objectContaining({
           pickup_ready_email_sent_at: expect.any(String),
+        }),
+      })
+    )
+    expect(updateOrders).toHaveBeenCalledWith(
+      "order_60",
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          pickup_ready_active: true,
+          pickup_ready_last_fulfillment_id: "ful_60",
+          pickup_ready_last_sent_at: expect.any(String),
         }),
       })
     )

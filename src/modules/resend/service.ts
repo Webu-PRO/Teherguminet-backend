@@ -31,6 +31,10 @@ import {
   type OrderPickupCompletedEmailProps,
 } from "./emails/order-pickup-completed";
 import {
+  OrderPickupCancelledEmail,
+  type OrderPickupCancelledEmailProps,
+} from "./emails/order-pickup-cancelled";
+import {
   OwnDeliveryPaymentNoticeEmail,
   type OwnDeliveryPaymentNoticeEmailProps,
 } from "./emails/own-delivery-payment-notice";
@@ -112,6 +116,7 @@ enum Templates {
   ORDER_DELIVERED = "order-delivered",
   ORDER_PICKUP_READY = "order-pickup-ready",
   ORDER_PICKUP_COMPLETED = "order-pickup-completed",
+  ORDER_PICKUP_CANCELLED = "order-pickup-cancelled",
   OWN_DELIVERY_PAYMENT_NOTICE = "own-delivery-payment-notice",
   OWN_DELIVERY_FULFILLMENT_CREATED = "own-delivery-fulfillment-created",
   OWN_DELIVERY_SHIPPED = "own-delivery-shipped",
@@ -138,6 +143,8 @@ const templates: Partial<Record<Templates, TemplateRenderer>> = {
     OrderPickupReadyEmail(props as OrderPickupReadyEmailProps),
   [Templates.ORDER_PICKUP_COMPLETED]: (props) =>
     OrderPickupCompletedEmail(props as OrderPickupCompletedEmailProps),
+  [Templates.ORDER_PICKUP_CANCELLED]: (props) =>
+    OrderPickupCancelledEmail(props as OrderPickupCancelledEmailProps),
   [Templates.OWN_DELIVERY_PAYMENT_NOTICE]: (props) =>
     OwnDeliveryPaymentNoticeEmail(props as OwnDeliveryPaymentNoticeEmailProps),
   [Templates.OWN_DELIVERY_FULFILLMENT_CREATED]: (props) =>
@@ -247,6 +254,7 @@ const resolveNotificationLanguage = (
     template === Templates.ORDER_DELIVERED ||
     template === Templates.ORDER_PICKUP_READY ||
     template === Templates.ORDER_PICKUP_COMPLETED ||
+    template === Templates.ORDER_PICKUP_CANCELLED ||
     template === Templates.OWN_DELIVERY_PAYMENT_NOTICE ||
     template === Templates.OWN_DELIVERY_FULFILLMENT_CREATED ||
     template === Templates.OWN_DELIVERY_SHIPPED ||
@@ -397,6 +405,7 @@ const resolveTemplateVariables = (
     Templates.ORDER_DELIVERED,
     Templates.ORDER_PICKUP_READY,
     Templates.ORDER_PICKUP_COMPLETED,
+    Templates.ORDER_PICKUP_CANCELLED,
     Templates.OWN_DELIVERY_PAYMENT_NOTICE,
     Templates.OWN_DELIVERY_FULFILLMENT_CREATED,
     Templates.OWN_DELIVERY_SHIPPED,
@@ -575,6 +584,20 @@ class ResendNotificationProviderService extends AbstractNotificationProviderServ
         return orderRef
           ? `Rendelés #${orderRef}: átvétel sikeresen megtörtént – ${BRAND_NAME}`
           : `Átvétel sikeresen megtörtént – ${BRAND_NAME}`;
+      }
+      case Templates.ORDER_PICKUP_CANCELLED: {
+        const orderRef = resolveOrderReference(
+          (notification.data as any)?.order
+        );
+        if (language === "sk") {
+          return orderRef
+            ? `Objednávka #${orderRef}: odber bol zrušený – ${BRAND_NAME}`
+            : `Osobný odber bol zrušený – ${BRAND_NAME}`;
+        }
+
+        return orderRef
+          ? `Rendelés #${orderRef}: átvétel visszavonva – ${BRAND_NAME}`
+          : `Személyes átvétel visszavonva – ${BRAND_NAME}`;
       }
       case Templates.OWN_DELIVERY_PAYMENT_NOTICE: {
         const orderRef = resolveOrderReference(

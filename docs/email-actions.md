@@ -29,6 +29,7 @@ Language-aware keys are usually `hu` or `sk`.
 |---|---:|---|---|---|---|---|
 | `order.fulfillment_created` / `fulfillment.created` (own delivery) | 2 | `own-delivery-fulfillment-created`, `own-delivery-shipped` | `order.email` | `event.name` | `{template}-{fulfillmentId}` | `src/subscribers/own-delivery-fulfillment-created.ts` |
 | `order.fulfillment_created` / `fulfillment.created` (pickup / helyszíni átvétel) | 1 | `order-pickup-ready` | `order.email` | `event.name` | `order-pickup-ready-{fulfillmentId}` | `src/subscribers/pickup-fulfillment-created.ts` |
+| `order.updated` (pickup-ready order -> `fulfillment_status=not_fulfilled`) | 1 | `order-pickup-cancelled` | `order.email` | `order.fulfillment_cancelled` | `order-pickup-cancelled-{lastFulfillmentId}` | `src/subscribers/pickup-fulfillment-cancelled.ts` |
 | `FulfillmentWorkflowEvents.SHIPMENT_CREATED` (own delivery) | 1 | `own-delivery-shipped` | `order.email` | `event.name` | `own-delivery-shipped-{fulfillmentId}` | `src/subscribers/own-delivery-shipment-created.ts` |
 | `FulfillmentWorkflowEvents.SHIPMENT_CREATED` (pickup / helyszíni átvétel) | 1 | `order-pickup-completed` | `order.email` | `event.name` | `order-pickup-completed-{fulfillmentId}` | `src/subscribers/pickup-shipment-created.ts` |
 | `FulfillmentEvents.FULFILLMENT_UPDATED` + `delivered_at` present | 1 | `order-delivered` OR `own-delivery-delivered` | `order.email` | `event.name` | `{selectedTemplate}-{fulfillmentId}` | `src/subscribers/fulfillment-delivered.ts` |
@@ -63,6 +64,7 @@ These env vars are mapped in `medusa-config.ts` to `template_ids` keys:
 - `RESEND_TEMPLATE_ID_ORDER_DELIVERED` -> `order-delivered`
 - `RESEND_TEMPLATE_ID_ORDER_PICKUP_READY` -> `order-pickup-ready`
 - `RESEND_TEMPLATE_ID_ORDER_PICKUP_COMPLETED` -> `order-pickup-completed`
+- `RESEND_TEMPLATE_ID_ORDER_PICKUP_CANCELLED` -> `order-pickup-cancelled`
 - `RESEND_TEMPLATE_ID_OWN_DELIVERY_PAYMENT_NOTICE` -> `own-delivery-payment-notice`
 - `RESEND_TEMPLATE_ID_OWN_DELIVERY_SHIPPED` -> `own-delivery-shipped`
 - `RESEND_TEMPLATE_ID_OWN_DELIVERY_DELIVERED` -> `own-delivery-delivered`

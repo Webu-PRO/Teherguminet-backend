@@ -12,6 +12,7 @@ import type {
   FulfillmentDTO,
   IFulfillmentModuleService,
   INotificationModuleService,
+  IOrderModuleService,
   Logger,
   OrderDTO,
   OrderShippingMethodDTO,
@@ -28,6 +29,11 @@ type ShipmentCreatedEventPayload = {
 
 const PICKUP_COMPLETED_TEMPLATE = "order-pickup-completed"
 const PICKUP_COMPLETED_EMAIL_METADATA_KEY = "pickup_completed_email_sent_at"
+const PICKUP_READY_ACTIVE_ORDER_METADATA_KEY = "pickup_ready_active"
+const PICKUP_COMPLETED_LAST_FULFILLMENT_ID_ORDER_METADATA_KEY =
+  "pickup_completed_last_fulfillment_id"
+const PICKUP_COMPLETED_LAST_SENT_AT_ORDER_METADATA_KEY =
+  "pickup_completed_last_sent_at"
 
 const resolveLogger = (container: SubscriberArgs["container"]) => {
   try {
@@ -166,6 +172,8 @@ export default async function pickupShipmentCreatedHandler({
     container.resolve<INotificationModuleService>(Modules.NOTIFICATION)
   const fulfillmentModuleService =
     container.resolve<IFulfillmentModuleService>(Modules.FULFILLMENT)
+  const orderModuleService =
+    container.resolve<IOrderModuleService>(Modules.ORDER)
 
   const { data: fulfillments } = await query.graph({
     entity: "fulfillment",
@@ -206,6 +214,8 @@ export default async function pickupShipmentCreatedHandler({
   }
 
   const order = fulfillment.order
+  const orderMetadata =
+    (order.metadata as Record<string, unknown> | null) ?? {}
   const email = order.email?.trim()
   if (!email) {
     return
@@ -230,6 +240,8 @@ export default async function pickupShipmentCreatedHandler({
   }
 
   try {
+    const sentAt = new Date().toISOString()
+
     await dispatchNotificationsIndividually(
       notificationModuleService,
       [notification],
@@ -239,7 +251,17 @@ export default async function pickupShipmentCreatedHandler({
     await fulfillmentModuleService.updateFulfillment(fulfillment.id, {
       metadata: {
         ...metadata,
-        [PICKUP_COMPLETED_EMAIL_METADATA_KEY]: new Date().toISOString(),
+        [PICKUP_COMPLETED_EMAIL_METADATA_KEY]: sentAt,
+      },
+    })
+
+    await orderModuleService.updateOrders(order.id, {
+      metadata: {
+        ...orderMetadata,
+        [PICKUP_READY_ACTIVE_ORDER_METADATA_KEY]: false,
+        [PICKUP_COMPLETED_LAST_FULFILLMENT_ID_ORDER_METADATA_KEY]:
+          fulfillment.id,
+        [PICKUP_COMPLETED_LAST_SENT_AT_ORDER_METADATA_KEY]: sentAt,
       },
     })
   } catch (error) {
