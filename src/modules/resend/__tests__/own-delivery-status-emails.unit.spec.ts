@@ -201,7 +201,7 @@ describe("own delivery status templates", () => {
     expect(sent.template.variables.order_id).toBe("TG-000019")
     expect(sent.template.variables.customer_name).toBe("Péter")
     expect(sent.template.variables.order_url).toContain(
-      "/hu/store/orders/TG-000019"
+      "/hu/account/orders/details/order_1"
     )
   })
 
@@ -243,7 +243,7 @@ describe("own delivery status templates", () => {
     expect(sent.template.variables.order_id).toBe("TG-000023")
     expect(sent.template.variables.customer_name).toBe("Ján")
     expect(sent.template.variables.order_url).toContain(
-      "/sk/store/orders/TG-000023"
+      "/sk/account/orders/details/order_pickup_1"
     )
   })
 })

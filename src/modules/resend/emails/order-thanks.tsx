@@ -374,7 +374,7 @@ export const OrderThanksEmailComponent = ({ order }: OrderThanksEmailProps) => {
   const lang = languageBlocks[languageCode] ?? languageBlocks.hu;
 
   const items = prepareOrderItems(order, lang.itemFallbackLabel);
-  const orderUrl = buildOrderUrl(orderId, languageCode);
+  const orderUrl = buildOrderUrl(order.id, languageCode);
 
   const orderTotalDisplay = formatAmount(totals.total, currency, lang.locale);
   const accentColor = lang.code === "hu" ? "#E10600" : "#4DA3FF";

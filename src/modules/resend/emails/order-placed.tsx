@@ -428,7 +428,7 @@ export const OrderPlacedEmailComponent = ({ order }: OrderPlacedEmailProps) => {
   const languageCode = resolveLanguageFromOrder(order);
   const lang = languageBlocks[languageCode] ?? languageBlocks.hu;
 
-  const orderUrl = buildOrderUrl(orderId, languageCode);
+  const orderUrl = buildOrderUrl(order.id, languageCode);
   const orderTotalDisplay = formatAmount(orderTotal, currency, lang.locale);
   const receiptUrl = resolveBillingoPublicUrl(
     order.metadata as Record<string, unknown> | null

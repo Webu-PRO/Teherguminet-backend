@@ -131,6 +131,7 @@ type ResendTemplatesApi = {
 
 const TEMPLATE_IDS_FILE = ".resend-template-ids.json"
 const ORDER_ID_PLACEHOLDER = "{{{order_id}}}"
+const ORDER_ENTITY_ID_PLACEHOLDER = "order_123456"
 const CUSTOMER_NAME_PLACEHOLDER = "{{{customer_name}}}"
 const ORDER_URL_PLACEHOLDER = "{{{order_url}}}"
 const TEMPLATE_VARIABLES: ResendTemplateDefinition["variables"] = [
@@ -147,7 +148,8 @@ const TEMPLATE_VARIABLES: ResendTemplateDefinition["variables"] = [
   {
     key: "order_url",
     type: "string",
-    fallbackValue: "https://teherguminet.hu/hu/store/orders/TG-000019",
+    fallbackValue:
+      "https://teherguminet.hu/hu/account/orders/details/order_123456",
   },
 ]
 
@@ -215,6 +217,7 @@ const withTemplatePlaceholders = <
     ...props,
     order: {
       ...props.order,
+      id: ORDER_ENTITY_ID_PLACEHOLDER,
       display_id: ORDER_ID_PLACEHOLDER,
       customer: {
         ...(props.order.customer ?? {}),
@@ -236,7 +239,7 @@ const normalizeHtmlForResendVariables = (
   html: string,
   language: TemplateLanguage
 ) => {
-  const orderUrlMarker = buildOrderUrl(ORDER_ID_PLACEHOLDER, language)
+  const orderUrlMarker = buildOrderUrl(ORDER_ENTITY_ID_PLACEHOLDER, language)
   return html
     .split(orderUrlMarker)
     .join(ORDER_URL_PLACEHOLDER)

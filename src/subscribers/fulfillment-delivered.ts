@@ -26,8 +26,10 @@ type FulfillmentEventPayload = {
 }
 
 const DELIVERY_EMAIL_METADATA_KEY = "delivery_email_sent_at"
+const PICKUP_COMPLETED_EMAIL_METADATA_KEY = "pickup_completed_email_sent_at"
 const DELIVERY_TEMPLATE_DEFAULT = "order-delivered"
 const DELIVERY_TEMPLATE_OWN_DELIVERY = "own-delivery-delivered"
+const DELIVERY_TEMPLATE_PICKUP_COMPLETED = "order-pickup-completed"
 
 const resolveLogger = (container: SubscriberArgs["container"]) => {
   try {
@@ -164,10 +166,6 @@ export default async function fulfillmentDeliveredHandler({
   }
 
   const metadata = resolveMetadata(fulfillment.metadata)
-  if (metadata[DELIVERY_EMAIL_METADATA_KEY]) {
-    return
-  }
-
   const order = fulfillment.order
   if (!order.email) {
     return
@@ -201,12 +199,21 @@ export default async function fulfillmentDeliveredHandler({
   const isOwnDelivery = isOwnDeliveryShippingMethod(
     shippingMethod ?? shippingMethodFallback
   )
-  if (isPickupDelivery) {
+  if (
+    metadata[
+      isPickupDelivery
+        ? PICKUP_COMPLETED_EMAIL_METADATA_KEY
+        : DELIVERY_EMAIL_METADATA_KEY
+    ]
+  ) {
     return
   }
-  const selectedTemplate = isOwnDelivery
-    ? DELIVERY_TEMPLATE_OWN_DELIVERY
-    : DELIVERY_TEMPLATE_DEFAULT
+
+  const selectedTemplate = isPickupDelivery
+    ? DELIVERY_TEMPLATE_PICKUP_COMPLETED
+    : isOwnDelivery
+      ? DELIVERY_TEMPLATE_OWN_DELIVERY
+      : DELIVERY_TEMPLATE_DEFAULT
 
   const trackingNumbers =
     "tracking_numbers" in fulfillment
@@ -244,7 +251,11 @@ export default async function fulfillmentDeliveredHandler({
     await fulfillmentModuleService.updateFulfillment(fulfillment.id, {
       metadata: {
         ...metadata,
-        [DELIVERY_EMAIL_METADATA_KEY]: new Date().toISOString(),
+        [
+          isPickupDelivery
+            ? PICKUP_COMPLETED_EMAIL_METADATA_KEY
+            : DELIVERY_EMAIL_METADATA_KEY
+        ]: new Date().toISOString(),
       },
     })
   } catch (error) {

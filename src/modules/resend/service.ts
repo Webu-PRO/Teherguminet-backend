@@ -427,7 +427,7 @@ const resolveTemplateVariables = (
 
   const orderId = resolveOrderId(order);
   const customerName = resolveCustomerName(order);
-  const orderUrl = buildOrderUrl(orderId, language);
+  const orderUrl = buildOrderUrl(order.id, language);
 
   const enriched = {
     ...base,

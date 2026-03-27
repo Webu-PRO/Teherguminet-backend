@@ -152,7 +152,7 @@ export const buildOrderUrl = (
   }
 
   const sanitizedId = encodeURIComponent(orderId.trim());
-  const pathname = `/${localePrefix}/store/orders/${sanitizedId}`;
+  const pathname = `/${localePrefix}/account/orders/details/${sanitizedId}`;
 
   try {
     return new URL(pathname, normalizedBase).toString();

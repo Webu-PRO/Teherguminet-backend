@@ -249,7 +249,7 @@ export const OwnDeliveryShippedEmail = ({
   const languageCode = resolveLanguageFromOrder(order)
   const orderId = resolveOrderId(order)
   const customerName = resolveCustomerName(order)
-  const orderUrl = buildOrderUrl(orderId, languageCode)
+  const orderUrl = buildOrderUrl(order.id, languageCode)
 
   const languageBlocks: Record<LanguageCode, LanguageBlock> = {
     hu: {

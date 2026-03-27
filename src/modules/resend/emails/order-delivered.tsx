@@ -273,7 +273,7 @@ export const OrderDeliveredEmail = ({
     .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
     .filter(Boolean)
 
-  const orderUrl = buildOrderUrl(orderId, languageCode)
+  const orderUrl = buildOrderUrl(order.id, languageCode)
 
   const details = [
     { label: lang.labels.order, value: orderId },
