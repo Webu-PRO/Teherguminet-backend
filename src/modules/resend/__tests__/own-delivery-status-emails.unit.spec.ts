@@ -1,6 +1,11 @@
 import { describe, expect, it, jest } from "@jest/globals"
 import ResendNotificationProviderService from "../service"
 
+type MockSendResult = {
+  data: { id: string }
+  error: null
+}
+
 const createService = (options: Record<string, unknown> = {}) =>
   new ResendNotificationProviderService(
     {
@@ -19,6 +24,26 @@ const createService = (options: Record<string, unknown> = {}) =>
   )
 
 describe("own delivery status templates", () => {
+  it("resolves Slovak pickup-ready subject from order country", () => {
+    const service = createService()
+
+    const subject = service.getTemplateSubject({
+      template: "order-pickup-ready",
+      to: "partner@example.com",
+      data: {
+        order: {
+          id: "order_pickup_sk",
+          display_id: 88,
+          shipping_address: {
+            country_code: "sk",
+          },
+        },
+      },
+    } as any)
+
+    expect(subject).toContain("pripravená na osobný odber")
+  })
+
   it("resolves Hungarian and Slovak subjects for own-delivery fulfillment-created template", () => {
     const service = createService()
 
@@ -124,10 +149,12 @@ describe("own delivery status templates", () => {
       },
     })
 
-    const sendMock = jest.fn().mockResolvedValue({
-      data: { id: "email_1" },
-      error: null,
-    })
+    const sendMock = jest
+      .fn<(...args: any[]) => Promise<MockSendResult>>()
+      .mockResolvedValue({
+        data: { id: "email_1" },
+        error: null,
+      })
 
     ;(service as any).resendClient = {
       emails: {
@@ -155,6 +182,48 @@ describe("own delivery status templates", () => {
     expect(sent.template.variables.customer_name).toBe("Péter")
     expect(sent.template.variables.order_url).toContain(
       "/hu/store/orders/TG-000019"
+    )
+  })
+
+  it("passes dynamic variables to Resend template IDs for pickup templates", async () => {
+    const service = createService({
+      template_ids: {
+        "order-pickup-ready.sk": "tpl_pickup_ready_sk",
+      },
+    })
+
+    const sendMock = jest
+      .fn<(...args: any[]) => Promise<MockSendResult>>()
+      .mockResolvedValue({
+        data: { id: "email_2" },
+        error: null,
+      })
+
+    ;(service as any).resendClient = {
+      emails: {
+        send: sendMock,
+      },
+    }
+
+    await service.send({
+      to: "partner@teherguminet.sk",
+      template: "order-pickup-ready",
+      data: {
+        order: {
+          id: "order_pickup_1",
+          display_id: 23,
+          shipping_address: { country_code: "sk", first_name: "Ján" },
+        },
+      },
+    } as any)
+
+    expect(sendMock).toHaveBeenCalledTimes(1)
+    const sent = sendMock.mock.calls[0][0]
+    expect(sent.template.id).toBe("tpl_pickup_ready_sk")
+    expect(sent.template.variables.order_id).toBe("TG-000023")
+    expect(sent.template.variables.customer_name).toBe("Ján")
+    expect(sent.template.variables.order_url).toContain(
+      "/sk/store/orders/TG-000023"
     )
   })
 })

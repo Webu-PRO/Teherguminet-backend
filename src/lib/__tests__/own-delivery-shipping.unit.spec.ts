@@ -29,4 +29,14 @@ describe("own-delivery-shipping", () => {
     expect(isPickupShippingMethod(method)).toBe(true)
     expect(isOwnDeliveryShippingMethod(method)).toBe(false)
   })
+
+  it("detects slovak pickup labels", () => {
+    const method = asMethod({
+      name: "Osobný odber",
+      provider_id: "manual_manual",
+    })
+
+    expect(isPickupShippingMethod(method)).toBe(true)
+    expect(isOwnDeliveryShippingMethod(method)).toBe(false)
+  })
 })

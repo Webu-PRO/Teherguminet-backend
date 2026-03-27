@@ -391,13 +391,23 @@ const resolveTemplateVariables = (
 ): Record<string, string | number> | undefined => {
   const template = notification.template as Templates;
   const base = extractTemplateVariables(notification.data) ?? {};
+  const templatesWithOrderVariables = new Set<Templates>([
+    Templates.ORDER_PLACED,
+    Templates.ORDER_THANKS,
+    Templates.ORDER_DELIVERED,
+    Templates.ORDER_PICKUP_READY,
+    Templates.ORDER_PICKUP_COMPLETED,
+    Templates.OWN_DELIVERY_PAYMENT_NOTICE,
+    Templates.OWN_DELIVERY_FULFILLMENT_CREATED,
+    Templates.OWN_DELIVERY_SHIPPED,
+    Templates.OWN_DELIVERY_DELIVERED,
+    Templates.PAYMENT_RECEIPT,
+    Templates.GLS_LABEL_CANCELLED,
+    Templates.ORDER_ITEMS_CANCELLED,
+    Templates.GLS_SHIPMENT_CREATED,
+  ]);
 
-  if (
-    template !== Templates.OWN_DELIVERY_PAYMENT_NOTICE &&
-    template !== Templates.OWN_DELIVERY_FULFILLMENT_CREATED &&
-    template !== Templates.OWN_DELIVERY_SHIPPED &&
-    template !== Templates.OWN_DELIVERY_DELIVERED
-  ) {
+  if (!templatesWithOrderVariables.has(template)) {
     return Object.keys(base).length ? base : undefined;
   }
 

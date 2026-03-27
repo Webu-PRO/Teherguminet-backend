@@ -14,14 +14,18 @@
   ],
   "scripts": {
     "build": "medusa build",
+    "turbo:build": "turbo run build --single-package",
     "seed": "medusa exec ./src/scripts/seed.ts",
     "resend:templates:sync": "ts-node --transpile-only ./src/scripts/sync-resend-templates.ts",
     "start": "medusa start",
+    "turbo:start": "turbo run start --single-package",
     "dev": "medusa develop",
+    "turbo:dev": "turbo run dev --single-package",
     "dev:email": "email dev --dir ./src/modules/resend/emails",
     "test:integration:http": "TEST_TYPE=integration:http NODE_OPTIONS=--experimental-vm-modules jest --silent=false --runInBand --forceExit",
     "test:integration:modules": "TEST_TYPE=integration:modules NODE_OPTIONS=--experimental-vm-modules jest --silent=false --runInBand --forceExit",
     "test:unit": "TEST_TYPE=unit NODE_OPTIONS=--experimental-vm-modules jest --silent --runInBand --forceExit",
+    "turbo:test": "turbo run test:unit --single-package",
     "docker:up": "docker compose up --build -d",
     "docker:down": "docker compose down",
     "postinstall": "patch-package"
@@ -60,11 +64,13 @@
     "react-dom": "^18.2.0",
     "react-email": "^4.3.2",
     "ts-node": "^10.9.2",
+    "turbo": "^2.8.20",
     "typescript": "^5.6.2",
     "vite": "^5.2.11",
     "yalc": "^1.0.0-pre.53"
   },
   "engines": {
     "node": ">=20"
-  }
+  },
+  "packageManager": "yarn@1.22.22"
 }

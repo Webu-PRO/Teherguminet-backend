@@ -73,7 +73,8 @@ export const isPickupShippingMethod = (
     text.includes("pickup") ||
     text.includes("helyszini atvetel") ||
     text.includes("szemelyes atvetel") ||
-    text.includes("telephelyi atvetel")
+    text.includes("telephelyi atvetel") ||
+    text.includes("osobny odber")
   )
 }
 
@@ -107,4 +108,3 @@ export const isOwnDeliveryShippingMethod = (
       (text.includes("hazhoz") || text.includes("szallit")))
   )
 }
-

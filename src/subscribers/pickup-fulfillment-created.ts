@@ -72,17 +72,83 @@ const shouldSkipBecauseEmailAlreadySent = (
   return sentAt >= createdAt
 }
 
-const resolveShippingMethod = (
+const resolveShippingMethod = async (
+  query: Query,
   order: OrderDTO,
   fulfillment: FulfillmentDTO
-): OrderShippingMethodDTO | null => {
+): Promise<OrderShippingMethodDTO | null> => {
   const methods = order.shipping_methods ?? []
 
-  if (!methods.length) {
-    return null
+  const resolveFromShippingOption = async () => {
+    const shippingOptionId = fulfillment.shipping_option_id
+    if (!shippingOptionId) {
+      return null
+    }
+
+    try {
+      const { data } = await query.graph({
+        entity: "shipping_option",
+        fields: [
+          "id",
+          "name",
+          "provider_id",
+          "data",
+          "metadata",
+          "type.code",
+          "type.label",
+          "type.description",
+        ],
+        filters: {
+          id: shippingOptionId,
+        },
+      })
+
+      const shippingOption = (data?.[0] ?? null) as
+        | Record<string, unknown>
+        | null
+      if (!shippingOption) {
+        return null
+      }
+
+      return {
+        id:
+          typeof shippingOption.id === "string"
+            ? shippingOption.id
+            : shippingOptionId,
+        shipping_option_id: shippingOptionId,
+        name:
+          typeof shippingOption.name === "string"
+            ? shippingOption.name
+            : undefined,
+        provider_id:
+          typeof shippingOption.provider_id === "string"
+            ? shippingOption.provider_id
+            : undefined,
+        data:
+          shippingOption.data &&
+          typeof shippingOption.data === "object" &&
+          !Array.isArray(shippingOption.data)
+            ? (shippingOption.data as Record<string, unknown>)
+            : undefined,
+        metadata:
+          shippingOption.metadata &&
+          typeof shippingOption.metadata === "object" &&
+          !Array.isArray(shippingOption.metadata)
+            ? (shippingOption.metadata as Record<string, unknown>)
+            : undefined,
+        type:
+          shippingOption.type &&
+          typeof shippingOption.type === "object" &&
+          !Array.isArray(shippingOption.type)
+            ? shippingOption.type
+            : undefined,
+      } as unknown as OrderShippingMethodDTO
+    } catch {
+      return null
+    }
   }
 
-  if (fulfillment.shipping_option_id) {
+  if (methods.length && fulfillment.shipping_option_id) {
     const match = methods.find(
       (method) =>
         method.shipping_option_id === fulfillment.shipping_option_id
@@ -91,6 +157,22 @@ const resolveShippingMethod = (
     if (match) {
       return match
     }
+  }
+
+  const shippingOptionMethod = await resolveFromShippingOption()
+  if (shippingOptionMethod) {
+    return shippingOptionMethod
+  }
+
+  if (!methods.length) {
+    return null
+  }
+
+  const pickupCandidate = methods.find((method) =>
+    isPickupShippingMethod(method)
+  )
+  if (pickupCandidate) {
+    return pickupCandidate
   }
 
   return methods.length === 1 ? methods[0] : methods.at(-1) ?? null
@@ -162,7 +244,7 @@ export default async function pickupFulfillmentCreatedHandler({
     return
   }
 
-  const shippingMethod = resolveShippingMethod(order, fulfillment)
+  const shippingMethod = await resolveShippingMethod(query, order, fulfillment)
   if (!isPickupShippingMethod(shippingMethod)) {
     return
   }
