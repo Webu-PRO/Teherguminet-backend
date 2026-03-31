@@ -16,6 +16,10 @@ import type {
 
 import { sendOrderConfirmationWorkflow } from "../workflows/send-order-confirmation"
 import {
+  isStripePaymentProvider,
+  sendPaymentReceiptWorkflow,
+} from "../workflows/send-payment-receipt"
+import {
   applyBillingoPartnerMetadata,
   BILLINGO_ERROR_KEYS,
   createBillingoPartner,
@@ -36,6 +40,148 @@ const resolveLogger = (container: SubscriberArgs["container"]) => {
     return container.resolve<Logger>(ContainerRegistrationKeys.LOGGER)
   } catch {
     return undefined
+  }
+}
+
+const ORDER_PAYMENT_LOOKUP_MAX_ATTEMPTS = 5
+const ORDER_PAYMENT_LOOKUP_RETRY_DELAY_MS = 1200
+const ORDER_PAYMENT_LOOKUP_RETRY_BACKOFF_MS = 1200
+
+type PaymentLookupRecord = {
+  id?: string | null
+  provider_id?: string | null
+  captured_at?: string | Date | null
+}
+
+type PaymentLookupOptions = {
+  maxAttempts?: number
+  retryDelayMs?: number
+  retryBackoffMs?: number
+}
+
+const sleep = (ms: number) =>
+  new Promise((resolve) => setTimeout(resolve, ms))
+
+const defaultPaymentLookupOptions: Required<PaymentLookupOptions> = {
+  maxAttempts: ORDER_PAYMENT_LOOKUP_MAX_ATTEMPTS,
+  retryDelayMs: ORDER_PAYMENT_LOOKUP_RETRY_DELAY_MS,
+  retryBackoffMs: ORDER_PAYMENT_LOOKUP_RETRY_BACKOFF_MS,
+}
+
+const resolveCapturedStripePaymentIds = (
+  payments: PaymentLookupRecord[]
+) => {
+  const uniqueIds = new Set<string>()
+
+  for (const payment of payments) {
+    const paymentId = payment?.id?.trim()
+    if (!paymentId) {
+      continue
+    }
+
+    if (!payment?.captured_at) {
+      continue
+    }
+
+    if (!isStripePaymentProvider(payment.provider_id)) {
+      continue
+    }
+
+    uniqueIds.add(paymentId)
+  }
+
+  return Array.from(uniqueIds)
+}
+
+export const findCapturedStripePaymentIdsForOrder = async (
+  container: SubscriberArgs["container"],
+  orderId: string,
+  options?: PaymentLookupOptions
+) => {
+  const query = container.resolve<Query>(ContainerRegistrationKeys.QUERY)
+  const config = {
+    ...defaultPaymentLookupOptions,
+    ...(options ?? {}),
+  }
+
+  let delayMs = config.retryDelayMs
+
+  for (
+    let attempt = 1;
+    attempt <= config.maxAttempts;
+    attempt += 1
+  ) {
+    const { data } = await query.graph({
+      entity: "payment",
+      fields: [
+        "id",
+        "provider_id",
+        "captured_at",
+        "payment_collection.order.id",
+      ],
+      filters: {
+        payment_collection: {
+          order: {
+            id: orderId,
+          },
+        },
+      },
+    })
+
+    const payments = (data ?? []) as PaymentLookupRecord[]
+    const paymentIds = resolveCapturedStripePaymentIds(payments)
+    if (paymentIds.length) {
+      return paymentIds
+    }
+
+    if (attempt < config.maxAttempts) {
+      await sleep(delayMs)
+      delayMs += config.retryBackoffMs
+    }
+  }
+
+  return [] as string[]
+}
+
+export const maybeSendPaymentReceiptsForPlacedOrder = async (
+  container: SubscriberArgs["container"],
+  orderId: string,
+  logger?: Logger,
+  options?: PaymentLookupOptions,
+  runReceiptWorkflow?: (paymentId: string) => Promise<void>
+) => {
+  const paymentIds = await findCapturedStripePaymentIdsForOrder(
+    container,
+    orderId,
+    options
+  )
+
+  if (!paymentIds.length) {
+    return
+  }
+
+  const runWorkflow =
+    runReceiptWorkflow ??
+    (async (paymentId: string) => {
+      await sendPaymentReceiptWorkflow(container).run({
+        input: {
+          paymentId,
+        },
+      })
+    })
+
+  for (const paymentId of paymentIds) {
+    try {
+      await runWorkflow(paymentId)
+    } catch (error) {
+      logger?.warn?.(
+        `order-placed: failed to send payment receipt for payment ${paymentId}`
+      )
+      logger?.error?.(
+        `order-placed: payment receipt workflow error for payment ${paymentId}`,
+        error as Error
+      )
+    }
   }
 }
 
@@ -370,6 +516,8 @@ export default async function orderPlacedHandler({
       id: data.id,
     },
   })
+
+  await maybeSendPaymentReceiptsForPlacedOrder(container, data.id, logger)
 
   await updateOrderItemThumbnails(container, data.id, logger)
 }
