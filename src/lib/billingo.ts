@@ -178,9 +178,37 @@ const CURRENCY_DECIMALS = parseCurrencyDecimals(
   process.env.BILLINGO_CURRENCY_DECIMALS
 )
 
-const isBillingoDebugEnabled = () => {
+export const isBillingoDebugEnabled = () => {
   const raw = process.env.BILLINGO_DEBUG?.trim().toLowerCase()
   return raw === "1" || raw === "true" || raw === "yes" || raw === "on"
+}
+
+export class BillingoRequestError extends Error {
+  status: number
+  statusText: string
+  path: string
+  method: string
+  requestBody: unknown
+  responseData: unknown
+
+  constructor(input: {
+    status: number
+    statusText: string
+    message: string
+    path: string
+    method: string
+    requestBody: unknown
+    responseData: unknown
+  }) {
+    super(`Billingo ${input.status}: ${input.message}`)
+    this.name = "BillingoRequestError"
+    this.status = input.status
+    this.statusText = input.statusText
+    this.path = input.path
+    this.method = input.method
+    this.requestBody = input.requestBody
+    this.responseData = input.responseData
+  }
 }
 
 const parseBodyForLog = (body: RequestInit["body"]) => {
@@ -193,6 +221,44 @@ const parseBodyForLog = (body: RequestInit["body"]) => {
   } catch {
     return body.length > 2000 ? `${body.slice(0, 2000)}…` : body
   }
+}
+
+const resolveConfiguredConversionRate = (currency: string) => {
+  const normalized = currency.toUpperCase()
+  const byCurrency = process.env[`BILLINGO_CONVERSION_RATE_${normalized}`]
+  const generic = process.env.BILLINGO_CONVERSION_RATE
+  const parsed = readNumber(byCurrency, generic)
+  if (!parsed || parsed <= 0) {
+    return undefined
+  }
+  return parsed
+}
+
+const resolveConversionRate = (
+  currency: string,
+  extraPayload?: Record<string, unknown> | null
+) => {
+  if (currency.toUpperCase() === "HUF") {
+    return undefined
+  }
+
+  const payloadRate = readNumber(extraPayload?.conversion_rate)
+  if (payloadRate && payloadRate > 0) {
+    return payloadRate
+  }
+
+  const configuredRate = resolveConfiguredConversionRate(currency)
+  if (configuredRate) {
+    return configuredRate
+  }
+
+  console.warn(
+    "[Billingo] missing conversion_rate for non-HUF currency, defaulting to 1",
+    {
+      currency: currency.toUpperCase(),
+    }
+  )
+  return 1
 }
 
 const summarizePayloadForLog = (payload: unknown) => {
@@ -1115,7 +1181,15 @@ const billingoRequest = async <T>(
         })(),
         data,
       })
-      throw new Error(`Billingo ${response.status}: ${message}`)
+      throw new BillingoRequestError({
+        status: response.status,
+        statusText: response.statusText,
+        message,
+        path,
+        method,
+        requestBody: requestBodySummary,
+        responseData: data,
+      })
     }
 
     return data as T
@@ -1204,6 +1278,7 @@ export const createBillingoDocument = async (
   const documentType = type ?? resolveBillingoDocumentType(order, config)
   const decimals = resolveDecimals(currency)
   const extraPayload = resolveExtraPayload(order, documentType)
+  const conversionRate = resolveConversionRate(currency, extraPayload)
   const paymentMethod = resolvePaymentMethod(
     order,
     config.paymentMethodDefault
@@ -1736,6 +1811,10 @@ export const createBillingoDocument = async (
       items,
     }
 
+    if (conversionRate) {
+      basePayload.conversion_rate = conversionRate
+    }
+
     const payload = applyPayloadOverrides(basePayload, extraPayload)
 
     return billingoRequest<BillingoDocument>(
@@ -1799,6 +1878,10 @@ export const createBillingoDocument = async (
     currency,
     electronic: config.electronic,
     items,
+  }
+
+  if (conversionRate) {
+    basePayload.conversion_rate = conversionRate
   }
 
   if (invoiceBankAccountId) {

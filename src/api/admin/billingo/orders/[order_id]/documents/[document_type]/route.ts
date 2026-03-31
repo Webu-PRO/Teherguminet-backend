@@ -12,6 +12,7 @@ import type {
 
 import {
   BILLINGO_METADATA_KEYS,
+  BillingoRequestError,
   applyBillingoPartnerMetadata,
   createBillingoPartner,
   createBillingoInvoice,
@@ -20,6 +21,7 @@ import {
   getBillingoDocumentPdf,
   getBillingoPublicUrl,
   hasBillingoMetadata,
+  isBillingoDebugEnabled,
   resolveBillingoPartnerId,
   type BillingoDocumentMetadata,
 } from "../../../../../../../lib/billingo"
@@ -105,6 +107,22 @@ const fetchOrderForBillingo = async (
   })
 
   return orders?.[0] as unknown as OrderDTO | undefined
+}
+
+const serializeUnknownError = (error: unknown) => {
+  if (!error || typeof error !== "object") {
+    return undefined
+  }
+
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+    }
+  }
+
+  return error
 }
 
 export async function GET(req: MedusaRequest, res: MedusaResponse) {
@@ -359,15 +377,36 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
 
     res.status(201).json({ document: payload })
   } catch (error) {
+    const debugEnabled = isBillingoDebugEnabled()
+    const billingoDetails =
+      error instanceof BillingoRequestError
+        ? {
+            status: error.status,
+            statusText: error.statusText,
+            method: error.method,
+            path: error.path,
+            request: error.requestBody,
+            response: error.responseData,
+          }
+        : undefined
+
     console.error("[Billingo] create failed", {
       orderId,
       documentType,
-      error,
+      error: serializeUnknownError(error),
+      billingoDetails,
     })
     const message =
       error instanceof Error
         ? error.message
         : "Failed to create Billingo document."
-    res.status(500).json({ message })
+    const status =
+      error instanceof BillingoRequestError ? error.status : 500
+    res.status(status).json({
+      message,
+      ...(debugEnabled && billingoDetails
+        ? { debug: billingoDetails }
+        : {}),
+    })
   }
 }
