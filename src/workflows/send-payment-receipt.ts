@@ -12,6 +12,14 @@ type WorkflowInput = {
   paymentId: string
 }
 
+export const isStripePaymentProvider = (providerId: unknown) => {
+  if (typeof providerId !== "string") {
+    return false
+  }
+
+  return providerId.toLowerCase().includes("stripe")
+}
+
 export const sendPaymentReceiptWorkflow = createWorkflow(
   "send-payment-receipt",
   ({ paymentId }: WorkflowInput) => {
@@ -57,7 +65,9 @@ export const sendPaymentReceiptWorkflow = createWorkflow(
 
     const notification = when(
       { payload },
-      ({ payload }) => Boolean(payload.order?.email)
+      ({ payload }) =>
+        Boolean(payload.order?.email) &&
+        isStripePaymentProvider(payload.payment?.provider_id)
     ).then(() => {
       const { payment, order } = payload
 

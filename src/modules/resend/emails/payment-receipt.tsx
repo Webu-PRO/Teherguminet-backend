@@ -389,12 +389,12 @@ const languageBlocks: Record<LanguageCode, LanguageBlock> = {
   hu: {
     code: "hu",
     locale: "hu-HU",
-    preview: "Fizetés beérkezett",
-    heading: "Köszönjük, a fizetés beérkezett",
+    preview: "Sikeres fizetés",
+    heading: "Sikeres fizetés, köszönjük a rendelésed",
     intro: (name) => (
       <>
-        Köszönjük a vásárlást, {name}! A fizetés sikeresen beérkezett,
-        az alábbiakban megtalálod a részleteket.
+        Köszönjük a vásárlást, {name}! A fizetésedet sikeresen rögzítettük,
+        az alábbiakban látod a visszaigazolás részleteit.
       </>
     ),
     labels: {
@@ -414,7 +414,7 @@ const languageBlocks: Record<LanguageCode, LanguageBlock> = {
     receiptTitle: "Fizetés",
     receiptCopy: "",
     receiptCta: "",
-    note: "A számlát külön e-mailben küldjük. Ha kérdésed van, válaszolj erre az e-mailre, és segítünk.",
+    note: "A fizetés sikeresen lezárult. A számlát külön e-mailben küldjük. Ha kérdésed van, válaszolj erre az e-mailre, és segítünk.",
     closingLines: ["Üdvözlettel,", `A ${BRAND} csapata`],
     orderFallback: "Rendelés",
     dateFallback: "Frissen feldolgozva",
@@ -423,12 +423,12 @@ const languageBlocks: Record<LanguageCode, LanguageBlock> = {
   sk: {
     code: "sk",
     locale: "sk-SK",
-    preview: "Platba prijatá",
-    heading: "Ďakujeme, platba bola prijatá",
+    preview: "Platba úspešná",
+    heading: "Platba úspešná, ďakujeme za objednávku",
     intro: (name) => (
       <>
-        Ďakujeme za nákup, {name}! Platba bola úspešne prijatá
-        a nižšie nájdete podrobnosti.
+        Ďakujeme za nákup, {name}! Vašu platbu sme úspešne zaevidovali
+        a nižšie nájdete potvrdenie s podrobnosťami.
       </>
     ),
     labels: {
@@ -448,7 +448,7 @@ const languageBlocks: Record<LanguageCode, LanguageBlock> = {
     receiptTitle: "Platba",
     receiptCopy: "",
     receiptCta: "",
-    note: "Faktúru posielame v samostatnom e-maile. Ak potrebujete zmenu, odpovedzte na tento e-mail.",
+    note: "Platba bola úspešne dokončená. Faktúru posielame v samostatnom e-maile. Ak potrebujete zmenu, odpovedzte na tento e-mail.",
     closingLines: ["S pozdravom,", `Tím ${BRAND}`],
     orderFallback: "Objednávka",
     dateFallback: "Práve spracované",

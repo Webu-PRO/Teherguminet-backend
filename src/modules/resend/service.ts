@@ -509,13 +509,13 @@ class ResendNotificationProviderService extends AbstractNotificationProviderServ
         );
         if (language === "sk") {
           return orderRef
-            ? `Potvrdenie platby k objednávke #${orderRef} – ${BRAND_NAME}`
-            : `Potvrdenie platby – ${BRAND_NAME}`;
+            ? `Platba úspešná: objednávka #${orderRef} – ${BRAND_NAME}`
+            : `Platba úspešná – ${BRAND_NAME}`;
         }
 
         return orderRef
-          ? `Fizetési bizonylat a #${orderRef} rendeléshez – ${BRAND_NAME}`
-          : `Fizetési bizonylat – ${BRAND_NAME}`;
+          ? `Sikeres fizetés: #${orderRef} rendelés – ${BRAND_NAME}`
+          : `Sikeres fizetés – ${BRAND_NAME}`;
       }
       case Templates.ORDER_PLACED: {
         const orderRef = resolveOrderReference(notification.data);

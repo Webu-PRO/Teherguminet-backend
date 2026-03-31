@@ -19,7 +19,7 @@ Language-aware keys are usually `hu` or `sk`.
 | Action / Event | Sends | Templates | To | Trigger Type | Idempotency Key | Source |
 |---|---:|---|---|---|---|---|
 | `order.placed` | 2 | `order-thanks`, `order-placed` | `order.email` | `order.placed` | `order-thanks-{orderId}`, `order-placed-{orderId}` | `src/subscribers/order-placed.ts`, `src/workflows/send-order-confirmation.ts` |
-| `payment.captured` | 1 | `payment-receipt` | `order.email` | `payment.captured` | `payment-receipt-{paymentId}` | `src/subscribers/payment-captured.ts`, `src/workflows/send-payment-receipt.ts` |
+| `payment.captured` (Stripe providers only) | 1 | `payment-receipt` | `order.email` | `payment.captured` | `payment-receipt-{paymentId}` | `src/subscribers/payment-captured.ts`, `src/workflows/send-payment-receipt.ts` |
 | `payment.captured` (own delivery only) | 1 | `own-delivery-payment-notice` | `order.email` | `payment.captured.own_delivery` | `own-delivery-payment-notice-{paymentId}` | `src/subscribers/payment-captured.ts` |
 | `order.updated` (written-off qty increased) | 1 | `order-items-cancelled` | `order.email` | `order.items_cancelled` | _(none)_ | `src/subscribers/order-items-cancelled.ts` |
 

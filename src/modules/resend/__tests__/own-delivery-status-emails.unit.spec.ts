@@ -162,6 +162,38 @@ describe("own delivery status templates", () => {
     expect(service.getTemplate("own-delivery-delivered" as any)).toBeTruthy()
   })
 
+  it("resolves Hungarian and Slovak payment-receipt success subjects", () => {
+    const service = createService()
+
+    const huSubject = service.getTemplateSubject({
+      template: "payment-receipt",
+      to: "partner@teherguminet.hu",
+      data: {
+        order: {
+          id: "order_payment_hu",
+          display_id: 46,
+          metadata: { language: "hu" },
+        },
+      },
+    } as any)
+
+    const skSubject = service.getTemplateSubject({
+      template: "payment-receipt",
+      to: "partner@teherguminet.sk",
+      data: {
+        order: {
+          id: "order_payment_sk",
+          display_id: 47,
+          metadata: { language: "sk" },
+        },
+      },
+    } as any)
+
+    expect(huSubject).toContain("Sikeres fizetés")
+    expect(skSubject).toContain("Platba úspešná")
+    expect(service.getTemplate("payment-receipt" as any)).toBeTruthy()
+  })
+
   it("passes dynamic variables to Resend template IDs for own-delivery templates", async () => {
     const service = createService({
       template_ids: {
@@ -244,6 +276,53 @@ describe("own delivery status templates", () => {
     expect(sent.template.variables.customer_name).toBe("Ján")
     expect(sent.template.variables.order_url).toContain(
       "/sk/account/orders/details/order_pickup_1"
+    )
+  })
+
+  it("prefers Slovak template ID for payment-receipt when language resolves to sk", async () => {
+    const service = createService({
+      template_ids: {
+        "payment-receipt": "tpl_receipt_hu",
+        "payment-receipt.sk": "tpl_receipt_sk",
+      },
+    })
+
+    const sendMock = jest
+      .fn<(...args: any[]) => Promise<MockSendResult>>()
+      .mockResolvedValue({
+        data: { id: "email_3" },
+        error: null,
+      })
+
+    ;(service as any).resendClient = {
+      emails: {
+        send: sendMock,
+      },
+    }
+
+    await service.send({
+      to: "partner@teherguminet.sk",
+      template: "payment-receipt",
+      data: {
+        order: {
+          id: "order_payment_1",
+          display_id: 67,
+          shipping_address: { country_code: "sk", first_name: "Ján" },
+        },
+        payment: {
+          id: "pay_1",
+          provider_id: "pp_stripe_stripe",
+        },
+      },
+    } as any)
+
+    expect(sendMock).toHaveBeenCalledTimes(1)
+    const sent = sendMock.mock.calls[0][0]
+    expect(sent.template.id).toBe("tpl_receipt_sk")
+    expect(sent.template.variables.order_id).toBe("TG-000067")
+    expect(sent.template.variables.customer_name).toBe("Ján")
+    expect(sent.template.variables.order_url).toContain(
+      "/sk/account/orders/details/order_payment_1"
     )
   })
 })

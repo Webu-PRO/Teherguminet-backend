@@ -41,6 +41,11 @@ import {
   type OrderPickupCancelledEmailProps,
 } from "../modules/resend/emails/order-pickup-cancelled"
 import {
+  PaymentReceiptEmail,
+  mockPaymentReceipt,
+  type PaymentReceiptEmailProps,
+} from "../modules/resend/emails/payment-receipt"
+import {
   GlsLabelCancelledEmail,
   type GlsLabelCancelledEmailProps,
 } from "../modules/resend/emails/gls-label-cancelled"
@@ -61,6 +66,7 @@ type ResendTemplateDefinition = {
     | "order-pickup-ready"
     | "order-pickup-completed"
     | "order-pickup-cancelled"
+    | "payment-receipt"
     | "gls-label-cancelled"
   language: TemplateLanguage
   name: string
@@ -184,6 +190,7 @@ const withLanguage = <
     | OwnDeliveryDeliveredEmailProps
     | OrderPickupReadyEmailProps
     | OrderPickupCompletedEmailProps
+    | OrderPickupCancelledEmailProps
     | GlsLabelCancelledEmailProps,
 >(
   props: T,
@@ -209,6 +216,7 @@ const withTemplatePlaceholders = <
     | OwnDeliveryDeliveredEmailProps
     | OrderPickupReadyEmailProps
     | OrderPickupCompletedEmailProps
+    | OrderPickupCancelledEmailProps
     | GlsLabelCancelledEmailProps,
 >(
   props: T
@@ -288,6 +296,40 @@ const tryPublishTemplate = async (resend: Resend, id: string) => {
       `Publish warning for template ${id}: ${JSON.stringify(response.error)}`
     )
     return
+  }
+}
+
+const withPaymentReceiptTemplateData = (
+  language: TemplateLanguage
+): PaymentReceiptEmailProps => {
+  const order = mockPaymentReceipt.order
+  if (!order) {
+    throw new Error("mockPaymentReceipt.order is required")
+  }
+
+  return {
+    ...mockPaymentReceipt,
+    order: {
+      ...order,
+      id: ORDER_ENTITY_ID_PLACEHOLDER,
+      display_id: ORDER_ID_PLACEHOLDER,
+      metadata: {
+        ...(order.metadata ?? {}),
+        language,
+      },
+      customer: {
+        ...(order.customer ?? {}),
+        first_name: CUSTOMER_NAME_PLACEHOLDER,
+      },
+      shipping_address: {
+        ...(order.shipping_address ?? {}),
+        first_name: CUSTOMER_NAME_PLACEHOLDER,
+      },
+      billing_address: {
+        ...(order.billing_address ?? {}),
+        first_name: CUSTOMER_NAME_PLACEHOLDER,
+      },
+    },
   }
 }
 
@@ -394,6 +436,8 @@ export default async function syncResendTemplates({
   const paymentSkProps = withTemplatePlaceholders(
     withLanguage(mockOwnDeliveryPaymentNotice, "sk")
   )
+  const paymentReceiptHuProps = withPaymentReceiptTemplateData("hu")
+  const paymentReceiptSkProps = withPaymentReceiptTemplateData("sk")
   const fulfillmentCreatedHuProps = withTemplatePlaceholders(
     withLanguage(mockOwnDeliveryFulfillmentCreated, "hu")
   )
@@ -481,6 +525,34 @@ export default async function syncResendTemplates({
       html: normalizeHtmlForResendVariables(
         await render(
           React.createElement(OwnDeliveryPaymentNoticeEmail, paymentSkProps)
+        ),
+        "sk"
+      ),
+      variables: TEMPLATE_VARIABLES,
+    },
+    {
+      key: "payment-receipt",
+      language: "hu",
+      name: "Teherguminet - payment-receipt",
+      alias: "teherguminet-payment-receipt",
+      subject: "Sikeres fizetés visszaigazolása – Teherguminet.hu",
+      html: normalizeHtmlForResendVariables(
+        await render(
+          React.createElement(PaymentReceiptEmail, paymentReceiptHuProps)
+        ),
+        "hu"
+      ),
+      variables: TEMPLATE_VARIABLES,
+    },
+    {
+      key: "payment-receipt",
+      language: "sk",
+      name: "Teherguminet - payment-receipt (SK)",
+      alias: "teherguminet-payment-receipt-sk",
+      subject: "Potvrdenie úspešnej platby – Teherguminet.hu",
+      html: normalizeHtmlForResendVariables(
+        await render(
+          React.createElement(PaymentReceiptEmail, paymentReceiptSkProps)
         ),
         "sk"
       ),
