@@ -30,7 +30,6 @@ ENV NODE_ENV=production \
     HOST=0.0.0.0 \
     PORT=9000
 
-COPY --from=builder /server /server
 COPY --from=builder /server/. /server
 
 EXPOSE 9000
