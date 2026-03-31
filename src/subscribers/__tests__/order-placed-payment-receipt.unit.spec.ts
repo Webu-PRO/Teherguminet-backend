@@ -10,12 +10,28 @@ type QueryGraphFn = (input: unknown) => Promise<{ data: Array<unknown> }>
 
 describe("order-placed payment receipt fallback", () => {
   it("retries payment lookup and returns captured Stripe payment ids", async () => {
-    let attempt = 0
-    const graph = jest.fn<QueryGraphFn>().mockImplementation(async () => {
-      attempt += 1
+    let orderAttempt = 0
+    const graph = jest.fn<QueryGraphFn>().mockImplementation(async (input) => {
+      const payload = input as {
+        entity?: string
+      }
 
-      if (attempt === 1) {
-        return { data: [] }
+      if (payload.entity === "order") {
+        orderAttempt += 1
+        if (orderAttempt === 1) {
+          return {
+            data: [{ id: "order_79", payment_collections: [] }],
+          }
+        }
+
+        return {
+          data: [
+            {
+              id: "order_79",
+              payment_collections: [{ id: "pay_col_1" }],
+            },
+          ],
+        }
       }
 
       return {
@@ -24,16 +40,19 @@ describe("order-placed payment receipt fallback", () => {
             id: "pay_stripe_captured",
             provider_id: "pp_stripe_stripe",
             captured_at: "2026-03-31T16:58:01.000Z",
+            payment_collection_id: "pay_col_1",
           },
           {
             id: "pay_manual_captured",
             provider_id: "pp_manual_manual",
             captured_at: "2026-03-31T16:58:01.000Z",
+            payment_collection_id: "pay_col_1",
           },
           {
             id: "pay_stripe_not_captured",
             provider_id: "pp_stripe_stripe",
             captured_at: null,
+            payment_collection_id: "pay_col_1",
           },
         ],
       }
@@ -60,23 +79,42 @@ describe("order-placed payment receipt fallback", () => {
     )
 
     expect(paymentIds).toEqual(["pay_stripe_captured"])
-    expect(graph).toHaveBeenCalledTimes(2)
+    expect(graph).toHaveBeenCalledTimes(3)
   })
 
   it("sends receipts for resolved payments and continues on one failure", async () => {
-    const graph = jest.fn<QueryGraphFn>().mockResolvedValue({
-      data: [
-        {
-          id: "pay_ok",
-          provider_id: "pp_stripe_stripe",
-          captured_at: "2026-03-31T16:58:01.000Z",
-        },
-        {
-          id: "pay_fail",
-          provider_id: "pp_stripe_stripe",
-          captured_at: "2026-03-31T16:58:02.000Z",
-        },
-      ],
+    const graph = jest.fn<QueryGraphFn>().mockImplementation(async (input) => {
+      const payload = input as {
+        entity?: string
+      }
+
+      if (payload.entity === "order") {
+        return {
+          data: [
+            {
+              id: "order_79",
+              payment_collections: [{ id: "pay_col_1" }],
+            },
+          ],
+        }
+      }
+
+      return {
+        data: [
+          {
+            id: "pay_ok",
+            provider_id: "pp_stripe_stripe",
+            captured_at: "2026-03-31T16:58:01.000Z",
+            payment_collection_id: "pay_col_1",
+          },
+          {
+            id: "pay_fail",
+            provider_id: "pp_stripe_stripe",
+            captured_at: "2026-03-31T16:58:02.000Z",
+            payment_collection_id: "pay_col_1",
+          },
+        ],
+      }
     })
 
     const container = {
@@ -122,14 +160,32 @@ describe("order-placed payment receipt fallback", () => {
   })
 
   it("does nothing when no captured Stripe payments are found", async () => {
-    const graph = jest.fn<QueryGraphFn>().mockResolvedValue({
-      data: [
-        {
-          id: "pay_manual",
-          provider_id: "pp_manual_manual",
-          captured_at: "2026-03-31T16:58:01.000Z",
-        },
-      ],
+    const graph = jest.fn<QueryGraphFn>().mockImplementation(async (input) => {
+      const payload = input as {
+        entity?: string
+      }
+
+      if (payload.entity === "order") {
+        return {
+          data: [
+            {
+              id: "order_79",
+              payment_collections: [{ id: "pay_col_1" }],
+            },
+          ],
+        }
+      }
+
+      return {
+        data: [
+          {
+            id: "pay_manual",
+            provider_id: "pp_manual_manual",
+            captured_at: "2026-03-31T16:58:01.000Z",
+            payment_collection_id: "pay_col_1",
+          },
+        ],
+      }
     })
 
     const container = {

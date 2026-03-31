@@ -51,6 +51,16 @@ type PaymentLookupRecord = {
   id?: string | null
   provider_id?: string | null
   captured_at?: string | Date | null
+  payment_collection_id?: string | null
+}
+
+type PaymentCollectionLookupRecord = {
+  id?: string | null
+  payment_collections?:
+    | Array<{
+        id?: string | null
+      } | null>
+    | null
 }
 
 type PaymentLookupOptions = {
@@ -93,6 +103,24 @@ const resolveCapturedStripePaymentIds = (
   return Array.from(uniqueIds)
 }
 
+const resolvePaymentCollectionIds = (
+  order: PaymentCollectionLookupRecord | null | undefined
+) => {
+  const uniqueIds = new Set<string>()
+  const collections = order?.payment_collections ?? []
+
+  for (const collection of collections) {
+    const id = collection?.id?.trim()
+    if (!id) {
+      continue
+    }
+
+    uniqueIds.add(id)
+  }
+
+  return Array.from(uniqueIds)
+}
+
 export const findCapturedStripePaymentIdsForOrder = async (
   container: SubscriberArgs["container"],
   orderId: string,
@@ -111,20 +139,36 @@ export const findCapturedStripePaymentIdsForOrder = async (
     attempt <= config.maxAttempts;
     attempt += 1
   ) {
+    const { data: orderData } = await query.graph({
+      entity: "order",
+      fields: ["id", "payment_collections.id"],
+      filters: {
+        id: orderId,
+      },
+    })
+
+    const order = (orderData?.[0] ?? null) as
+      | PaymentCollectionLookupRecord
+      | null
+    const paymentCollectionIds = resolvePaymentCollectionIds(order)
+    if (!paymentCollectionIds.length) {
+      if (attempt < config.maxAttempts) {
+        await sleep(delayMs)
+        delayMs += config.retryBackoffMs
+      }
+      continue
+    }
+
     const { data } = await query.graph({
       entity: "payment",
       fields: [
         "id",
         "provider_id",
         "captured_at",
-        "payment_collection.order.id",
+        "payment_collection_id",
       ],
       filters: {
-        payment_collection: {
-          order: {
-            id: orderId,
-          },
-        },
+        payment_collection_id: paymentCollectionIds,
       },
     })
 

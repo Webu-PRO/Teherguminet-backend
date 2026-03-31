@@ -178,6 +178,43 @@ const CURRENCY_DECIMALS = parseCurrencyDecimals(
   process.env.BILLINGO_CURRENCY_DECIMALS
 )
 
+const isBillingoDebugEnabled = () => {
+  const raw = process.env.BILLINGO_DEBUG?.trim().toLowerCase()
+  return raw === "1" || raw === "true" || raw === "yes" || raw === "on"
+}
+
+const parseBodyForLog = (body: RequestInit["body"]) => {
+  if (typeof body !== "string") {
+    return null
+  }
+
+  try {
+    return JSON.parse(body) as Record<string, unknown>
+  } catch {
+    return body.length > 2000 ? `${body.slice(0, 2000)}…` : body
+  }
+}
+
+const summarizePayloadForLog = (payload: unknown) => {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return payload
+  }
+
+  const record = payload as Record<string, unknown>
+  const items = Array.isArray(record.items) ? record.items : null
+
+  return {
+    ...record,
+    ...(items
+      ? {
+          items_count: items.length,
+          items_preview: items.slice(0, 3),
+          items: undefined,
+        }
+      : {}),
+  }
+}
+
 const resolveDecimals = (currency: string): number => {
   const normalized = currency.toUpperCase()
   const override = CURRENCY_DECIMALS[normalized]
@@ -1011,6 +1048,20 @@ const billingoRequest = async <T>(
   )
 
   try {
+    const requestBodyRaw = parseBodyForLog(options.body)
+    const requestBodySummary = summarizePayloadForLog(requestBodyRaw)
+    const method = (options.method ?? "GET").toUpperCase()
+
+    if (isBillingoDebugEnabled()) {
+      console.info("[Billingo] request", {
+        path,
+        method,
+        timeoutMs: config.timeoutMs,
+        baseUrl: config.baseUrl,
+        body: requestBodySummary,
+      })
+    }
+
     const response = await fetch(`${config.baseUrl}${path}`, {
       ...options,
       headers: {
@@ -1045,12 +1096,15 @@ const billingoRequest = async <T>(
         errors?: unknown
       }
       console.error("[Billingo] request failed", {
+        path,
+        method,
         status: response.status,
         statusText: response.statusText,
         message:
           typeof errorRecord?.message === "string"
             ? errorRecord.message
             : undefined,
+        request_body: requestBodySummary,
         errors: errorRecord?.errors,
         errors_json: (() => {
           try {
