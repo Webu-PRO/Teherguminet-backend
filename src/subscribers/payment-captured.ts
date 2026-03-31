@@ -64,6 +64,21 @@ type PaymentRecord = {
 }
 
 const OWN_DELIVERY_PAYMENT_TEMPLATE = "own-delivery-payment-notice"
+const PAYMENT_ORDER_LINK_MAX_ATTEMPTS = 5
+const PAYMENT_ORDER_LINK_RETRY_DELAY_MS = 1200
+const PAYMENT_ORDER_LINK_RETRY_BACKOFF_MS = 1200
+
+type PaymentOrderLinkRecord = {
+  payment_collection?: {
+    order?: {
+      id?: string | null
+      email?: string | null
+    } | null
+  } | null
+}
+
+const sleep = (ms: number) =>
+  new Promise((resolve) => setTimeout(resolve, ms))
 
 const resolveLogger = (container: SubscriberArgs["container"]) => {
   try {
@@ -114,6 +129,41 @@ const resolveFulfillmentItems = (items?: PaymentOrder["items"]) => {
           : 0,
     }))
     .filter((item) => item.quantity > 0)
+}
+
+const waitForPaymentOrderLink = async (
+  container: SubscriberArgs["container"],
+  paymentId: string
+) => {
+  const query = container.resolve<Query>(ContainerRegistrationKeys.QUERY)
+  let delayMs = PAYMENT_ORDER_LINK_RETRY_DELAY_MS
+
+  for (let attempt = 1; attempt <= PAYMENT_ORDER_LINK_MAX_ATTEMPTS; attempt += 1) {
+    const { data: payments } = await query.graph({
+      entity: "payment",
+      fields: [
+        "id",
+        "payment_collection.order.id",
+        "payment_collection.order.email",
+      ],
+      filters: {
+        id: paymentId,
+      },
+    })
+
+    const payment = payments?.[0] as PaymentOrderLinkRecord | undefined
+    const order = payment?.payment_collection?.order
+    if (order?.id && order?.email?.trim()) {
+      return true
+    }
+
+    if (attempt < PAYMENT_ORDER_LINK_MAX_ATTEMPTS) {
+      await sleep(delayMs)
+      delayMs += PAYMENT_ORDER_LINK_RETRY_BACKOFF_MS
+    }
+  }
+
+  return false
 }
 
 const maybeCreateGlsFulfillment = async (
@@ -500,14 +550,32 @@ export default async function paymentCapturedHandler({
     return
   }
 
+  const logger = resolveLogger(container)
   await maybeCreateGlsFulfillment(container, data.id)
-  await maybeCreateBillingoReceipt(container, data.id, resolveLogger(container))
+  await maybeCreateBillingoReceipt(container, data.id, logger)
 
-  await sendPaymentReceiptWorkflow(container).run({
-    input: {
-      paymentId: data.id,
-    },
-  })
+  const hasOrderLink = await waitForPaymentOrderLink(container, data.id)
+  if (!hasOrderLink) {
+    logger?.warn?.(
+      `payment-captured: payment ${data.id} has no linked order/email after retry window`
+    )
+  }
+
+  try {
+    await sendPaymentReceiptWorkflow(container).run({
+      input: {
+        paymentId: data.id,
+      },
+    })
+  } catch (error) {
+    logger?.warn?.(
+      `payment-captured: failed to run payment-receipt workflow for payment ${data.id}`
+    )
+    logger?.error?.(
+      `payment-captured: payment-receipt workflow error for payment ${data.id}`,
+      error as Error
+    )
+  }
 
   await maybeSendOwnDeliveryPaymentNotice(container, data.id)
 }
