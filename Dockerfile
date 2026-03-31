@@ -13,7 +13,12 @@ COPY package.json yarn.lock .yarnrc.yml ./
 # Install dependencies with the Yarn version pinned in package.json
 RUN corepack enable \
   && corepack prepare yarn@1.22.22 --activate \
-  && yarn install --pure-lockfile --production=false
+  && sh -lc 'for attempt in 1 2 3 4 5; do \
+    yarn install --pure-lockfile --production=false --network-timeout 600000 && exit 0; \
+    echo "yarn install failed (attempt ${attempt}/5), retrying..." >&2; \
+    sleep $((attempt * 5)); \
+  done; \
+  exit 1'
 
 # Copy source code
 COPY . .

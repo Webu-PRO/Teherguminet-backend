@@ -12,7 +12,12 @@ FROM base AS deps
 COPY package.json yarn.lock .yarnrc.yml ./
 
 RUN --mount=type=cache,id=yarn-cache-backend,target=/usr/local/share/.cache/yarn \
-  yarn install --frozen-lockfile --production=false
+  sh -lc 'for attempt in 1 2 3 4 5; do \
+    yarn install --frozen-lockfile --production=false --network-timeout 600000 && exit 0; \
+    echo "yarn install failed (attempt ${attempt}/5), retrying..." >&2; \
+    sleep $((attempt * 5)); \
+  done; \
+  exit 1'
 
 FROM deps AS builder
 WORKDIR /server
