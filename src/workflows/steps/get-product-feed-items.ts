@@ -25,8 +25,105 @@ type StepInput = {
   country_code: string;
 };
 
-const formatPrice = (price: number, currencyCode: string) => {
+type ProductImage = {
+  url?: string | null;
+} | null;
+
+const ABSOLUTE_URL_PREFIX_REGEX = /^[a-z][a-z\d+\-.]*:\/\//i;
+
+export const formatPrice = (price: number, currencyCode: string) => {
   return `${Number(price).toFixed(2)} ${currencyCode.toUpperCase()}`;
+};
+
+const toAbsoluteUrl = (
+  rawValue: string | null | undefined,
+  storefrontBaseUrl?: string
+): string | undefined => {
+  const value = (rawValue ?? "").trim();
+
+  if (!value) {
+    return undefined;
+  }
+
+  let candidate = value;
+
+  if (candidate.startsWith("//")) {
+    candidate = `https:${candidate}`;
+  } else if (candidate.startsWith("/")) {
+    if (!storefrontBaseUrl) {
+      return undefined;
+    }
+    candidate = `${storefrontBaseUrl}${candidate}`;
+  } else if (!ABSOLUTE_URL_PREFIX_REGEX.test(candidate)) {
+    candidate = `https://${candidate}`;
+  }
+
+  try {
+    const parsed = new URL(candidate);
+    return parsed.toString();
+  } catch {
+    return undefined;
+  }
+};
+
+const normalizeStorefrontUrl = (rawValue: string | null | undefined) => {
+  const absoluteUrl = toAbsoluteUrl(rawValue);
+
+  if (!absoluteUrl) {
+    return undefined;
+  }
+
+  return absoluteUrl.replace(/\/+$/, "");
+};
+
+export const resolveStorefrontBaseUrl = (
+  configStorefrontUrl: string | null | undefined,
+  envStorefrontUrl: string | null | undefined
+) => {
+  const fromConfig = normalizeStorefrontUrl(configStorefrontUrl);
+  if (fromConfig) {
+    return fromConfig;
+  }
+
+  const fromEnv = normalizeStorefrontUrl(envStorefrontUrl);
+  if (fromEnv) {
+    return fromEnv;
+  }
+
+  return undefined;
+};
+
+export const resolveFeedImageUrl = (
+  rawImageUrl: string | null | undefined,
+  storefrontBaseUrl: string
+) => {
+  return toAbsoluteUrl(rawImageUrl, storefrontBaseUrl);
+};
+
+export const resolveAdditionalImageLink = (
+  images: ProductImage[] | null | undefined,
+  primaryImageUrl: string | undefined,
+  storefrontBaseUrl: string
+) => {
+  if (!Array.isArray(images)) {
+    return undefined;
+  }
+
+  for (const image of images) {
+    const normalized = resolveFeedImageUrl(image?.url, storefrontBaseUrl);
+
+    if (!normalized) {
+      continue;
+    }
+
+    if (primaryImageUrl && normalized === primaryImageUrl) {
+      continue;
+    }
+
+    return normalized;
+  }
+
+  return undefined;
 };
 
 export const getProductFeedItemsStep = createStep(
@@ -40,9 +137,16 @@ export const getProductFeedItemsStep = createStep(
       };
     };
 
-    const storefrontUrl =
-      configModule.admin?.storefrontUrl || process.env.STOREFRONT_URL || "";
-    const normalizedStorefrontUrl = storefrontUrl.replace(/\/+$/, "");
+    const storefrontBaseUrl = resolveStorefrontBaseUrl(
+      configModule.admin?.storefrontUrl,
+      process.env.STOREFRONT_URL
+    );
+
+    if (!storefrontBaseUrl) {
+      throw new Error(
+        "Product feed requires an absolute storefront URL. Set admin.storefrontUrl or STOREFRONT_URL."
+      );
+    }
 
     const limit = 100;
     let offset = 0;
@@ -107,10 +211,29 @@ export const getProductFeedItemsStep = createStep(
             })
           : undefined;
 
+        const productHandle =
+          typeof product.handle === "string" && product.handle.trim().length
+            ? product.handle.trim()
+            : product.id;
+
+        const productLink = `${storefrontBaseUrl}/${encodeURIComponent(countryCode)}/${encodeURIComponent(productHandle)}`;
+
+        const primaryImageLink = resolveFeedImageUrl(
+          product.thumbnail ?? product.images?.[0]?.url,
+          storefrontBaseUrl
+        );
+
+        const additionalImageLink = resolveAdditionalImageLink(
+          product.images,
+          primaryImageLink,
+          storefrontBaseUrl
+        );
+
         for (const variant of product.variants) {
           const calculatedPrice = (
             variant as { calculated_price?: CalculatedPriceSet | null }
           ).calculated_price;
+
           if (!calculatedPrice) {
             continue;
           }
@@ -140,14 +263,12 @@ export const getProductFeedItemsStep = createStep(
           feedItems.push({
             id: variant.id,
             title: product.title,
-            description: product.description ?? "",
-            link: `${normalizedStorefrontUrl}/${input.country_code}/${product.handle || product.id}`,
-            image_link: product.thumbnail ?? "",
-            additional_image_link: product.images
-              ?.map((image) => image.url)
-              .join(","),
+            description: product.description?.trim() || product.title,
+            link: productLink,
+            image_link: primaryImageLink,
+            additional_image_link: additionalImageLink,
             availability: stockStatus,
-            price: formatPrice(originalPrice as number, currencyCode),
+            price: formatPrice(originalPrice, currencyCode),
             sale_price:
               typeof salePrice === "number"
                 ? formatPrice(salePrice, currencyCode)

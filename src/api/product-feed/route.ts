@@ -15,6 +15,7 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
     },
   });
 
-  res.setHeader("Content-Type", "application/rss+xml; charset=utf-8");
+  res.setHeader("Content-Type", "application/xml; charset=utf-8");
+  res.setHeader("Content-Disposition", 'inline; filename="product-feed.xml"');
   res.status(200).send(result.xml);
 }

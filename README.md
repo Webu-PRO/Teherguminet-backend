@@ -52,6 +52,19 @@ If you deploy the backend on `https://admin.teherguminet.hu` (for example throug
 
 Coolify exposes a “Environment Variables” panel per service—add or update the variables there so the values propagate to the container. The project now falls back to these domains automatically when the variables are omitted, so you can keep local origins for development and append production URLs separated by commas as needed.
 
+## Product Feed for Meta & Google
+
+The backend exposes a product feed endpoint that is compatible with Meta and Google catalog ingestion:
+
+- `GET /product-feed?currency_code=eur&country_code=hu`
+
+Requirements:
+
+- Set `admin.storefrontUrl` in `medusa-config.ts` **or** define `STOREFRONT_URL` in the backend environment.
+- The storefront URL must be absolute (for example `https://teherguminet.hu`).
+
+The endpoint returns `application/rss+xml` and includes product-variant feed items with availability and price fields.
+
 ## Email Delivery (Resend)
 
 This backend exclusively uses the custom Resend notification provider defined in `medusa-config.ts`. To avoid silent delivery failures:
