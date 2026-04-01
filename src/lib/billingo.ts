@@ -420,10 +420,90 @@ const roundTo = (value: number, decimals: number) => {
   return Math.round(value * factor) / factor
 }
 
+type BillingoAmountMode = "major" | "minor"
+
 const toMajor = (amount: number, currency: string) => {
   const decimals = resolveDecimals(currency)
   const divisor = Math.pow(10, decimals)
   return divisor ? amount / divisor : amount
+}
+
+const normalizeAmountForBillingo = ({
+  amount,
+  currency,
+  mode,
+}: {
+  amount: number
+  currency: string
+  mode: BillingoAmountMode
+}) => {
+  if (mode === "minor") {
+    return toMajor(amount, currency)
+  }
+
+  return amount
+}
+
+const hasFractionalComponent = (value: number) => {
+  return Math.abs(value - Math.round(value)) > 0.000001
+}
+
+const inferAmountModeFromOrder = ({
+  currency,
+  values,
+}: {
+  currency: string
+  values: Array<number | null | undefined>
+}): BillingoAmountMode => {
+  if (resolveDecimals(currency) === 0) {
+    return "major"
+  }
+
+  const finite = values.filter(
+    (value): value is number =>
+      typeof value === "number" && Number.isFinite(value)
+  )
+  if (!finite.length) {
+    return "major"
+  }
+
+  if (finite.some((value) => hasFractionalComponent(value))) {
+    return "major"
+  }
+
+  const maxAbs = finite.reduce(
+    (max, value) => Math.max(max, Math.abs(value)),
+    0
+  )
+
+  // Legacy guard: if all observed values are whole numbers and very large for
+  // a decimal currency, treat them as minor units.
+  return maxAbs >= 20_000 ? "minor" : "major"
+}
+
+const shouldSwitchAmountModeForMismatch = ({
+  mode,
+  targetTotal,
+  estimatedTotal,
+}: {
+  mode: BillingoAmountMode
+  targetTotal: number | null
+  estimatedTotal: number
+}) => {
+  if (
+    mode !== "minor" ||
+    typeof targetTotal !== "number" ||
+    !Number.isFinite(targetTotal) ||
+    targetTotal <= 0 ||
+    targetTotal > 1000 ||
+    !Number.isFinite(estimatedTotal) ||
+    estimatedTotal <= 0
+  ) {
+    return false
+  }
+
+  const ratio = targetTotal / estimatedTotal
+  return ratio >= 95 && ratio <= 105
 }
 
 const DEFAULT_VAT_RATES = [0, 5, 18, 27]
@@ -562,14 +642,20 @@ const resolveInvoiceUnitPrice = ({
   currency,
   vat,
   unitPriceType,
+  amountMode,
 }: {
   lineTotal: number
   quantity: number
   currency: string
   vat: string
   unitPriceType: BillingoConfig["invoiceUnitPriceType"]
+  amountMode: BillingoAmountMode
 }) => {
-  const grossUnitPrice = toMajor(lineTotal / quantity, currency)
+  const grossUnitPrice = normalizeAmountForBillingo({
+    amount: lineTotal / quantity,
+    currency,
+    mode: amountMode,
+  })
   const currencyDecimals = resolveDecimals(currency)
   const vatPercent = parseVatPercent(vat)
 
@@ -1891,6 +1977,72 @@ export const createBillingoDocument = async (
     }
   }
 
+  const observedAmountValues: number[] = []
+  const maybePushAmountValue = (
+    value: number | null | undefined
+  ) => {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      return
+    }
+    observedAmountValues.push(value)
+  }
+
+  maybePushAmountValue(targetTotalRounded)
+  maybePushAmountValue(totalGross)
+  maybePushAmountValue(itemGross)
+  maybePushAmountValue(taxTotal)
+  maybePushAmountValue(shippingGross)
+  maybePushAmountValue(shippingSubtotal)
+  maybePushAmountValue(shippingTaxTotal)
+  maybePushAmountValue(originalOrderTotal)
+  for (const item of baseItems) {
+    maybePushAmountValue(item.lineTotal)
+  }
+
+  let amountMode = inferAmountModeFromOrder({
+    currency,
+    values: observedAmountValues,
+  })
+
+  const estimateBillingoTotal = (mode: BillingoAmountMode) => {
+    return roundTo(
+      baseItems.reduce((sum, item) => {
+        const normalized = normalizeAmountForBillingo({
+          amount: item.lineTotal,
+          currency,
+          mode,
+        })
+        return sum + normalized
+      }, 0),
+      decimals
+    )
+  }
+
+  const estimatedWithInitialMode = estimateBillingoTotal(amountMode)
+  if (
+    shouldSwitchAmountModeForMismatch({
+      mode: amountMode,
+      targetTotal: targetTotalRounded,
+      estimatedTotal: estimatedWithInitialMode,
+    })
+  ) {
+    console.warn("[Billingo] amount mode auto-correction applied", {
+      orderId: order.id,
+      currency,
+      fromMode: amountMode,
+      toMode: "major",
+      targetTotal: targetTotalRounded,
+      estimatedTotal: estimatedWithInitialMode,
+    })
+    amountMode = "major"
+  } else if (amountMode === "minor") {
+    console.warn("[Billingo] using inferred minor-unit order totals", {
+      orderId: order.id,
+      currency,
+      estimatedTotal: estimatedWithInitialMode,
+    })
+  }
+
   if (!baseItems.length) {
     if (documentType === "invoice") {
       throw new Error("Billingo: invoice items missing")
@@ -1929,7 +2081,11 @@ export const createBillingoDocument = async (
     const items: BillingoReceiptItem[] = baseItems
       .map((item) => {
         const unitPrice = roundTo(
-          toMajor(item.lineTotal, currency),
+          normalizeAmountForBillingo({
+            amount: item.lineTotal,
+            currency,
+            mode: amountMode,
+          }),
           decimals
         )
         const name =
@@ -1987,6 +2143,7 @@ export const createBillingoDocument = async (
         currency,
         vat: item.vat,
         unitPriceType: config.invoiceUnitPriceType,
+        amountMode,
       })
       return {
         name: item.title,
