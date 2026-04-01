@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react"
 import { defineRouteConfig } from "@medusajs/admin-sdk"
-import { DocumentText } from "@medusajs/icons"
+import { LightBulb } from "@medusajs/icons"
 import { Button, Container, Heading, Input, Select, Text, toast } from "@medusajs/ui"
 
 const FEED_MARKETS = {
@@ -108,7 +108,10 @@ const XmlFeedPage = () => {
     <Container className="p-0">
       <div className="flex flex-col gap-y-4 px-6 py-4">
         <div>
-          <Heading level="h1">XML FEED</Heading>
+          <div className="flex items-center gap-2">
+            <LightBulb className="text-ui-fg-subtle" />
+            <Heading level="h1">XML FEED</Heading>
+          </div>
           <Text size="small" className="text-ui-fg-subtle mt-1">
             Generate and access the product XML feed URL for Meta and Google.
           </Text>
@@ -173,7 +176,7 @@ const XmlFeedPage = () => {
 
 export const config = defineRouteConfig({
   label: "XML FEED",
-  icon: DocumentText,
+  icon: LightBulb,
 })
 
 export default XmlFeedPage

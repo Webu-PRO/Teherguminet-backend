@@ -31,6 +31,7 @@
     "postinstall": "patch-package"
   },
   "dependencies": {
+    "@alpha-solutions/medusa-image-alt": "^1.1.0",
     "@medusajs/admin-sdk": "2.13.2",
     "@medusajs/cli": "2.13.2",
     "@medusajs/framework": "2.13.2",

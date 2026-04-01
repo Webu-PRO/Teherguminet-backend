@@ -329,6 +329,10 @@ module.exports = defineConfig({
       resolve: "@rsc-labs/medusa-store-analytics-v2",
       options: {},
     },
+    {
+      resolve: "@alpha-solutions/medusa-image-alt",
+      options: {},
+    },
   ],
   auth: {
     customer: {
