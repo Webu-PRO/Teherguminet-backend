@@ -234,28 +234,138 @@ const resolveConfiguredConversionRate = (currency: string) => {
   return parsed
 }
 
-const resolveConversionRate = (
-  currency: string,
-  extraPayload?: Record<string, unknown> | null
+const resolveConversionRateFromApi = async (
+  config: BillingoConfig,
+  fromCurrency: string,
+  documentDate: string
 ) => {
-  if (currency.toUpperCase() === "HUF") {
+  const controller = new AbortController()
+  const timeout = setTimeout(
+    () => controller.abort(),
+    config.timeoutMs
+  )
+
+  const query = new URLSearchParams({
+    from: fromCurrency,
+    to: "HUF",
+    date: documentDate,
+  })
+
+  try {
+    const response = await fetch(
+      `${config.baseUrl}/currencies?${query.toString()}`,
+      {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+          "X-API-KEY": config.apiKey,
+        },
+        signal: controller.signal,
+      }
+    )
+
+    if (!response.ok) {
+      console.warn("[Billingo] failed to fetch conversion_rate", {
+        fromCurrency,
+        status: response.status,
+        statusText: response.statusText,
+      })
+      return null
+    }
+
+    const text = await response.text()
+    if (!text) {
+      return null
+    }
+
+    let data: unknown = null
+    try {
+      data = JSON.parse(text)
+    } catch {
+      return null
+    }
+
+    const payload =
+      data && typeof data === "object" && !Array.isArray(data)
+        ? (data as Record<string, unknown>)
+        : null
+
+    const parsedRate = readNumber(
+      payload?.conversion_rate,
+      payload?.conversation_rate,
+      payload?.rate
+    )
+    if (!parsedRate || parsedRate <= 0) {
+      return null
+    }
+
+    return parsedRate
+  } catch (error) {
+    console.warn("[Billingo] conversion_rate request failed", {
+      fromCurrency,
+      message:
+        error instanceof Error ? error.message : "Unknown error",
+    })
+    return null
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+const resolveConversionRate = async ({
+  config,
+  currency,
+  documentType,
+  documentDate,
+  extraPayload,
+}: {
+  config: BillingoConfig
+  currency: string
+  documentType: BillingoDocumentType
+  documentDate: string
+  extraPayload?: Record<string, unknown> | null
+}) => {
+  const normalizedCurrency = currency.toUpperCase()
+  if (normalizedCurrency === "HUF") {
     return undefined
   }
 
-  const payloadRate = readNumber(extraPayload?.conversion_rate)
+  const payloadRate = readNumber(
+    extraPayload?.conversion_rate,
+    extraPayload?.conversation_rate,
+    extraPayload?.rate
+  )
   if (payloadRate && payloadRate > 0) {
     return payloadRate
   }
 
-  const configuredRate = resolveConfiguredConversionRate(currency)
+  const apiRate = await resolveConversionRateFromApi(
+    config,
+    normalizedCurrency,
+    documentDate
+  )
+  if (apiRate && apiRate > 0) {
+    return apiRate
+  }
+
+  const configuredRate = resolveConfiguredConversionRate(
+    normalizedCurrency
+  )
   if (configuredRate) {
     return configuredRate
   }
 
+  if (documentType === "invoice") {
+    throw new Error(
+      `Billingo: missing conversion_rate for non-HUF invoice (${normalizedCurrency})`
+    )
+  }
+
   console.warn(
-    "[Billingo] missing conversion_rate for non-HUF currency, defaulting to 1",
+    "[Billingo] missing conversion_rate for non-HUF document, defaulting to 1",
     {
-      currency: currency.toUpperCase(),
+      currency: normalizedCurrency,
+      documentType,
     }
   )
   return 1
@@ -1277,8 +1387,17 @@ export const createBillingoDocument = async (
   const currency = order.currency_code?.toUpperCase() || "EUR"
   const documentType = type ?? resolveBillingoDocumentType(order, config)
   const decimals = resolveDecimals(currency)
+  const documentDate = toDateString(
+    (order as OrderDTO & { created_at?: string | Date }).created_at
+  )
   const extraPayload = resolveExtraPayload(order, documentType)
-  const conversionRate = resolveConversionRate(currency, extraPayload)
+  const conversionRate = await resolveConversionRate({
+    config,
+    currency,
+    documentType,
+    documentDate,
+    extraPayload,
+  })
   const paymentMethod = resolvePaymentMethod(
     order,
     config.paymentMethodDefault
@@ -1605,27 +1724,44 @@ export const createBillingoDocument = async (
 
       const quantity = Math.max(quantityValue, 1)
       const unitPrice =
-        readNumber(record.unit_price, record.raw_unit_price) ?? 0
+        readNumber(
+          record.unit_price,
+          record.raw_unit_price,
+          detail?.unit_price,
+          detail?.raw_unit_price
+        ) ?? 0
       const originalTotal =
         readNumber(
           record.original_total,
           record.raw_original_total,
+          detail?.original_total,
+          detail?.raw_original_total,
           record.total,
-          record.item_total
+          record.item_total,
+          detail?.total,
+          detail?.item_total,
+          detail?.raw_total,
+          detail?.raw_item_total
         ) ?? unitPrice * quantity
       const subtotal =
         readNumber(
           record.subtotal,
           record.raw_subtotal,
+          detail?.subtotal,
+          detail?.raw_subtotal,
           record.original_subtotal,
-          record.raw_original_subtotal
+          record.raw_original_subtotal,
+          detail?.original_subtotal,
+          detail?.raw_original_subtotal
         ) ?? unitPrice * quantity
       const discount =
         readNumber(
           record.discount_total,
           record.raw_discount_total,
           record.discount_subtotal,
-          record.raw_discount_subtotal
+          record.raw_discount_subtotal,
+          detail?.discount_total,
+          detail?.raw_discount_total
         ) ?? 0
       const lineTotalOriginal =
         readNumber(
@@ -1636,14 +1772,26 @@ export const createBillingoDocument = async (
           record.total,
           record.item_total,
           record.raw_total,
-          record.raw_item_total
+          record.raw_item_total,
+          detail?.original_total,
+          detail?.raw_original_total,
+          detail?.subtotal,
+          detail?.raw_subtotal,
+          detail?.total,
+          detail?.item_total,
+          detail?.raw_total,
+          detail?.raw_item_total
         ) ?? unitPrice * quantity
       const lineTotalDiscounted =
         readNumber(
           record.total,
           record.item_total,
           record.raw_total,
-          record.raw_item_total
+          record.raw_item_total,
+          detail?.total,
+          detail?.item_total,
+          detail?.raw_total,
+          detail?.raw_item_total
         ) ??
         Math.max(originalTotal - discount, 0) ??
         Math.max(subtotal - discount, 0)
@@ -1744,6 +1892,10 @@ export const createBillingoDocument = async (
   }
 
   if (!baseItems.length) {
+    if (documentType === "invoice") {
+      throw new Error("Billingo: invoice items missing")
+    }
+
     const fallbackTotal =
       typeof targetTotalRounded === "number"
         ? targetTotalRounded
@@ -1854,9 +2006,6 @@ export const createBillingoDocument = async (
     throw new Error("Billingo: no invoice items available")
   }
 
-  const documentDate = toDateString(
-    (order as OrderDTO & { created_at?: string | Date }).created_at
-  )
   const bankAccountIdOverride = readNumber(
     extraPayload?.bank_account_id
   )
