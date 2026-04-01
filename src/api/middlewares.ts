@@ -3,6 +3,7 @@ import {
   validateAndTransformQuery,
 } from "@medusajs/framework/http";
 import { z } from "@medusajs/framework/zod";
+import { adminDiscountCodeMiddlewares } from "./admin/discount-code/middlewares";
 
 const productFeedQuerySchema = z
   .object({
@@ -41,5 +42,6 @@ export default defineMiddlewares({
       methods: ["GET"],
       middlewares: [validateAndTransformQuery(productFeedQuerySchema, {})],
     },
+    ...adminDiscountCodeMiddlewares,
   ],
 });
