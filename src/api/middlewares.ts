@@ -7,6 +7,7 @@ import { adminDiscountCodeMiddlewares } from "./admin/discount-code/middlewares"
 import { adminFeedStatusMiddlewares } from "./admin/feed-status/middlewares";
 import { adminAiAgentMiddlewares } from "./admin/ai-agent/middlewares";
 import { adminSeoSettingsMiddlewares } from "./admin/seo-settings/middlewares";
+import { adminProductLocalizationMiddlewares } from "./admin/products/localization/middlewares";
 
 const productFeedQuerySchema = z
   .object({
@@ -21,22 +22,7 @@ const productFeedQuerySchema = z
       .min(1)
       .transform((value) => value.toLowerCase()),
   })
-  .superRefine((value, ctx) => {
-    const isValidPair =
-      (value.country_code === "hu" && value.currency_code === "huf") ||
-      (value.country_code === "sk" && value.currency_code === "eur");
-
-    if (isValidPair) {
-      return;
-    }
-
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message:
-        "Unsupported product feed market. Supported pairs: hu+huf, sk+eur.",
-      path: ["country_code"],
-    });
-  });
+  .strict();
 
 export default defineMiddlewares({
   routes: [
@@ -49,5 +35,6 @@ export default defineMiddlewares({
     ...adminFeedStatusMiddlewares,
     ...adminAiAgentMiddlewares,
     ...adminSeoSettingsMiddlewares,
+    ...adminProductLocalizationMiddlewares,
   ],
 });

@@ -3,7 +3,7 @@ import { AdminUpdateFeedStatus } from "../middlewares"
 describe("admin feed-status middleware schema", () => {
   it("accepts valid payload", () => {
     const parsed = AdminUpdateFeedStatus.safeParse({
-      market: "hu_huf",
+      market: "reg_123",
       channel: "facebook",
       active: true,
     })
@@ -11,9 +11,9 @@ describe("admin feed-status middleware schema", () => {
     expect(parsed.success).toBe(true)
   })
 
-  it("rejects unknown market", () => {
+  it("rejects empty market identifier", () => {
     const parsed = AdminUpdateFeedStatus.safeParse({
-      market: "hu_eur",
+      market: " ",
       channel: "facebook",
       active: true,
     })
@@ -23,7 +23,7 @@ describe("admin feed-status middleware schema", () => {
 
   it("rejects unknown channel", () => {
     const parsed = AdminUpdateFeedStatus.safeParse({
-      market: "hu_huf",
+      market: "reg_123",
       channel: "meta",
       active: true,
     })
@@ -33,7 +33,7 @@ describe("admin feed-status middleware schema", () => {
 
   it("rejects non-boolean active flag", () => {
     const parsed = AdminUpdateFeedStatus.safeParse({
-      market: "sk_eur",
+      market: "reg_456",
       channel: "google",
       active: "yes",
     })

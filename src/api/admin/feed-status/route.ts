@@ -4,8 +4,10 @@ import type { IStoreModuleService } from "@medusajs/types"
 import { Modules } from "@medusajs/utils"
 
 import type { AdminUpdateFeedStatusType } from "./middlewares"
+import { listFeedMarketsFromRegions } from "../../../lib/feed-markets-loader"
 import {
   FEED_STATUS_METADATA_KEY,
+  buildFeedStatusContext,
   normalizeFeedChannelStatusByMarket,
   setFeedChannelActiveForMarket,
   upsertFeedStatusInStoreMetadata,
@@ -18,7 +20,11 @@ const resolvePrimaryStore = async (req: MedusaRequest) => {
   return stores[0] ?? null
 }
 
-const buildPayload = (store: { id?: string; metadata?: unknown } | null) => {
+const buildPayload = (
+  store: { id?: string; metadata?: unknown } | null,
+  markets: Awaited<ReturnType<typeof listFeedMarketsFromRegions>>
+) => {
+  const statusContext = buildFeedStatusContext(markets)
   const storedStatus = store?.metadata
     ? (store.metadata as Record<string, unknown>)[FEED_STATUS_METADATA_KEY]
     : null
@@ -26,13 +32,18 @@ const buildPayload = (store: { id?: string; metadata?: unknown } | null) => {
   return {
     ok: true,
     store_id: store?.id ?? null,
-    status: normalizeFeedChannelStatusByMarket(storedStatus),
+    markets,
+    status: normalizeFeedChannelStatusByMarket(storedStatus, statusContext),
   }
 }
 
 export async function GET(req: MedusaRequest, res: MedusaResponse) {
-  const store = await resolvePrimaryStore(req)
-  res.status(200).json(buildPayload(store))
+  const [store, markets] = await Promise.all([
+    resolvePrimaryStore(req),
+    listFeedMarketsFromRegions(req.scope),
+  ])
+
+  res.status(200).json(buildPayload(store, markets))
 }
 
 export async function PATCH(
@@ -48,6 +59,16 @@ export async function PATCH(
     return
   }
 
+  const markets = await listFeedMarketsFromRegions(req.scope)
+  const statusContext = buildFeedStatusContext(markets)
+
+  if (!statusContext.marketKeys.includes(req.validatedBody.market)) {
+    res.status(400).json({
+      message: `Unknown feed market '${req.validatedBody.market}'.`,
+    })
+    return
+  }
+
   const existingMetadata =
     store.metadata && typeof store.metadata === "object"
       ? (store.metadata as Record<string, unknown>)
@@ -58,6 +79,7 @@ export async function PATCH(
     market: req.validatedBody.market,
     channel: req.validatedBody.channel,
     active: req.validatedBody.active,
+    context: statusContext,
   })
 
   const nextMetadata = upsertFeedStatusInStoreMetadata(existingMetadata, nextStatus)
@@ -74,7 +96,7 @@ export async function PATCH(
   res.status(200).json({
     ok: true,
     store_id: store.id,
+    markets,
     status: nextStatus,
   })
 }
-

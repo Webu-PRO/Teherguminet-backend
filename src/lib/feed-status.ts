@@ -1,15 +1,25 @@
+import {
+  getLegacyPairToRegionMap,
+  getFeedStatusRegionKeys,
+  type FeedMarket,
+} from "./feed-markets"
+
 export const FEED_STATUS_METADATA_KEY = "feed_channel_status"
 
-export const FEED_STATUS_MARKETS = ["hu_huf", "sk_eur"] as const
 export const FEED_STATUS_CHANNELS = ["facebook", "google"] as const
 
-export type FeedStatusMarket = (typeof FEED_STATUS_MARKETS)[number]
+export type FeedStatusMarket = string
 export type FeedStatusChannel = (typeof FEED_STATUS_CHANNELS)[number]
 
 export type FeedChannelStatusByMarket = Record<
   FeedStatusMarket,
   Record<FeedStatusChannel, boolean>
 >
+
+export type FeedStatusContext = {
+  marketKeys: FeedStatusMarket[]
+  legacyPairToMarketKeys: Record<string, FeedStatusMarket[]>
+}
 
 const toRecord = (value: unknown): Record<string, unknown> => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -19,30 +29,69 @@ const toRecord = (value: unknown): Record<string, unknown> => {
   return value as Record<string, unknown>
 }
 
-export const getDefaultFeedChannelStatusByMarket = (): FeedChannelStatusByMarket => {
+const buildEmptyChannelStatus = (): Record<FeedStatusChannel, boolean> => {
   return {
-    hu_huf: {
-      facebook: false,
-      google: false,
-    },
-    sk_eur: {
-      facebook: false,
-      google: false,
-    },
+    facebook: false,
+    google: false,
+  }
+}
+
+export const buildFeedStatusContext = (
+  markets: Pick<FeedMarket, "region_id" | "legacy_market_key">[]
+): FeedStatusContext => {
+  return {
+    marketKeys: getFeedStatusRegionKeys(markets),
+    legacyPairToMarketKeys: getLegacyPairToRegionMap(markets),
+  }
+}
+
+export const getDefaultFeedChannelStatusByMarket = (
+  marketKeys: FeedStatusMarket[]
+): FeedChannelStatusByMarket => {
+  const next: FeedChannelStatusByMarket = {}
+
+  for (const marketKey of marketKeys) {
+    next[marketKey] = buildEmptyChannelStatus()
+  }
+
+  return next
+}
+
+const applyRawStatusForMarket = (
+  target: FeedChannelStatusByMarket,
+  rawMarketRecord: Record<string, unknown>,
+  marketKey: FeedStatusMarket
+) => {
+  if (!target[marketKey]) {
+    target[marketKey] = buildEmptyChannelStatus()
+  }
+
+  for (const channel of FEED_STATUS_CHANNELS) {
+    if (rawMarketRecord[channel] === true) {
+      target[marketKey][channel] = true
+    }
   }
 }
 
 export const normalizeFeedChannelStatusByMarket = (
-  value: unknown
+  value: unknown,
+  context: FeedStatusContext
 ): FeedChannelStatusByMarket => {
   const raw = toRecord(value)
-  const next = getDefaultFeedChannelStatusByMarket()
+  const next = getDefaultFeedChannelStatusByMarket(context.marketKeys)
 
-  for (const market of FEED_STATUS_MARKETS) {
-    const marketRecord = toRecord(raw[market])
+  for (const marketKey of context.marketKeys) {
+    const marketRecord = toRecord(raw[marketKey])
+    applyRawStatusForMarket(next, marketRecord, marketKey)
+  }
 
-    for (const channel of FEED_STATUS_CHANNELS) {
-      next[market][channel] = marketRecord[channel] === true
+  for (const [legacyPairKey, mappedMarketKeys] of Object.entries(
+    context.legacyPairToMarketKeys
+  )) {
+    const legacyRecord = toRecord(raw[legacyPairKey])
+
+    for (const marketKey of mappedMarketKeys) {
+      applyRawStatusForMarket(next, legacyRecord, marketKey)
     }
   }
 
@@ -54,8 +103,16 @@ export const setFeedChannelActiveForMarket = (input: {
   market: FeedStatusMarket
   channel: FeedStatusChannel
   active: boolean
+  context: FeedStatusContext
 }): FeedChannelStatusByMarket => {
-  const normalized = normalizeFeedChannelStatusByMarket(input.current)
+  const marketKeys = input.context.marketKeys.includes(input.market)
+    ? input.context.marketKeys
+    : [...input.context.marketKeys, input.market]
+
+  const normalized = normalizeFeedChannelStatusByMarket(input.current, {
+    ...input.context,
+    marketKeys,
+  })
 
   return {
     ...normalized,
@@ -77,4 +134,3 @@ export const upsertFeedStatusInStoreMetadata = (
     [FEED_STATUS_METADATA_KEY]: feedStatus,
   }
 }
-

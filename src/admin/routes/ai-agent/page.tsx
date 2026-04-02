@@ -8,6 +8,9 @@ type AiAgentStatusPayload = {
     provider?: string
     model?: string
     connected?: boolean
+    message?: string
+    sidecar_url?: string
+    remediation_command?: string
   }
 }
 
@@ -32,7 +35,9 @@ const readErrorMessage = async (response: Response, fallback: string) => {
 const AiAgentPage = () => {
   const [isLoading, setIsLoading] = useState(true)
   const [isConnected, setIsConnected] = useState(false)
-  const [model, setModel] = useState("gpt-5")
+  const [model, setModel] = useState("gpt-5.3-codex")
+  const [statusMessage, setStatusMessage] = useState("")
+  const [remediationCommand, setRemediationCommand] = useState("")
 
   const loadStatus = useCallback(async () => {
     setIsLoading(true)
@@ -54,7 +59,9 @@ const AiAgentPage = () => {
 
       const payload = (await response.json()) as AiAgentStatusPayload
       setIsConnected(payload?.status?.connected === true)
-      setModel(payload?.status?.model?.trim() || "gpt-5")
+      setModel(payload?.status?.model?.trim() || "gpt-5.3-codex")
+      setStatusMessage(payload?.status?.message?.trim() || "")
+      setRemediationCommand(payload?.status?.remediation_command?.trim() || "")
     } catch (error) {
       const message =
         error instanceof Error
@@ -90,14 +97,18 @@ const AiAgentPage = () => {
           <div className="flex items-center justify-between gap-3">
             <div>
               <Text size="small" weight="plus">
-                OpenAI kapcsolat
+                Codex CLI kapcsolat
               </Text>
               <Text size="xsmall" className="text-ui-fg-subtle mt-1">
                 Modell: {model}
               </Text>
             </div>
             <StatusBadge color={isConnected ? "green" : "red"}>
-              {isLoading ? "Ellenőrzés..." : isConnected ? "Aktív" : "Nincs API kulcs"}
+              {isLoading
+                ? "Ellenőrzés..."
+                : isConnected
+                  ? "Aktív"
+                  : "Nincs Codex bejelentkezés"}
             </StatusBadge>
           </div>
 
@@ -113,6 +124,21 @@ const AiAgentPage = () => {
               Státusz frissítése
             </Button>
           </div>
+
+          {!isConnected && !isLoading && remediationCommand ? (
+            <div className="mt-3 rounded-md border border-ui-border-base bg-ui-bg-base p-3">
+              <Text size="xsmall" className="text-ui-fg-subtle">
+                Futtasd szerveren/terminálban a bejelentkezéshez:
+              </Text>
+              <code className="mt-1 block break-all text-xs">{remediationCommand}</code>
+            </div>
+          ) : null}
+
+          {statusMessage ? (
+            <Text size="xsmall" className="text-ui-fg-subtle mt-3">
+              {statusMessage}
+            </Text>
+          ) : null}
 
           <Text size="xsmall" className="text-ui-fg-subtle mt-3">
             Az AI fordítást a Termék oldalon, a „Lokalizált termék adatok (HU/SK)”

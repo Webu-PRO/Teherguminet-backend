@@ -7,6 +7,7 @@ import {
   resolveLocalizedFeedDescription,
   resolveLocalizedFeedTitle,
   resolveAdditionalImageLink,
+  resolveFeedBrand,
   resolveFeedImageUrl,
   resolveStorefrontBaseUrl,
 } from "../steps/get-product-feed-items";
@@ -32,6 +33,7 @@ describe("product feed utils", () => {
       expect(
         resolveFeedStock({
           manageInventory: true,
+          allowBackorder: false,
           quantity: 2,
         })
       ).toEqual({
@@ -44,6 +46,7 @@ describe("product feed utils", () => {
       expect(
         resolveFeedStock({
           manageInventory: true,
+          allowBackorder: false,
           quantity: undefined,
         })
       ).toEqual({
@@ -52,10 +55,37 @@ describe("product feed utils", () => {
       });
     });
 
+    it("marks variant as backorder when quantity is zero and backorder is allowed", () => {
+      expect(
+        resolveFeedStock({
+          manageInventory: true,
+          allowBackorder: true,
+          quantity: 0,
+        })
+      ).toEqual({
+        status: "backorder",
+        quantity: undefined,
+      });
+    });
+
+    it("marks variant as backorder when quantity is invalid and backorder is allowed", () => {
+      expect(
+        resolveFeedStock({
+          manageInventory: true,
+          allowBackorder: true,
+          quantity: undefined,
+        })
+      ).toEqual({
+        status: "backorder",
+        quantity: undefined,
+      });
+    });
+
     it("keeps non-managed inventory always in stock and omits quantity", () => {
       expect(
         resolveFeedStock({
           manageInventory: false,
+          allowBackorder: true,
           quantity: 0,
         })
       ).toEqual({
@@ -116,6 +146,26 @@ describe("product feed utils", () => {
   });
 
   describe("resolveLocalizedFeedDescription", () => {
+    it("prefers DB localization description over metadata for SK feed", () => {
+      const result = resolveLocalizedFeedDescription(
+        {
+          title: "Fallback title",
+          description: "Default description",
+          metadata: {
+            description_sk: "Metadata SK popis",
+          },
+        },
+        "sk",
+        {
+          id: "ploc_1",
+          product_id: "prod_1",
+          description_sk: "DB SK popis",
+        }
+      );
+
+      expect(result).toBe("DB SK popis");
+    });
+
     it("uses SK metadata description for SK feed", () => {
       const result = resolveLocalizedFeedDescription(
         {
@@ -192,6 +242,25 @@ describe("product feed utils", () => {
   });
 
   describe("resolveLocalizedFeedTitle", () => {
+    it("prefers DB localization title over metadata for SK feed", () => {
+      const result = resolveLocalizedFeedTitle(
+        {
+          title: "Default title",
+          metadata: {
+            title_sk: "Metadata SK názov",
+          },
+        },
+        "sk",
+        {
+          id: "ploc_1",
+          product_id: "prod_1",
+          title_sk: "DB SK názov",
+        }
+      );
+
+      expect(result).toBe("DB SK názov");
+    });
+
     it("uses SK metadata title for SK feed", () => {
       const result = resolveLocalizedFeedTitle(
         {
@@ -231,6 +300,68 @@ describe("product feed utils", () => {
       );
 
       expect(result).toBe("Default title");
+    });
+  });
+
+  describe("resolveFeedBrand", () => {
+    it("uses metadata brand when available", () => {
+      const result = resolveFeedBrand({
+        product: {
+          handle: "315-70r22-5-18-156-150l-highway-d11-hubtrac",
+          metadata: {
+            brand: "Hubtrac",
+          },
+        },
+        variant: null,
+        localizedTitle: "315/70R22.5-18 156/150L HIGHWAY D11",
+        localizedDescription: "Leírás",
+      });
+
+      expect(result).toBe("HUBTRAC");
+    });
+
+    it("keeps non-known metadata brand values", () => {
+      const result = resolveFeedBrand({
+        product: {
+          handle: "example-product",
+          metadata: {
+            brand: "Goodyear",
+          },
+        },
+        variant: null,
+        localizedTitle: "Product title",
+        localizedDescription: "Description",
+      });
+
+      expect(result).toBe("Goodyear");
+    });
+
+    it("infers known brand from handle when metadata is missing", () => {
+      const result = resolveFeedBrand({
+        product: {
+          handle: "295-80r22-5-16-152-148m-regional-d11-hubtrac",
+          metadata: {},
+        },
+        variant: null,
+        localizedTitle: "Product title",
+        localizedDescription: "Description",
+      });
+
+      expect(result).toBe("HUBTRAC");
+    });
+
+    it("returns undefined when brand cannot be inferred", () => {
+      const result = resolveFeedBrand({
+        product: {
+          handle: "random-product",
+          metadata: {},
+        },
+        variant: null,
+        localizedTitle: "Generic tire",
+        localizedDescription: "No known brand token",
+      });
+
+      expect(result).toBeUndefined();
     });
   });
 });

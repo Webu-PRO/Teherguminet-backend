@@ -37,6 +37,27 @@ services:
       timeout: 5s
       retries: 10
 
+  # Codex CLI sidecar used by AI AGENT HU->SK translation
+  codex-sidecar:
+    build:
+      context: .
+      dockerfile: codex-sidecar/Dockerfile
+    container_name: medusa_codex_sidecar
+    restart: unless-stopped
+    environment:
+      - CODEX_SIDECAR_PORT=3210
+      - AI_AGENT_CODEX_MODEL=${AI_AGENT_CODEX_MODEL:-gpt-5.3-codex}
+      - AI_AGENT_CODEX_LOGIN_COMMAND=${AI_AGENT_CODEX_LOGIN_COMMAND:-docker compose exec codex-sidecar codex login --device-auth}
+    volumes:
+      - ${CODEX_AUTH_DIR:-${HOME}/.codex}:/home/node/.codex
+    networks:
+      - medusa_network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:3210/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
   # Medusa Server
   medusa:
     build:
@@ -52,6 +73,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      codex-sidecar:
+        condition: service_healthy
     environment:
       - NODE_ENV=${NODE_ENV:-production}
       - CI=${CI:-1}
@@ -60,6 +83,9 @@ services:
       - RUN_SEED=${RUN_SEED:-false}
       - DATABASE_URL=${DATABASE_URL:-postgresql://deadpool:Kroschu.1236547890@postgres:5432/medusa-store}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      - AI_AGENT_CODEX_SIDECAR_URL=${AI_AGENT_CODEX_SIDECAR_URL:-http://codex-sidecar:3210}
+      - AI_AGENT_CODEX_MODEL=${AI_AGENT_CODEX_MODEL:-gpt-5.3-codex}
+      - AI_AGENT_CODEX_LOGIN_COMMAND=${AI_AGENT_CODEX_LOGIN_COMMAND:-docker compose exec codex-sidecar codex login --device-auth}
     env_file:
       - .env
     networks:

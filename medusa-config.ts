@@ -227,6 +227,9 @@ module.exports = defineConfig({
     b2b: {
       resolve: "./src/modules/b2b",
     },
+    productLocalization: {
+      resolve: "./src/modules/product-localization",
+    },
     fulfillment: {
       resolve: "@medusajs/fulfillment",
       options: {

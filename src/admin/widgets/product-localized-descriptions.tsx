@@ -1,76 +1,78 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { defineWidgetConfig } from "@medusajs/admin-sdk";
-import { Button, Container, Input, Text, Textarea, toast } from "@medusajs/ui";
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { defineWidgetConfig } from "@medusajs/admin-sdk"
+import { Button, Container, Input, Text, Textarea, toast } from "@medusajs/ui"
 
-import { sdk } from "../lib/client";
+import { sdk } from "../lib/client"
+import { normalizeText } from "../../lib/product-localization"
 
 type ProductData = {
-  id: string;
-  title?: string | null;
-  description?: string | null;
-  metadata?: Record<string, unknown> | null;
-};
-
-type ProductResponse = {
-  product?: ProductData;
-};
+  id: string
+  title?: string | null
+  description?: string | null
+}
 
 type HuToSkTranslationResponse = {
-  title_sk?: string;
-  description_sk?: string;
-  translated_fields?: Array<"title_sk" | "description_sk">;
-  skipped_fields?: Array<"title_sk" | "description_sk">;
-  model?: string;
-};
+  title_sk?: string
+  description_sk?: string
+  translated_fields?: Array<"title_sk" | "description_sk">
+}
+
+type FieldSource = "db" | "metadata" | "default" | "empty"
+
+type LocalizationResponse = {
+  ok: boolean
+  product_id: string
+  values?: {
+    title_hu?: string
+    title_sk?: string
+    description_hu?: string
+    description_sk?: string
+  }
+  sources?: {
+    title_hu?: FieldSource
+    title_sk?: FieldSource
+    description_hu?: FieldSource
+    description_sk?: FieldSource
+  }
+  defaults?: {
+    title?: string
+    description?: string
+  }
+}
 
 type WidgetProps = {
-  data: ProductData;
-};
+  data: ProductData
+}
 
-const TITLE_HU_KEYS = ["title_hu"] as const;
-const TITLE_SK_KEYS = ["title_sk"] as const;
-const DESCRIPTION_HU_KEYS = [
-  "description_hu",
-  "description_hu_hu",
-  "leiras_hu",
-  "leiras_hu_hu",
-] as const;
-const DESCRIPTION_SK_KEYS = [
-  "description_sk",
-  "description_sk_sk",
-  "leiras_sk",
-  "leiras_sk_sk",
-] as const;
-
-const normalizeText = (value: unknown) => {
-  if (typeof value !== "string") {
-    return "";
+const getSourceBadgeText = (source: FieldSource | undefined) => {
+  switch (source) {
+    case "db":
+      return "Mentett lokalizáció"
+    case "metadata":
+      return "Régi metadata"
+    case "default":
+      return "Termék alapérték"
+    default:
+      return "Nincs érték"
   }
+}
 
-  return value.trim();
-};
-
-const readLocalizedDescription = (
-  metadata: Record<string, unknown> | null | undefined,
-  keys: readonly string[]
-) => {
-  if (!metadata || typeof metadata !== "object") {
-    return "";
+const getSourceBadgeClass = (source: FieldSource | undefined) => {
+  switch (source) {
+    case "db":
+      return "bg-ui-tag-green-bg text-ui-tag-green-text"
+    case "metadata":
+      return "bg-ui-tag-orange-bg text-ui-tag-orange-text"
+    case "default":
+      return "bg-ui-tag-blue-bg text-ui-tag-blue-text"
+    default:
+      return "bg-ui-tag-neutral-bg text-ui-tag-neutral-text"
   }
-
-  for (const key of keys) {
-    const value = normalizeText(metadata[key]);
-    if (value) {
-      return value;
-    }
-  }
-
-  return "";
-};
+}
 
 const readErrorMessage = (error: unknown, fallback: string) => {
   if (error instanceof Error && error.message.trim().length) {
-    return error.message;
+    return error.message
   }
 
   if (
@@ -79,183 +81,150 @@ const readErrorMessage = (error: unknown, fallback: string) => {
     "message" in error &&
     typeof (error as { message?: unknown }).message === "string"
   ) {
-    const message = (error as { message: string }).message.trim();
+    const message = (error as { message: string }).message.trim()
     if (message.length) {
-      return message;
+      return message
     }
   }
 
-  return fallback;
-};
+  return fallback
+}
 
 const ProductLocalizedDescriptionsWidget = ({ data }: WidgetProps) => {
-  const productId = data.id;
-  const [product, setProduct] = useState<ProductData | null>(null);
-  const [titleHu, setTitleHu] = useState("");
-  const [titleSk, setTitleSk] = useState("");
-  const [descriptionHu, setDescriptionHu] = useState("");
-  const [descriptionSk, setDescriptionSk] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
-  const [isTranslating, setIsTranslating] = useState(false);
+  const productId = data.id
 
-  const fallbackTitle = useMemo(() => {
-    const loadedTitle = normalizeText(product?.title);
-    if (loadedTitle) {
-      return loadedTitle;
-    }
-    return normalizeText(data.title) || "-";
-  }, [data.title, product?.title]);
+  const [titleHu, setTitleHu] = useState("")
+  const [titleSk, setTitleSk] = useState("")
+  const [descriptionHu, setDescriptionHu] = useState("")
+  const [descriptionSk, setDescriptionSk] = useState("")
 
-  const fallbackDescription = useMemo(() => {
-    const loadedDescription = normalizeText(product?.description);
-    if (loadedDescription) {
-      return loadedDescription;
-    }
-    return normalizeText(data.description) || "-";
-  }, [data.description, product?.description]);
+  const [sourceTitleHu, setSourceTitleHu] = useState<FieldSource>("empty")
+  const [sourceTitleSk, setSourceTitleSk] = useState<FieldSource>("empty")
+  const [sourceDescriptionHu, setSourceDescriptionHu] = useState<FieldSource>("empty")
+  const [sourceDescriptionSk, setSourceDescriptionSk] = useState<FieldSource>("empty")
 
-  const hydrateForm = useCallback((nextProduct: ProductData | null) => {
-    const metadata = nextProduct?.metadata;
-    const nextTitleHu = readLocalizedDescription(metadata, TITLE_HU_KEYS);
-    const nextTitleSk = readLocalizedDescription(metadata, TITLE_SK_KEYS);
-    const nextHu = readLocalizedDescription(metadata, DESCRIPTION_HU_KEYS);
-    const nextSk = readLocalizedDescription(metadata, DESCRIPTION_SK_KEYS);
+  const [fallbackTitle, setFallbackTitle] = useState("")
+  const [fallbackDescription, setFallbackDescription] = useState("")
 
-    setTitleHu(nextTitleHu);
-    setTitleSk(nextTitleSk);
-    setDescriptionHu(nextHu);
-    setDescriptionSk(nextSk);
-  }, []);
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
+  const [isTranslating, setIsTranslating] = useState(false)
 
-  const loadProduct = useCallback(async () => {
+  const effectiveFallbackTitle = useMemo(() => {
+    return normalizeText(fallbackTitle) || normalizeText(data.title) || "-"
+  }, [data.title, fallbackTitle])
+
+  const effectiveFallbackDescription = useMemo(() => {
+    return normalizeText(fallbackDescription) || normalizeText(data.description) || "-"
+  }, [data.description, fallbackDescription])
+
+  const loadLocalization = useCallback(async () => {
     if (!productId) {
-      setIsLoading(false);
-      return;
+      setIsLoading(false)
+      return
     }
 
-    setIsLoading(true);
+    setIsLoading(true)
     try {
-      const payload = (await sdk.admin.product.retrieve(productId, {
-        fields: "id,title,description,metadata",
-      })) as ProductResponse;
-      const nextProduct = payload.product ?? null;
-      setProduct(nextProduct);
-      hydrateForm(nextProduct);
+      const payload = (await sdk.client.fetch(
+        `/admin/products/${encodeURIComponent(productId)}/localization`,
+        {
+          method: "GET",
+        }
+      )) as LocalizationResponse
+
+      setTitleHu(normalizeText(payload?.values?.title_hu))
+      setTitleSk(normalizeText(payload?.values?.title_sk))
+      setDescriptionHu(normalizeText(payload?.values?.description_hu))
+      setDescriptionSk(normalizeText(payload?.values?.description_sk))
+
+      setSourceTitleHu(payload?.sources?.title_hu ?? "empty")
+      setSourceTitleSk(payload?.sources?.title_sk ?? "empty")
+      setSourceDescriptionHu(payload?.sources?.description_hu ?? "empty")
+      setSourceDescriptionSk(payload?.sources?.description_sk ?? "empty")
+
+      setFallbackTitle(normalizeText(payload?.defaults?.title))
+      setFallbackDescription(normalizeText(payload?.defaults?.description))
     } catch (error) {
       const message = readErrorMessage(
         error,
         "Nem sikerült betölteni a termék lokalizált adatait."
-      );
-      toast.error("Lokalizált leírások", {
+      )
+      toast.error("Lokalizált termék adatok", {
         description: message,
-      });
-      setProduct(null);
-      hydrateForm(null);
+      })
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
-  }, [hydrateForm, productId]);
+  }, [productId])
 
   useEffect(() => {
-    void loadProduct();
-  }, [loadProduct]);
+    void loadLocalization()
+  }, [loadLocalization])
 
   const handleSave = useCallback(async () => {
     if (!productId || isSaving) {
-      return;
+      return
     }
 
-    setIsSaving(true);
+    setIsSaving(true)
     try {
-      const baseMetadata =
-        product?.metadata && typeof product.metadata === "object"
-          ? { ...product.metadata }
-          : data.metadata && typeof data.metadata === "object"
-            ? { ...data.metadata }
-            : {};
+      await sdk.client.fetch(
+        `/admin/products/${encodeURIComponent(productId)}/localization`,
+        {
+          method: "PATCH",
+          body: {
+            title_hu: normalizeText(titleHu),
+            title_sk: normalizeText(titleSk),
+            description_hu: normalizeText(descriptionHu),
+            description_sk: normalizeText(descriptionSk),
+          },
+        }
+      )
 
-      for (const key of [...DESCRIPTION_HU_KEYS, ...DESCRIPTION_SK_KEYS]) {
-        delete (baseMetadata as Record<string, unknown>)[key];
-      }
+      toast.success("Lokalizált termék adatok", {
+        description: "Sikeres mentés az adatbázisba.",
+      })
 
-      for (const key of [...TITLE_HU_KEYS, ...TITLE_SK_KEYS]) {
-        delete (baseMetadata as Record<string, unknown>)[key];
-      }
-
-      const nextTitleHu = normalizeText(titleHu);
-      const nextTitleSk = normalizeText(titleSk);
-      const nextHu = normalizeText(descriptionHu);
-      const nextSk = normalizeText(descriptionSk);
-
-      if (nextTitleHu) {
-        (baseMetadata as Record<string, unknown>).title_hu = nextTitleHu;
-      }
-
-      if (nextTitleSk) {
-        (baseMetadata as Record<string, unknown>).title_sk = nextTitleSk;
-      }
-
-      if (nextHu) {
-        (baseMetadata as Record<string, unknown>).description_hu = nextHu;
-      }
-
-      if (nextSk) {
-        (baseMetadata as Record<string, unknown>).description_sk = nextSk;
-      }
-
-      await sdk.admin.product.update(productId, {
-        metadata: baseMetadata,
-      });
-
-      toast.success("Lokalizált leírások", {
-        description: "A HU/SK címek és leírások mentése sikeres.",
-      });
-
-      await loadProduct();
+      await loadLocalization()
     } catch (error) {
       const message = readErrorMessage(
         error,
         "Nem sikerült menteni a lokalizált adatokat."
-      );
-      toast.error("Lokalizált leírások", {
+      )
+      toast.error("Lokalizált termék adatok", {
         description: message,
-      });
+      })
     } finally {
-      setIsSaving(false);
+      setIsSaving(false)
     }
   }, [
-    data.metadata,
     descriptionHu,
     descriptionSk,
     isSaving,
-    loadProduct,
-    product?.metadata,
+    loadLocalization,
     productId,
     titleHu,
     titleSk,
-  ]);
+  ])
 
   const handleAutoTranslate = useCallback(async () => {
     if (!productId || isLoading || isSaving || isTranslating) {
-      return;
+      return
     }
 
-    const sourceTitleHu =
-      normalizeText(titleHu) ||
-      (fallbackTitle === "-" ? "" : normalizeText(fallbackTitle));
+    const sourceTitleHu = normalizeText(titleHu) || normalizeText(effectiveFallbackTitle)
     const sourceDescriptionHu =
-      normalizeText(descriptionHu) ||
-      (fallbackDescription === "-" ? "" : normalizeText(fallbackDescription));
+      normalizeText(descriptionHu) || normalizeText(effectiveFallbackDescription)
 
     if (!sourceTitleHu && !sourceDescriptionHu) {
       toast.error("AI fordítás", {
         description: "Nincs HU forrásszöveg a fordításhoz.",
-      });
-      return;
+      })
+      return
     }
 
-    setIsTranslating(true);
+    setIsTranslating(true)
     try {
       const payload = (await sdk.client.fetch("/admin/ai-agent/translate", {
         method: "POST",
@@ -266,171 +235,185 @@ const ProductLocalizedDescriptionsWidget = ({ data }: WidgetProps) => {
           description_sk: normalizeText(descriptionSk),
           overwrite: false,
         },
-      })) as HuToSkTranslationResponse;
+      })) as HuToSkTranslationResponse
 
-      const nextTitleSk = normalizeText(payload?.title_sk);
-      const nextDescriptionSk = normalizeText(payload?.description_sk);
+      const nextTitleSk = normalizeText(payload?.title_sk)
+      const nextDescriptionSk = normalizeText(payload?.description_sk)
       const translatedFields = Array.isArray(payload?.translated_fields)
         ? payload.translated_fields
-        : [];
+        : []
 
       if (nextTitleSk) {
-        setTitleSk(nextTitleSk);
+        setTitleSk(nextTitleSk)
       }
 
       if (nextDescriptionSk) {
-        setDescriptionSk(nextDescriptionSk);
+        setDescriptionSk(nextDescriptionSk)
       }
 
       if (!translatedFields.length) {
         toast.success("AI fordítás", {
           description: "Nincs üres SK mező, ezért nem történt új fordítás.",
-        });
-        return;
+        })
+        return
       }
 
       toast.success("AI fordítás", {
-        description:
-          "HU → SK fordítás elkészült. Ellenőrizd, majd kattints a Mentés gombra.",
-      });
+        description: "Fordítás kész. Ellenőrizd, majd mentsd az adatokat.",
+      })
     } catch (error) {
-      const message = readErrorMessage(
-        error,
-        "Nem sikerült AI fordítást kérni."
-      );
+      const message = readErrorMessage(error, "Nem sikerült AI fordítást kérni.")
       toast.error("AI fordítás", {
         description: message,
-      });
+      })
     } finally {
-      setIsTranslating(false);
+      setIsTranslating(false)
     }
   }, [
     descriptionHu,
     descriptionSk,
-    fallbackDescription,
-    fallbackTitle,
+    effectiveFallbackDescription,
+    effectiveFallbackTitle,
     isLoading,
     isSaving,
     isTranslating,
     productId,
     titleHu,
     titleSk,
-  ]);
+  ])
 
   return (
     <Container className="p-0">
-      <div className="flex flex-col gap-y-3 px-6 py-4">
+      <div className="flex flex-col gap-y-4 px-6 py-4">
         <div>
           <Text size="small" leading="compact" weight="plus">
             Lokalizált termék adatok (HU / SK)
           </Text>
           <Text size="small" leading="compact" className="text-ui-fg-subtle mt-1">
-            A SK feed a <code>title_sk</code> és <code>description_sk</code> mezőket
-            használja, HU feed a <code>title_hu</code> és{" "}
-            <code>description_hu</code> mezőket.
+            SK feed: <code>title_sk</code> + <code>description_sk</code>. HU feed:{" "}
+            <code>title_hu</code> + <code>description_hu</code>.
           </Text>
           <Text size="small" leading="compact" className="text-ui-fg-subtle">
-            Ha az SK mezők üresek, a feed a HU értékekre esik vissza.
-          </Text>
-          <Text size="small" leading="compact" className="text-ui-fg-subtle">
-            Az AI fordítás csak az üres SK mezőket tölti ki. A módosítások mentéséhez
-            kattints a Mentés gombra.
+            SK hiány esetén a feed HU értékre esik vissza.
           </Text>
         </div>
 
-        <div className="rounded-md border border-ui-border-base bg-ui-bg-subtle p-3">
-          <Text size="xsmall" leading="compact" weight="plus">
-            Default cím (fallback)
-          </Text>
-          <Text size="small" leading="compact" className="text-ui-fg-subtle mt-1 whitespace-pre-wrap">
-            {fallbackTitle}
-          </Text>
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          <div className="rounded-lg border border-ui-border-base bg-ui-bg-subtle p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <Text size="small" weight="plus">
+                HU forrás
+              </Text>
+              <span
+                className={`inline-flex rounded-full px-2 py-0.5 text-[11px] ${getSourceBadgeClass(
+                  sourceTitleHu
+                )}`}
+              >
+                {getSourceBadgeText(sourceTitleHu)}
+              </span>
+            </div>
+
+            <div className="flex flex-col gap-y-2">
+              <Text size="xsmall" weight="plus">
+                Cím (HU)
+              </Text>
+              <Input
+                value={titleHu}
+                onChange={(event) => setTitleHu(event.target.value)}
+                placeholder="Magyar cím..."
+                disabled={isLoading || isSaving}
+              />
+            </div>
+
+            <div className="mt-3 flex flex-col gap-y-2">
+              <Text size="xsmall" weight="plus">
+                Leírás (HU)
+              </Text>
+              <Textarea
+                value={descriptionHu}
+                onChange={(event) => setDescriptionHu(event.target.value)}
+                placeholder="Magyar leírás..."
+                rows={8}
+                disabled={isLoading || isSaving}
+              />
+            </div>
+
+            <div className="mt-3 rounded-md border border-ui-border-base bg-ui-bg-base p-2">
+              <Text size="xsmall" className="text-ui-fg-subtle">
+                Alap cím: {effectiveFallbackTitle}
+              </Text>
+              <Text size="xsmall" className="text-ui-fg-subtle mt-1 whitespace-pre-wrap">
+                Alap leírás: {effectiveFallbackDescription}
+              </Text>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-ui-border-base bg-ui-bg-subtle p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <Text size="small" weight="plus">
+                SK fordítás
+              </Text>
+              <span
+                className={`inline-flex rounded-full px-2 py-0.5 text-[11px] ${getSourceBadgeClass(
+                  sourceTitleSk
+                )}`}
+              >
+                {getSourceBadgeText(sourceTitleSk)}
+              </span>
+            </div>
+
+            <div className="flex flex-col gap-y-2">
+              <Text size="xsmall" weight="plus">
+                Názov (SK)
+              </Text>
+              <Input
+                value={titleSk}
+                onChange={(event) => setTitleSk(event.target.value)}
+                placeholder="Slovenský názov..."
+                disabled={isLoading || isSaving}
+              />
+            </div>
+
+            <div className="mt-3 flex flex-col gap-y-2">
+              <div className="flex items-center justify-between">
+                <Text size="xsmall" weight="plus">
+                  Popis (SK)
+                </Text>
+                <span
+                  className={`inline-flex rounded-full px-2 py-0.5 text-[11px] ${getSourceBadgeClass(
+                    sourceDescriptionSk
+                  )}`}
+                >
+                  {getSourceBadgeText(sourceDescriptionSk)}
+                </span>
+              </div>
+              <Textarea
+                value={descriptionSk}
+                onChange={(event) => setDescriptionSk(event.target.value)}
+                placeholder="Slovenský popis..."
+                rows={8}
+                disabled={isLoading || isSaving}
+              />
+            </div>
+
+            <div className="mt-3">
+              <Button
+                size="small"
+                variant="secondary"
+                onClick={() => void handleAutoTranslate()}
+                isLoading={isTranslating}
+                disabled={isLoading || isSaving || isTranslating}
+              >
+                AI fordítás HU→SK
+              </Button>
+            </div>
+          </div>
         </div>
 
-        <div className="rounded-md border border-ui-border-base bg-ui-bg-subtle p-3">
-          <Text size="xsmall" leading="compact" weight="plus">
-            Default leírás (fallback)
-          </Text>
-          <Text size="small" leading="compact" className="text-ui-fg-subtle mt-1 whitespace-pre-wrap">
-            {fallbackDescription}
-          </Text>
-        </div>
-
-        <div className="flex flex-col gap-y-2">
-          <Text size="xsmall" leading="compact" weight="plus">
-            Cím (HU)
-          </Text>
-          <Input
-            value={titleHu}
-            onChange={(event) => {
-              setTitleHu(event.target.value);
-            }}
-            placeholder="Magyar cím..."
-            disabled={isLoading || isSaving}
-          />
-        </div>
-
-        <div className="flex flex-col gap-y-2">
-          <Text size="xsmall" leading="compact" weight="plus">
-            Názov (SK)
-          </Text>
-          <Input
-            value={titleSk}
-            onChange={(event) => {
-              setTitleSk(event.target.value);
-            }}
-            placeholder="Slovenský názov..."
-            disabled={isLoading || isSaving}
-          />
-        </div>
-
-        <div className="flex flex-col gap-y-2">
-          <Text size="xsmall" leading="compact" weight="plus">
-            Leírás (HU)
-          </Text>
-          <Textarea
-            value={descriptionHu}
-            onChange={(event) => {
-              setDescriptionHu(event.target.value);
-            }}
-            placeholder="Magyar leírás..."
-            rows={6}
-            disabled={isLoading || isSaving}
-          />
-        </div>
-
-        <div className="flex flex-col gap-y-2">
-          <Text size="xsmall" leading="compact" weight="plus">
-            Popis (SK)
-          </Text>
-          <Textarea
-            value={descriptionSk}
-            onChange={(event) => {
-              setDescriptionSk(event.target.value);
-            }}
-            placeholder="Slovenský popis..."
-            rows={6}
-            disabled={isLoading || isSaving}
-          />
-        </div>
-
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             size="small"
-            variant="secondary"
-            onClick={() => {
-              void handleAutoTranslate();
-            }}
-            isLoading={isTranslating}
-            disabled={isLoading || isSaving || isTranslating}
-          >
-            AI fordítás HU→SK
-          </Button>
-          <Button
-            size="small"
-            onClick={() => {
-              void handleSave();
-            }}
+            onClick={() => void handleSave()}
             isLoading={isSaving}
             disabled={isLoading || isSaving || isTranslating}
           >
@@ -439,9 +422,7 @@ const ProductLocalizedDescriptionsWidget = ({ data }: WidgetProps) => {
           <Button
             size="small"
             variant="secondary"
-            onClick={() => {
-              void loadProduct();
-            }}
+            onClick={() => void loadLocalization()}
             disabled={isLoading || isSaving || isTranslating}
           >
             Frissítés
@@ -449,11 +430,12 @@ const ProductLocalizedDescriptionsWidget = ({ data }: WidgetProps) => {
         </div>
       </div>
     </Container>
-  );
-};
+  )
+}
 
 export const config = defineWidgetConfig({
   zone: "product.details.after",
-});
+})
 
-export default ProductLocalizedDescriptionsWidget;
+export default ProductLocalizedDescriptionsWidget
+

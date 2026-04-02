@@ -5,6 +5,13 @@ import {
   QueryContext,
 } from "@medusajs/framework/utils";
 import { createStep, StepResponse } from "@medusajs/framework/workflows-sdk";
+import {
+  DESCRIPTION_HU_KEYS,
+  DESCRIPTION_SK_KEYS,
+  TITLE_HU_KEYS,
+  TITLE_SK_KEYS,
+  normalizeText as normalizeLocalizedText,
+} from "../../lib/product-localization";
 
 export type FeedItem = {
   id: string;
@@ -45,6 +52,8 @@ type QuerySalesChannel = {
 type QueryVariant = {
   id: string;
   manage_inventory?: boolean | null;
+  allow_backorder?: boolean | null;
+  metadata?: Record<string, unknown> | null;
   calculated_price?: CalculatedPriceSet | null;
 } | null;
 
@@ -60,15 +69,30 @@ type QueryProduct = {
   sales_channels?: QuerySalesChannel[] | null;
 };
 
+type QueryProductLocalization = {
+  id: string
+  product_id?: string | null
+  title_hu?: string | null
+  title_sk?: string | null
+  description_hu?: string | null
+  description_sk?: string | null
+}
+
 const ABSOLUTE_URL_PREFIX_REGEX = /^[a-z][a-z\d+\-.]*:\/\//i;
-const TITLE_METADATA_KEYS = {
-  hu: ["title_hu"],
-  sk: ["title_sk"],
-} as const;
-const DESCRIPTION_METADATA_KEYS = {
-  hu: ["description_hu", "description_hu_hu", "leiras_hu", "leiras_hu_hu"],
-  sk: ["description_sk", "description_sk_sk", "leiras_sk", "leiras_sk_sk"],
-} as const;
+const BRAND_METADATA_KEYS = [
+  "brand",
+  "márka",
+  "marka",
+  "manufacturer",
+  "gyártó",
+  "gyarto",
+] as const;
+const KNOWN_FEED_BRANDS = [
+  "HUBTRAC",
+  "AEROTYRE",
+  "SUPERWAY",
+  "GROUNDSPEED",
+] as const;
 
 export const formatPrice = (price: number, currencyCode: string) => {
   return `${Number(price).toFixed(2)} ${currencyCode.toUpperCase()}`;
@@ -86,9 +110,11 @@ export const normalizeAvailabilityQuantity = (
 
 export const resolveFeedStock = ({
   manageInventory,
+  allowBackorder,
   quantity,
 }: {
   manageInventory?: boolean | null;
+  allowBackorder?: boolean | null;
   quantity: number | null | undefined;
 }) => {
   if (!manageInventory) {
@@ -100,6 +126,13 @@ export const resolveFeedStock = ({
 
   const normalizedQuantity = normalizeAvailabilityQuantity(quantity);
 
+  if (normalizedQuantity <= 0 && allowBackorder === true) {
+    return {
+      status: "backorder" as const,
+      quantity: undefined,
+    };
+  }
+
   return {
     status: normalizedQuantity > 0 ? ("in stock" as const) : ("out of stock" as const),
     quantity: normalizedQuantity,
@@ -107,24 +140,33 @@ export const resolveFeedStock = ({
 };
 
 const normalizeText = (value: unknown) => {
-  if (typeof value !== "string") {
-    return undefined;
-  }
-
-  const trimmed = value.trim();
-  return trimmed.length ? trimmed : undefined;
+  const trimmed = normalizeLocalizedText(value)
+  return trimmed.length ? trimmed : undefined
 };
 
-const resolveDescriptionFromMetadata = (
+const toRecord = (value: unknown): Record<string, unknown> | null => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  return value as Record<string, unknown>;
+};
+
+const getMetadataValue = (
   metadata: Record<string, unknown> | null | undefined,
   keys: readonly string[]
 ) => {
-  if (!metadata || typeof metadata !== "object") {
+  if (!metadata) {
     return undefined;
   }
 
-  for (const key of keys) {
-    const value = normalizeText(metadata[key]);
+  const normalizedKeys = keys.map((key) => key.toLowerCase());
+  for (const [metadataKey, metadataValue] of Object.entries(metadata)) {
+    if (!normalizedKeys.includes(metadataKey.toLowerCase())) {
+      continue;
+    }
+
+    const value = normalizeText(metadataValue);
     if (value) {
       return value;
     }
@@ -132,6 +174,83 @@ const resolveDescriptionFromMetadata = (
 
   return undefined;
 };
+
+const inferKnownBrandFromText = (value: string | undefined) => {
+  if (!value) {
+    return undefined;
+  }
+
+  for (const brand of KNOWN_FEED_BRANDS) {
+    const pattern = new RegExp(`\\b${brand}\\b`, "i");
+    if (pattern.test(value)) {
+      return brand;
+    }
+  }
+
+  return undefined;
+};
+
+export const resolveFeedBrand = (input: {
+  product: {
+    handle?: string | null;
+    metadata?: Record<string, unknown> | null;
+  };
+  variant?: {
+    metadata?: Record<string, unknown> | null;
+  } | null;
+  localizedTitle: string;
+  localizedDescription: string;
+}) => {
+  const variantMetadataBrand = getMetadataValue(
+    toRecord(input.variant?.metadata),
+    BRAND_METADATA_KEYS
+  );
+  const productMetadataBrand = getMetadataValue(
+    toRecord(input.product.metadata),
+    BRAND_METADATA_KEYS
+  );
+  const metadataBrand = variantMetadataBrand ?? productMetadataBrand;
+
+  if (metadataBrand) {
+    return inferKnownBrandFromText(metadataBrand) ?? metadataBrand;
+  }
+
+  return (
+    inferKnownBrandFromText(normalizeText(input.product.handle)) ??
+    inferKnownBrandFromText(input.localizedTitle) ??
+    inferKnownBrandFromText(input.localizedDescription) ??
+    undefined
+  );
+};
+
+const resolveDescriptionFromSource = (
+  source: Record<string, unknown> | null | undefined,
+  keys: readonly string[]
+) => {
+  if (!source || typeof source !== "object") {
+    return undefined;
+  }
+
+  for (const key of keys) {
+    const value = normalizeText(source[key]);
+    if (value) {
+      return value;
+    }
+  }
+
+  return undefined;
+};
+
+const resolveLocalizationRecord = (
+  localization: QueryProductLocalization | null | undefined
+) => {
+  return {
+    title_hu: normalizeText(localization?.title_hu),
+    title_sk: normalizeText(localization?.title_sk),
+    description_hu: normalizeText(localization?.description_hu),
+    description_sk: normalizeText(localization?.description_sk),
+  }
+}
 
 const readProductVariants = (product: QueryProduct) => {
   if (!Array.isArray(product.variants)) {
@@ -171,19 +290,33 @@ export const resolveLocalizedFeedDescription = (
     title?: unknown;
     metadata?: Record<string, unknown> | null;
   },
-  countryCode: string
+  countryCode: string,
+  localization?: QueryProductLocalization | null
 ) => {
-  const localizedTitle = resolveLocalizedFeedTitle(product, countryCode);
+  const localizedTitle = resolveLocalizedFeedTitle(
+    product,
+    countryCode,
+    localization
+  );
+  const localizationRecord = resolveLocalizationRecord(localization)
   const normalizedCountryCode = countryCode.toLowerCase();
   const isSk = normalizedCountryCode.startsWith("sk");
   const isHu = normalizedCountryCode.startsWith("hu");
   const metadataKeys = isSk
-    ? DESCRIPTION_METADATA_KEYS.sk
+    ? DESCRIPTION_SK_KEYS
     : isHu
-      ? DESCRIPTION_METADATA_KEYS.hu
+      ? DESCRIPTION_HU_KEYS
       : [];
 
-  const localizedDescription = resolveDescriptionFromMetadata(
+  if (isSk && localizationRecord.description_sk) {
+    return localizationRecord.description_sk
+  }
+
+  if (isHu && localizationRecord.description_hu) {
+    return localizationRecord.description_hu
+  }
+
+  const localizedDescription = resolveDescriptionFromSource(
     product.metadata,
     metadataKeys
   );
@@ -193,9 +326,13 @@ export const resolveLocalizedFeedDescription = (
   }
 
   if (isSk) {
-    const fallbackToHuDescription = resolveDescriptionFromMetadata(
+    if (localizationRecord.description_hu) {
+      return localizationRecord.description_hu
+    }
+
+    const fallbackToHuDescription = resolveDescriptionFromSource(
       product.metadata,
-      DESCRIPTION_METADATA_KEYS.hu
+      DESCRIPTION_HU_KEYS
     );
 
     if (fallbackToHuDescription) {
@@ -216,26 +353,40 @@ export const resolveLocalizedFeedTitle = (
     title?: unknown;
     metadata?: Record<string, unknown> | null;
   },
-  countryCode: string
+  countryCode: string,
+  localization?: QueryProductLocalization | null
 ) => {
+  const localizationRecord = resolveLocalizationRecord(localization)
   const normalizedCountryCode = countryCode.toLowerCase();
   const isSk = normalizedCountryCode.startsWith("sk");
   const isHu = normalizedCountryCode.startsWith("hu");
   const metadataKeys = isSk
-    ? TITLE_METADATA_KEYS.sk
+    ? TITLE_SK_KEYS
     : isHu
-      ? TITLE_METADATA_KEYS.hu
+      ? TITLE_HU_KEYS
       : [];
 
-  const localizedTitle = resolveDescriptionFromMetadata(product.metadata, metadataKeys);
+  if (isSk && localizationRecord.title_sk) {
+    return localizationRecord.title_sk
+  }
+
+  if (isHu && localizationRecord.title_hu) {
+    return localizationRecord.title_hu
+  }
+
+  const localizedTitle = resolveDescriptionFromSource(product.metadata, metadataKeys);
   if (localizedTitle) {
     return localizedTitle;
   }
 
   if (isSk) {
-    const fallbackToHuTitle = resolveDescriptionFromMetadata(
+    if (localizationRecord.title_hu) {
+      return localizationRecord.title_hu
+    }
+
+    const fallbackToHuTitle = resolveDescriptionFromSource(
       product.metadata,
-      TITLE_METADATA_KEYS.hu
+      TITLE_HU_KEYS
     );
 
     if (fallbackToHuTitle) {
@@ -337,17 +488,70 @@ export const resolveAdditionalImageLink = (
   return undefined;
 };
 
+const loadLocalizationsByProductId = async (
+  query: {
+    graph: <T = Record<string, unknown>>(
+      queryConfig: Record<string, unknown>
+    ) => Promise<{
+      data: T[]
+      metadata?: { count?: number }
+    }>
+  },
+  productIds: string[]
+) => {
+  const localizationByProductId = new Map<string, QueryProductLocalization>()
+  if (!productIds.length) {
+    return localizationByProductId
+  }
+
+  try {
+    const { data } = await query.graph<QueryProductLocalization>({
+      entity: "product_localization",
+      fields: [
+        "id",
+        "product_id",
+        "title_hu",
+        "title_sk",
+        "description_hu",
+        "description_sk",
+      ],
+      filters: {
+        product_id: productIds,
+      },
+      pagination: {
+        take: productIds.length,
+        skip: 0,
+      },
+    })
+
+    for (const row of data) {
+      const productId = normalizeText(row?.product_id)
+      if (!productId) {
+        continue
+      }
+
+      localizationByProductId.set(productId, row)
+    }
+  } catch {
+    return localizationByProductId
+  }
+
+  return localizationByProductId
+}
+
 export const getProductFeedItemsStep = createStep(
   "get-product-feed-items",
   async (input: StepInput, { container }) => {
     const feedItems: FeedItem[] = [];
-    const query = container.resolve("query") as unknown as Parameters<
+    const query = container.resolve("query") as Parameters<
       typeof getVariantAvailability
     >[0] & {
-      graph: (queryConfig: Record<string, unknown>) => Promise<{
-        data: QueryProduct[];
-        metadata?: { count?: number };
-      }>;
+      graph: <T = Record<string, unknown>>(
+        queryConfig: Record<string, unknown>
+      ) => Promise<{
+        data: T[]
+        metadata?: { count?: number }
+      }>
     };
     const configModule = container.resolve("configModule") as {
       admin?: {
@@ -374,7 +578,7 @@ export const getProductFeedItemsStep = createStep(
     const currencyCode = input.currency_code.toLowerCase();
 
     do {
-      const { data: products, metadata } = await query.graph({
+      const { data: products, metadata } = await query.graph<QueryProduct>({
         entity: "product",
         fields: [
           "id",
@@ -409,6 +613,11 @@ export const getProductFeedItemsStep = createStep(
 
       count = metadata?.count ?? 0;
       offset += limit;
+
+      const localizationByProductId = await loadLocalizationsByProductId(
+        query,
+        products.map((product) => product.id)
+      )
 
       for (const product of products) {
         const variants = readProductVariants(product);
@@ -471,10 +680,16 @@ export const getProductFeedItemsStep = createStep(
           primaryImageLink,
           storefrontBaseUrl
         );
-        const localizedTitle = resolveLocalizedFeedTitle(product, countryCode);
+        const localization = localizationByProductId.get(product.id)
+        const localizedTitle = resolveLocalizedFeedTitle(
+          product,
+          countryCode,
+          localization
+        );
         const localizedDescription = resolveLocalizedFeedDescription(
           product,
-          countryCode
+          countryCode,
+          localization
         );
 
         for (const variant of variants) {
@@ -508,7 +723,14 @@ export const getProductFeedItemsStep = createStep(
 
           const stock = resolveFeedStock({
             manageInventory: variant.manage_inventory,
+            allowBackorder: variant.allow_backorder,
             quantity: availabilityQuantity,
+          });
+          const brand = resolveFeedBrand({
+            product,
+            variant,
+            localizedTitle,
+            localizedDescription,
           });
 
           feedItems.push({
@@ -527,6 +749,7 @@ export const getProductFeedItemsStep = createStep(
                 : undefined,
             item_group_id: product.id,
             condition: "new",
+            brand,
           });
         }
       }

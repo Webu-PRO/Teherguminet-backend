@@ -1,6 +1,9 @@
 import { z } from "@medusajs/framework/zod"
 
-export const DEFAULT_OPENAI_TRANSLATE_MODEL = "gpt-5"
+export const DEFAULT_CODEX_TRANSLATE_MODEL = "gpt-5.3-codex"
+export const DEFAULT_CODEX_SIDECAR_URL = "http://codex-sidecar:3210"
+export const DEFAULT_CODEX_LOGIN_COMMAND =
+  "docker compose exec codex-sidecar codex login --device-auth"
 
 const normalizeString = (value: unknown) => {
   if (typeof value !== "string") {
@@ -10,42 +13,34 @@ const normalizeString = (value: unknown) => {
   return value.trim()
 }
 
-const toRecord = (value: unknown): Record<string, unknown> => {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return {}
-  }
+const readSidecarBaseUrl = () =>
+  normalizeString(process.env.AI_AGENT_CODEX_SIDECAR_URL) ||
+  DEFAULT_CODEX_SIDECAR_URL
 
-  return value as Record<string, unknown>
-}
+const readTranslateModel = () =>
+  normalizeString(process.env.AI_AGENT_CODEX_MODEL) ||
+  DEFAULT_CODEX_TRANSLATE_MODEL
 
-const extractOutputText = (payload: unknown) => {
-  const payloadRecord = toRecord(payload)
-  const directOutputText = normalizeString(payloadRecord.output_text)
+const readLoginCommand = () =>
+  normalizeString(process.env.AI_AGENT_CODEX_LOGIN_COMMAND) ||
+  DEFAULT_CODEX_LOGIN_COMMAND
 
-  if (directOutputText) {
-    return directOutputText
-  }
-
-  const output = Array.isArray(payloadRecord.output) ? payloadRecord.output : []
-
-  for (const entry of output) {
-    const message = toRecord(entry)
-    const content = Array.isArray(message.content) ? message.content : []
-
-    for (const item of content) {
-      const contentItem = toRecord(item)
-      if (contentItem.type !== "output_text") {
-        continue
-      }
-
-      const itemText = normalizeString(contentItem.text)
-      if (itemText) {
-        return itemText
-      }
+const readErrorMessage = async (response: Response, fallback: string) => {
+  try {
+    const payload = (await response.json()) as {
+      message?: string
+      error?: string
     }
+
+    const message = normalizeString(payload?.message || payload?.error)
+    if (message) {
+      return message
+    }
+  } catch {
+    // ignore parse issues
   }
 
-  return ""
+  return fallback
 }
 
 const normalizeTranslationResponse = z
@@ -71,46 +66,85 @@ export type TranslateHuToSkOutput = {
   model: string
 }
 
-export const getAiAgentStatus = () => {
-  const apiKey = normalizeString(process.env.OPENAI_API_KEY)
-  const model =
-    normalizeString(process.env.OPENAI_TRANSLATE_MODEL) ||
-    DEFAULT_OPENAI_TRANSLATE_MODEL
+export type AiAgentStatus = {
+  provider: "codex-cli"
+  model: string
+  connected: boolean
+  sidecar_url: string
+  remediation_command: string
+  message?: string
+}
 
-  return {
-    provider: "openai",
-    model,
-    connected: Boolean(apiKey),
+export const getAiAgentStatus = async (): Promise<AiAgentStatus> => {
+  const model = readTranslateModel()
+  const sidecarUrl = readSidecarBaseUrl()
+  const remediationCommand = readLoginCommand()
+
+  try {
+    const response = await fetch(`${sidecarUrl}/health`, {
+      method: "GET",
+      cache: "no-store",
+    })
+
+    if (!response.ok) {
+      const message = await readErrorMessage(
+        response,
+        "A Codex sidecar nem elérhető."
+      )
+
+      return {
+        provider: "codex-cli",
+        model,
+        connected: false,
+        sidecar_url: sidecarUrl,
+        remediation_command: remediationCommand,
+        message,
+      }
+    }
+
+    const payload = (await response.json()) as {
+      status?: {
+        model?: unknown
+        connected?: unknown
+        message?: unknown
+      }
+    }
+
+    const connected = payload?.status?.connected === true
+    const resolvedModel =
+      normalizeString(payload?.status?.model) || readTranslateModel()
+    const statusMessage = normalizeString(payload?.status?.message)
+
+    return {
+      provider: "codex-cli",
+      model: resolvedModel,
+      connected,
+      sidecar_url: sidecarUrl,
+      remediation_command: remediationCommand,
+      message: statusMessage || undefined,
+    }
+  } catch (error) {
+    const message =
+      error instanceof Error && error.message.trim().length
+        ? `A Codex sidecar nem elérhető: ${error.message}`
+        : "A Codex sidecar nem elérhető."
+
+    return {
+      provider: "codex-cli",
+      model,
+      connected: false,
+      sidecar_url: sidecarUrl,
+      remediation_command: remediationCommand,
+      message,
+    }
   }
-}
-
-const buildTranslationPrompt = (input: {
-  title_hu: string
-  description_hu: string
-  translate_title: boolean
-  translate_description: boolean
-}) => {
-  return JSON.stringify(input)
-}
-
-const parseTranslationOutput = (rawText: string) => {
-  const parsed = JSON.parse(rawText) as unknown
-  return normalizeTranslationResponse.parse(parsed)
 }
 
 export const translateHuToSk = async (
   input: TranslateHuToSkInput
 ): Promise<TranslateHuToSkOutput> => {
-  const apiKey = normalizeString(process.env.OPENAI_API_KEY)
-  const model =
-    normalizeString(process.env.OPENAI_TRANSLATE_MODEL) ||
-    DEFAULT_OPENAI_TRANSLATE_MODEL
-
-  if (!apiKey) {
-    throw new Error(
-      "OPENAI_API_KEY hiányzik. Állítsd be az API kulcsot a backend .env fájlban."
-    )
-  }
+  const model = readTranslateModel()
+  const sidecarUrl = readSidecarBaseUrl()
 
   const titleHu = normalizeString(input.title_hu)
   const descriptionHu = normalizeString(input.description_hu)
@@ -132,71 +166,34 @@ export const translateHuToSk = async (
     }
   }
 
-  const response = await fetch("https://api.openai.com/v1/responses", {
+  const response = await fetch(`${sidecarUrl}/translate`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
+      title_hu: titleHu,
+      description_hu: descriptionHu,
+      translate_title: shouldTranslateTitle,
+      translate_description: shouldTranslateDescription,
       model,
-      input: [
-        {
-          role: "system",
-          content: [
-            {
-              type: "input_text",
-              text:
-                "You are a professional ecommerce translator. Translate Hungarian (HU) text to Slovak (SK). Keep brand names, tire sizes, SKUs, numbers, punctuation style and technical abbreviations intact. Return JSON only.",
-            },
-          ],
-        },
-        {
-          role: "user",
-          content: [
-            {
-              type: "input_text",
-              text: buildTranslationPrompt({
-                title_hu: titleHu,
-                description_hu: descriptionHu,
-                translate_title: shouldTranslateTitle,
-                translate_description: shouldTranslateDescription,
-              }),
-            },
-          ],
-        },
-      ],
-      text: {
-        format: {
-          type: "json_object",
-        },
-      },
     }),
   })
 
   if (!response.ok) {
-    let details = ""
+    const fallback =
+      response.status === 401
+        ? "CODEX_AUTH_REQUIRED: A Codex CLI nincs bejelentkezve."
+        : response.status === 503
+          ? "CODEX_SIDECAR_UNAVAILABLE: A Codex sidecar nem elérhető."
+          : "Nem sikerült fordítást kérni a Codex sidecar szolgáltatástól."
 
-    try {
-      const payload = (await response.json()) as { error?: { message?: string } }
-      details = normalizeString(payload?.error?.message)
-    } catch {
-      // ignore parse errors
-    }
-
-    throw new Error(
-      details || "Nem sikerült fordítást kérni az OpenAI API-tól."
-    )
+    const message = await readErrorMessage(response, fallback)
+    throw new Error(message)
   }
 
   const payload = (await response.json()) as unknown
-  const outputText = extractOutputText(payload)
-
-  if (!outputText) {
-    throw new Error("Az AI válasz üres volt.")
-  }
-
-  const parsed = parseTranslationOutput(outputText)
+  const parsed = normalizeTranslationResponse.parse(payload)
 
   const nextTitleSk = shouldTranslateTitle
     ? normalizeString(parsed.title_sk)

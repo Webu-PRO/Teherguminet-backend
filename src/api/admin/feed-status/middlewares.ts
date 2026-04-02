@@ -6,12 +6,11 @@ import { z } from "@medusajs/framework/zod"
 
 import {
   FEED_STATUS_CHANNELS,
-  FEED_STATUS_MARKETS,
 } from "../../../lib/feed-status"
 
 export const AdminUpdateFeedStatus = z
   .object({
-    market: z.enum(FEED_STATUS_MARKETS),
+    market: z.string().trim().min(1),
     channel: z.enum(FEED_STATUS_CHANNELS),
     active: z.boolean(),
   })
@@ -26,4 +25,3 @@ export const adminFeedStatusMiddlewares: MiddlewareRoute[] = [
     middlewares: [validateAndTransformBody(AdminUpdateFeedStatus)],
   },
 ]
-
