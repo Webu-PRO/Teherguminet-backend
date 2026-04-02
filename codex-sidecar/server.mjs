@@ -157,6 +157,27 @@ const getAuthStatus = async () => {
   }
 }
 
+const getHealthAuthStatus = async () => {
+  const authFilePath = path.join(process.env.HOME || "/home/node", ".codex", "auth.json")
+
+  try {
+    const raw = await readFile(authFilePath, "utf8")
+    if (normalizeString(raw)) {
+      return {
+        connected: true,
+        message: "Codex auth file detected.",
+      }
+    }
+  } catch {
+    // ignore file read errors for lightweight health probes
+  }
+
+  return {
+    connected: false,
+    message: "Codex auth file not found.",
+  }
+}
+
 const extractJsonObject = (value) => {
   const text = normalizeString(value)
 
@@ -300,7 +321,7 @@ const server = createServer(async (req, res) => {
   const url = req.url || "/"
 
   if (method === "GET" && url === "/health") {
-    const authStatus = await getAuthStatus()
+    const authStatus = await getHealthAuthStatus()
 
     return sendJson(res, 200, {
       ok: true,

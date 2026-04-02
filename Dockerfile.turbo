@@ -26,11 +26,17 @@ RUN --mount=type=cache,id=yarn-cache-backend,target=/usr/local/share/.cache/yarn
 FROM deps AS builder
 WORKDIR /server
 COPY . .
+ARG REDIS_URL
+ARG EVENT_BUS_REDIS_URL
+ARG EVENTS_REDIS_URL
 ENV NODE_ENV=production \
     CI=1 \
     MEDUSA_DISABLE_TELEMETRY=1
 
 RUN --mount=type=cache,id=turbo-cache-backend,target=/server/.turbo \
+  REDIS_URL="$REDIS_URL" \
+  EVENT_BUS_REDIS_URL="$EVENT_BUS_REDIS_URL" \
+  EVENTS_REDIS_URL="$EVENTS_REDIS_URL" \
   sh -lc 'if [ -n "${TURBO_TEAM:-}" ] && [ -n "${TURBO_TOKEN:-}" ]; then \
     yarn turbo:build; \
   else \

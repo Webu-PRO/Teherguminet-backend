@@ -44,7 +44,22 @@ const normalizeAdminPath = (value?: string) => {
 
 loadEnv(process.env.NODE_ENV || "development", process.cwd());
 
-const sharedRedisUrl = process.env.REDIS_URL;
+const firstNonEmptyEnv = (...values: Array<string | undefined>) => {
+  for (const value of values) {
+    const trimmed = value?.trim();
+    if (trimmed) {
+      return trimmed;
+    }
+  }
+
+  return undefined;
+};
+
+const eventBusRedisUrl = firstNonEmptyEnv(
+  process.env.EVENT_BUS_REDIS_URL,
+  process.env.EVENTS_REDIS_URL,
+);
+const sharedRedisUrl = firstNonEmptyEnv(process.env.REDIS_URL, eventBusRedisUrl);
 const normalizeS3Prefix = (value: string | undefined) => {
   if (!value) {
     return undefined;
@@ -314,7 +329,7 @@ module.exports = defineConfig({
     eventBus: {
       resolve: "@medusajs/event-bus-redis",
       options: {
-        redisUrl: process.env.EVENT_BUS_REDIS_URL || sharedRedisUrl,
+        redisUrl: eventBusRedisUrl || sharedRedisUrl,
       },
     },
     invoinve: {
