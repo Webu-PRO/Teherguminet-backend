@@ -4,6 +4,7 @@ import {
 } from "@medusajs/framework/http";
 import { z } from "@medusajs/framework/zod";
 import { adminDiscountCodeMiddlewares } from "./admin/discount-code/middlewares";
+import { adminFeedStatusMiddlewares } from "./admin/feed-status/middlewares";
 
 const productFeedQuerySchema = z
   .object({
@@ -43,5 +44,6 @@ export default defineMiddlewares({
       middlewares: [validateAndTransformQuery(productFeedQuerySchema, {})],
     },
     ...adminDiscountCodeMiddlewares,
+    ...adminFeedStatusMiddlewares,
   ],
 });

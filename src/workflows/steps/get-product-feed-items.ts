@@ -33,18 +33,18 @@ type QueryStockLocation = {
   address?: {
     country_code?: string | null;
   } | null;
-};
+} | null;
 
 type QuerySalesChannel = {
   id?: string | null;
   stock_locations?: QueryStockLocation[] | null;
-};
+} | null;
 
 type QueryVariant = {
   id: string;
   manage_inventory?: boolean | null;
   calculated_price?: CalculatedPriceSet | null;
-};
+} | null;
 
 type QueryProduct = {
   id: string;
@@ -97,6 +97,38 @@ const resolveDescriptionFromMetadata = (
   }
 
   return undefined;
+};
+
+const readProductVariants = (product: QueryProduct) => {
+  if (!Array.isArray(product.variants)) {
+    return [] as Array<Exclude<QueryVariant, null>>;
+  }
+
+  const variants: Array<Exclude<QueryVariant, null>> = [];
+  for (const variant of product.variants) {
+    if (!variant || typeof variant.id !== "string") {
+      continue;
+    }
+    variants.push(variant);
+  }
+
+  return variants;
+};
+
+const readSalesChannels = (product: QueryProduct) => {
+  if (!Array.isArray(product.sales_channels)) {
+    return [] as Array<Exclude<QuerySalesChannel, null>>;
+  }
+
+  const salesChannels: Array<Exclude<QuerySalesChannel, null>> = [];
+  for (const channel of product.sales_channels) {
+    if (!channel) {
+      continue;
+    }
+    salesChannels.push(channel);
+  }
+
+  return salesChannels;
 };
 
 export const resolveLocalizedFeedDescription = (
@@ -345,28 +377,38 @@ export const getProductFeedItemsStep = createStep(
       offset += limit;
 
       for (const product of products) {
-        const variants = product.variants ?? [];
+        const variants = readProductVariants(product);
         if (!variants.length) {
           continue;
         }
 
-        const salesChannel = product.sales_channels?.find(
-          (channel: QuerySalesChannel) => {
-            return channel?.stock_locations?.some(
-              (location: QueryStockLocation) => {
-                const locationCountryCode =
-                  location?.address?.country_code?.toLowerCase();
-                return locationCountryCode === countryCode;
-              }
-            );
+        const salesChannels = readSalesChannels(product);
+        let salesChannel: Exclude<QuerySalesChannel, null> | undefined;
+        for (const channel of salesChannels) {
+          const stockLocations = Array.isArray(channel.stock_locations)
+            ? channel.stock_locations
+            : [];
+
+          let matchesCountry = false;
+          for (const location of stockLocations) {
+            const locationCountryCode = location?.address?.country_code?.toLowerCase();
+            if (locationCountryCode === countryCode) {
+              matchesCountry = true;
+              break;
+            }
           }
-        );
+
+          if (matchesCountry) {
+            salesChannel = channel;
+            break;
+          }
+        }
 
         const availability = salesChannel?.id
           ? await getVariantAvailability(
               query,
               {
-                variant_ids: variants.map((variant: QueryVariant) => variant.id),
+                variant_ids: variants.map((variant) => variant.id),
                 sales_channel_id: salesChannel.id,
               }
             )
@@ -396,7 +438,9 @@ export const getProductFeedItemsStep = createStep(
         );
 
         for (const variant of variants) {
-          const calculatedPrice = variant.calculated_price;
+          const calculatedPrice = (
+            variant as { calculated_price?: CalculatedPriceSet | null }
+          ).calculated_price;
 
           if (!calculatedPrice) {
             continue;
