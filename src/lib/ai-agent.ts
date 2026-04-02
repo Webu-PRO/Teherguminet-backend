@@ -75,6 +75,67 @@ export type AiAgentStatus = {
   message?: string
 }
 
+export type AiAgentAuthState =
+  | "idle"
+  | "pending"
+  | "connected"
+  | "failed"
+  | "expired"
+
+export type AiAgentAuthStatus = {
+  provider: "codex-cli"
+  model: string
+  connected: boolean
+  state: AiAgentAuthState
+  sidecar_url: string
+  remediation_command: string
+  verification_url?: string
+  user_code?: string
+  started_at?: string
+  completed_at?: string
+  expires_at?: string
+  message?: string
+}
+
+const normalizeAuthState = (value: unknown): AiAgentAuthState => {
+  const normalized = normalizeString(value)
+
+  if (
+    normalized === "idle" ||
+    normalized === "pending" ||
+    normalized === "connected" ||
+    normalized === "failed" ||
+    normalized === "expired"
+  ) {
+    return normalized
+  }
+
+  return "idle"
+}
+
+const toAiAgentAuthStatus = (
+  payload: Record<string, unknown> | undefined
+): AiAgentAuthStatus => {
+  const model = normalizeString(payload?.model) || readTranslateModel()
+  const connected = payload?.connected === true
+  const state = normalizeAuthState(payload?.state)
+
+  return {
+    provider: "codex-cli",
+    model,
+    connected,
+    state: connected ? "connected" : state,
+    sidecar_url: readSidecarBaseUrl(),
+    remediation_command: normalizeString(payload?.remediation_command) || readLoginCommand(),
+    verification_url: normalizeString(payload?.verification_url) || undefined,
+    user_code: normalizeString(payload?.user_code) || undefined,
+    started_at: normalizeString(payload?.started_at) || undefined,
+    completed_at: normalizeString(payload?.completed_at) || undefined,
+    expires_at: normalizeString(payload?.expires_at) || undefined,
+    message: normalizeString(payload?.message) || undefined,
+  }
+}
+
 export const getAiAgentStatus = async (): Promise<AiAgentStatus> => {
   const model = readTranslateModel()
   const sidecarUrl = readSidecarBaseUrl()
@@ -135,6 +196,86 @@ export const getAiAgentStatus = async (): Promise<AiAgentStatus> => {
       connected: false,
       sidecar_url: sidecarUrl,
       remediation_command: remediationCommand,
+      message,
+    }
+  }
+}
+
+export const startAiAgentAuth = async (): Promise<AiAgentAuthStatus> => {
+  const sidecarUrl = readSidecarBaseUrl()
+
+  try {
+    const response = await fetch(`${sidecarUrl}/auth/start`, {
+      method: "POST",
+      cache: "no-store",
+    })
+
+    if (!response.ok) {
+      const message = await readErrorMessage(
+        response,
+        "Nem sikerült elindítani a Codex bejelentkezést."
+      )
+      throw new Error(message)
+    }
+
+    const payload = (await response.json()) as {
+      status?: Record<string, unknown>
+    }
+
+    return toAiAgentAuthStatus(payload?.status)
+  } catch (error) {
+    const message =
+      error instanceof Error && error.message.trim().length
+        ? `A Codex bejelentkezés indítása sikertelen: ${error.message}`
+        : "A Codex bejelentkezés indítása sikertelen."
+
+    return {
+      provider: "codex-cli",
+      model: readTranslateModel(),
+      connected: false,
+      state: "failed",
+      sidecar_url: sidecarUrl,
+      remediation_command: readLoginCommand(),
+      message,
+    }
+  }
+}
+
+export const getAiAgentAuthStatus = async (): Promise<AiAgentAuthStatus> => {
+  const sidecarUrl = readSidecarBaseUrl()
+
+  try {
+    const response = await fetch(`${sidecarUrl}/auth/status`, {
+      method: "GET",
+      cache: "no-store",
+    })
+
+    if (!response.ok) {
+      const message = await readErrorMessage(
+        response,
+        "Nem sikerült lekérni a Codex bejelentkezés állapotát."
+      )
+      throw new Error(message)
+    }
+
+    const payload = (await response.json()) as {
+      status?: Record<string, unknown>
+    }
+
+    return toAiAgentAuthStatus(payload?.status)
+  } catch (error) {
+    const message =
+      error instanceof Error && error.message.trim().length
+        ? `A Codex sidecar nem elérhető: ${error.message}`
+        : "A Codex sidecar nem elérhető."
+
+    return {
+      provider: "codex-cli",
+      model: readTranslateModel(),
+      connected: false,
+      state: "failed",
+      sidecar_url: sidecarUrl,
+      remediation_command: readLoginCommand(),
       message,
     }
   }

@@ -8,7 +8,10 @@ import {
   resolveLocalizedFeedTitle,
   resolveAdditionalImageLink,
   resolveFeedBrand,
+  resolveFeedGoogleProductCategory,
   resolveFeedImageUrl,
+  resolveFeedSize,
+  resolveFeedSizeChart,
   resolveStorefrontBaseUrl,
 } from "../steps/get-product-feed-items";
 
@@ -362,6 +365,46 @@ describe("product feed utils", () => {
       });
 
       expect(result).toBeUndefined();
+    });
+  });
+
+  describe("category and size helpers", () => {
+    it("resolves google product category from variant metadata first", () => {
+      const result = resolveFeedGoogleProductCategory({
+        productMetadata: {
+          google_product_category: "Vehicles & Parts > Vehicle Parts",
+        },
+        variantMetadata: {
+          google_product_category:
+            "Vehicles & Parts > Vehicle Parts & Accessories > Motor Vehicle Tires",
+        },
+      });
+
+      expect(result).toBe(
+        "Vehicles & Parts > Vehicle Parts & Accessories > Motor Vehicle Tires"
+      );
+    });
+
+    it("extracts size from title when metadata size is missing", () => {
+      const result = resolveFeedSize({
+        localizedTitle: "315/60R22.5-18 154/150L HIGHWAY S11",
+        productMetadata: {},
+        variantMetadata: {},
+      });
+
+      expect(result).toBe("315/60R22.5");
+    });
+
+    it("normalizes relative size chart links to absolute URLs", () => {
+      const result = resolveFeedSizeChart({
+        storefrontBaseUrl: "https://teherguminet.hu",
+        productMetadata: {
+          size_chart: "/uploads/size-chart-s11.png",
+        },
+        variantMetadata: {},
+      });
+
+      expect(result).toBe("https://teherguminet.hu/uploads/size-chart-s11.png");
     });
   });
 });

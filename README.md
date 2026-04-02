@@ -63,15 +63,15 @@ The HU → SK translation feature now uses an internal `codex-sidecar` service i
    - `codex login --device-auth`
 2. Start compose so both `medusa` and `codex-sidecar` run:
    - `yarn docker:up`
-3. If the sidecar is not logged in, use:
-   - `docker compose exec codex-sidecar codex login --device-auth`
+3. If the sidecar is not logged in, you can now start login from Admin UI:
+   - `AI AGENT` oldal → `Codex bejelentkezés indítása`
+   - (Fallback) `docker compose exec codex-sidecar codex login --device-auth`
 
 ### Environment variables
 
 - `AI_AGENT_CODEX_SIDECAR_URL` (default: `http://codex-sidecar:3210`)
 - `AI_AGENT_CODEX_MODEL` (default: `gpt-5.3-codex`)
 - `AI_AGENT_CODEX_LOGIN_COMMAND` (shown in Admin UI when auth is missing)
-- `CODEX_AUTH_DIR` (host path to Codex auth cache, default: `${HOME}/.codex`)
 
 ### Security notes
 

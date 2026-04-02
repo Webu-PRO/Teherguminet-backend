@@ -24,6 +24,9 @@ export type FeedItem = {
   quantity?: number;
   price: string;
   sale_price?: string;
+  google_product_category?: string;
+  size?: string;
+  size_chart?: string;
   item_group_id: string;
   condition?: string;
   brand?: string;
@@ -92,6 +95,28 @@ const KNOWN_FEED_BRANDS = [
   "AEROTYRE",
   "SUPERWAY",
   "GROUNDSPEED",
+] as const;
+const GOOGLE_PRODUCT_CATEGORY_METADATA_KEYS = [
+  "google_product_category",
+  "google product category",
+  "google_category",
+  "gpc",
+] as const;
+const SIZE_METADATA_KEYS = [
+  "size",
+  "méret",
+  "meret",
+  "abroncs_meret",
+  "abroncs méret",
+] as const;
+const SIZE_CHART_METADATA_KEYS = [
+  "size_chart",
+  "size chart",
+  "size_chart_url",
+  "size chart url",
+  "sizechart",
+  "mérettáblázat",
+  "merettablazat",
 ] as const;
 
 export const formatPrice = (price: number, currencyCode: string) => {
@@ -221,6 +246,81 @@ export const resolveFeedBrand = (input: {
     inferKnownBrandFromText(input.localizedDescription) ??
     undefined
   );
+};
+
+const resolveMetadataFieldFromProductVariant = (input: {
+  productMetadata?: Record<string, unknown> | null;
+  variantMetadata?: Record<string, unknown> | null;
+  keys: readonly string[];
+}) => {
+  return (
+    getMetadataValue(toRecord(input.variantMetadata), input.keys) ??
+    getMetadataValue(toRecord(input.productMetadata), input.keys)
+  );
+};
+
+const maybeResolveAbsoluteUrl = (
+  value: string | undefined,
+  storefrontBaseUrl: string
+) => {
+  if (!value) {
+    return undefined;
+  }
+
+  return toAbsoluteUrl(value, storefrontBaseUrl) ?? value;
+};
+
+const extractSizeFromTitle = (title: string) => {
+  const normalizedTitle = normalizeText(title);
+  if (!normalizedTitle) {
+    return undefined;
+  }
+
+  const match = normalizedTitle.match(/^\s*([0-9]{3}\/[0-9]{2}R[0-9]{2}(?:[.,][0-9])?)/i);
+  if (!match?.[1]) {
+    return undefined;
+  }
+
+  return match[1].replace(",", ".");
+};
+
+export const resolveFeedGoogleProductCategory = (input: {
+  productMetadata?: Record<string, unknown> | null;
+  variantMetadata?: Record<string, unknown> | null;
+}) => {
+  return resolveMetadataFieldFromProductVariant({
+    productMetadata: input.productMetadata,
+    variantMetadata: input.variantMetadata,
+    keys: GOOGLE_PRODUCT_CATEGORY_METADATA_KEYS,
+  });
+};
+
+export const resolveFeedSize = (input: {
+  localizedTitle: string;
+  productMetadata?: Record<string, unknown> | null;
+  variantMetadata?: Record<string, unknown> | null;
+}) => {
+  return (
+    resolveMetadataFieldFromProductVariant({
+      productMetadata: input.productMetadata,
+      variantMetadata: input.variantMetadata,
+      keys: SIZE_METADATA_KEYS,
+    }) ?? extractSizeFromTitle(input.localizedTitle)
+  );
+};
+
+export const resolveFeedSizeChart = (input: {
+  storefrontBaseUrl: string;
+  productMetadata?: Record<string, unknown> | null;
+  variantMetadata?: Record<string, unknown> | null;
+}) => {
+  const rawValue = resolveMetadataFieldFromProductVariant({
+    productMetadata: input.productMetadata,
+    variantMetadata: input.variantMetadata,
+    keys: SIZE_CHART_METADATA_KEYS,
+  });
+
+  return maybeResolveAbsoluteUrl(rawValue, input.storefrontBaseUrl);
 };
 
 const resolveDescriptionFromSource = (
@@ -732,6 +832,20 @@ export const getProductFeedItemsStep = createStep(
             localizedTitle,
             localizedDescription,
           });
+          const googleProductCategory = resolveFeedGoogleProductCategory({
+            productMetadata: product.metadata,
+            variantMetadata: variant.metadata,
+          });
+          const size = resolveFeedSize({
+            localizedTitle,
+            productMetadata: product.metadata,
+            variantMetadata: variant.metadata,
+          });
+          const sizeChart = resolveFeedSizeChart({
+            storefrontBaseUrl,
+            productMetadata: product.metadata,
+            variantMetadata: variant.metadata,
+          });
 
           feedItems.push({
             id: variant.id,
@@ -747,6 +861,9 @@ export const getProductFeedItemsStep = createStep(
               typeof salePrice === "number"
                 ? formatPrice(salePrice, currencyCode)
                 : undefined,
+            google_product_category: googleProductCategory,
+            size,
+            size_chart: sizeChart,
             item_group_id: product.id,
             condition: "new",
             brand,

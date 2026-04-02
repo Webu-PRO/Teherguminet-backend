@@ -1,7 +1,9 @@
 import {
   DEFAULT_CODEX_SIDECAR_URL,
   DEFAULT_CODEX_TRANSLATE_MODEL,
+  getAiAgentAuthStatus,
   getAiAgentStatus,
+  startAiAgentAuth,
   translateHuToSk,
 } from "../ai-agent"
 
@@ -127,6 +129,39 @@ describe("ai-agent codex sidecar integration", () => {
     expect(status.provider).toBe("codex-cli")
     expect(status.connected).toBe(false)
     expect(status.model).toBe(DEFAULT_CODEX_TRANSLATE_MODEL)
+    expect(status.sidecar_url).toBe(DEFAULT_CODEX_SIDECAR_URL)
+    expect(status.message).toContain("nem elérhető")
+  })
+
+  it("starts auth flow and returns pending status", async () => {
+    jest.spyOn(global, "fetch").mockResolvedValueOnce(
+      mockJsonResponse({
+        status: {
+          state: "pending",
+          connected: false,
+          verification_url: "https://auth.openai.com/codex/device",
+          user_code: "ABCD-1234",
+          message: "Nyisd meg a linket és add meg a kódot.",
+        },
+      })
+    )
+
+    const status = await startAiAgentAuth()
+
+    expect(status.state).toBe("pending")
+    expect(status.connected).toBe(false)
+    expect(status.verification_url).toBe("https://auth.openai.com/codex/device")
+    expect(status.user_code).toBe("ABCD-1234")
+  })
+
+  it("returns failed auth status when sidecar is unreachable", async () => {
+    jest.spyOn(global, "fetch").mockRejectedValueOnce(new Error("connect ECONNREFUSED"))
+
+    const status = await getAiAgentAuthStatus()
+
+    expect(status.provider).toBe("codex-cli")
+    expect(status.state).toBe("failed")
+    expect(status.connected).toBe(false)
     expect(status.sidecar_url).toBe(DEFAULT_CODEX_SIDECAR_URL)
     expect(status.message).toContain("nem elérhető")
   })

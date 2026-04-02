@@ -39,6 +39,13 @@ export const buildProductFeedXmlStep = createStep(
           (item.sale_price
             ? `<g:sale_price>${escapeXml(item.sale_price)}</g:sale_price>`
             : "") +
+          (item.google_product_category
+            ? `<g:google_product_category>${escapeXml(item.google_product_category)}</g:google_product_category>`
+            : "") +
+          (item.size ? `<g:size>${escapeXml(item.size)}</g:size>` : "") +
+          (item.size_chart
+            ? `<size_chart>${escapeXml(item.size_chart)}</size_chart>`
+            : "") +
           `<g:condition>${escapeXml(item.condition || "new")}</g:condition>` +
           (item.brand ? `<g:brand>${escapeXml(item.brand)}</g:brand>` : "") +
           `<g:item_group_id>${escapeXml(item.item_group_id)}</g:item_group_id>` +

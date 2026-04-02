@@ -10,6 +10,8 @@ const LOGIN_COMMAND = (
   process.env.AI_AGENT_CODEX_LOGIN_COMMAND ||
   "docker compose exec codex-sidecar codex login --device-auth"
 ).trim()
+const AUTH_SESSION_DEFAULT_EXPIRY_MS = 15 * 60 * 1000
+const AUTH_BOOTSTRAP_WAIT_MS = 1_500
 
 const normalizeString = (value) => {
   if (typeof value !== "string") {
@@ -51,6 +53,9 @@ const sendJson = (res, status, payload) => {
   })
   res.end(JSON.stringify(payload))
 }
+
+const stripAnsi = (value) =>
+  normalizeString(value).replace(/\u001b\[[0-9;]*m/g, "").trim()
 
 const runCommand = ({ cmd, args, timeoutMs = 90_000, cwd }) =>
   new Promise((resolve) => {
@@ -176,6 +181,296 @@ const getHealthAuthStatus = async () => {
     connected: false,
     message: "Codex auth file not found.",
   }
+}
+
+const getNowIso = () => new Date().toISOString()
+
+const getExpiryIso = (expiresInMs) => new Date(Date.now() + expiresInMs).toISOString()
+
+const createEmptyAuthSession = () => ({
+  state: "idle",
+  connected: false,
+  started_at: "",
+  completed_at: "",
+  expires_at: "",
+  verification_url: "",
+  user_code: "",
+  message: "",
+})
+
+let authSession = createEmptyAuthSession()
+let authLoginProcess = null
+let authExpiryTimer = null
+let authOutput = ""
+
+const setAuthSession = (patch) => {
+  authSession = {
+    ...authSession,
+    ...patch,
+  }
+}
+
+const clearAuthExpiryTimer = () => {
+  if (!authExpiryTimer) {
+    return
+  }
+
+  clearTimeout(authExpiryTimer)
+  authExpiryTimer = null
+}
+
+const stopAuthLoginProcess = () => {
+  if (!authLoginProcess) {
+    return
+  }
+
+  authLoginProcess.kill("SIGTERM")
+  setTimeout(() => {
+    authLoginProcess?.kill("SIGKILL")
+  }, 2_000)
+}
+
+const getAuthStatusPayload = () => ({
+  provider: "codex-cli",
+  model: MODEL,
+  connected: authSession.connected,
+  state: authSession.state,
+  verification_url: authSession.verification_url || undefined,
+  user_code: authSession.user_code || undefined,
+  started_at: authSession.started_at || undefined,
+  completed_at: authSession.completed_at || undefined,
+  expires_at: authSession.expires_at || undefined,
+  remediation_command: LOGIN_COMMAND,
+  message: authSession.message || undefined,
+})
+
+const extractAuthOutputDetails = (value) => {
+  const clean = stripAnsi(value)
+  const urls = clean.match(/https?:\/\/[^\s)]+/gi) || []
+  const verificationUrl =
+    urls.find((candidate) => candidate.toLowerCase().includes("/device")) ||
+    urls[0] ||
+    ""
+
+  const codeMatch = clean.match(/\b([A-Z0-9]{4}-[A-Z0-9]{4,})\b/)
+  const expiryMatch = clean.match(/expires in\s+(\d+)\s+minutes?/i)
+  const expiresInMinutes = Number.parseInt(expiryMatch?.[1] || "", 10)
+
+  return {
+    verification_url: normalizeString(verificationUrl),
+    user_code: normalizeString(codeMatch?.[1] || ""),
+    expires_in_ms:
+      Number.isFinite(expiresInMinutes) && expiresInMinutes > 0
+        ? expiresInMinutes * 60 * 1000
+        : null,
+  }
+}
+
+const updateAuthSessionFromOutput = (outputChunk) => {
+  const details = extractAuthOutputDetails(outputChunk)
+  let shouldUpdate = false
+
+  if (!authSession.verification_url && details.verification_url) {
+    authSession.verification_url = details.verification_url
+    shouldUpdate = true
+  }
+
+  if (!authSession.user_code && details.user_code) {
+    authSession.user_code = details.user_code
+    shouldUpdate = true
+  }
+
+  if (!authSession.expires_at && details.expires_in_ms) {
+    authSession.expires_at = getExpiryIso(details.expires_in_ms)
+    clearAuthExpiryTimer()
+    authExpiryTimer = setTimeout(() => {
+      if (authSession.state !== "pending") {
+        return
+      }
+
+      setAuthSession({
+        state: "expired",
+        connected: false,
+        completed_at: getNowIso(),
+        message: "A bejelentkezési kód lejárt. Indíts új bejelentkezést.",
+      })
+      stopAuthLoginProcess()
+    }, details.expires_in_ms)
+    shouldUpdate = true
+  }
+
+  if (shouldUpdate && !authSession.message) {
+    authSession.message = "Nyisd meg a linket és add meg a kódot a bejelentkezéshez."
+  }
+}
+
+const syncAuthSessionWithAuthFile = async () => {
+  const authStatus = await getHealthAuthStatus()
+
+  if (authStatus.connected) {
+    if (!authSession.connected || authSession.state !== "connected") {
+      setAuthSession({
+        state: "connected",
+        connected: true,
+        completed_at: authSession.completed_at || getNowIso(),
+        message: "Codex sikeresen bejelentkezve.",
+      })
+    }
+
+    return authStatus
+  }
+
+  if (authSession.state === "connected" && !authLoginProcess) {
+    authSession = createEmptyAuthSession()
+    setAuthSession({
+      state: "idle",
+      connected: false,
+      message: "Codex auth file not found.",
+    })
+  }
+
+  return authStatus
+}
+
+const startAuthSession = async () => {
+  const authFileStatus = await syncAuthSessionWithAuthFile()
+  if (authFileStatus.connected) {
+    return
+  }
+
+  if (authLoginProcess && authSession.state === "pending") {
+    return
+  }
+
+  clearAuthExpiryTimer()
+  authOutput = ""
+  authSession = createEmptyAuthSession()
+
+  const startedAt = getNowIso()
+  setAuthSession({
+    state: "pending",
+    connected: false,
+    started_at: startedAt,
+    expires_at: getExpiryIso(AUTH_SESSION_DEFAULT_EXPIRY_MS),
+    message: "Bejelentkezési kód generálása...",
+  })
+
+  authExpiryTimer = setTimeout(() => {
+    if (authSession.state !== "pending") {
+      return
+    }
+
+    setAuthSession({
+      state: "expired",
+      connected: false,
+      completed_at: getNowIso(),
+      message: "A bejelentkezési kód lejárt. Indíts új bejelentkezést.",
+    })
+    stopAuthLoginProcess()
+  }, AUTH_SESSION_DEFAULT_EXPIRY_MS)
+
+  const child = spawn("codex", ["login", "--device-auth"], {
+    env: {
+      ...process.env,
+      NO_COLOR: "1",
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  })
+
+  authLoginProcess = child
+
+  let bootstrapResolved = false
+  let resolveBootstrap = () => {}
+  const bootstrapPromise = new Promise((resolve) => {
+    resolveBootstrap = resolve
+  })
+
+  const markBootstrapped = () => {
+    if (bootstrapResolved) {
+      return
+    }
+
+    bootstrapResolved = true
+    resolveBootstrap()
+  }
+
+  const appendOutputChunk = (chunk) => {
+    const text = chunk.toString()
+    if (!text) {
+      return
+    }
+
+    authOutput += text
+    if (authOutput.length > 500_000) {
+      authOutput = authOutput.slice(-500_000)
+    }
+
+    updateAuthSessionFromOutput(text)
+    if (authSession.verification_url && authSession.user_code) {
+      setAuthSession({
+        message: "Nyisd meg a linket és add meg a kódot a bejelentkezéshez.",
+      })
+      markBootstrapped()
+    }
+  }
+
+  child.stdout.on("data", appendOutputChunk)
+  child.stderr.on("data", appendOutputChunk)
+
+  child.on("error", (error) => {
+    clearAuthExpiryTimer()
+    authLoginProcess = null
+
+    setAuthSession({
+      state: "failed",
+      connected: false,
+      completed_at: getNowIso(),
+      message:
+        error instanceof Error
+          ? `A bejelentkezés indítása sikertelen: ${error.message}`
+          : "A bejelentkezés indítása sikertelen.",
+    })
+    markBootstrapped()
+  })
+
+  child.on("close", async (code) => {
+    clearAuthExpiryTimer()
+    authLoginProcess = null
+
+    const syncStatus = await syncAuthSessionWithAuthFile()
+    if (syncStatus.connected || code === 0) {
+      setAuthSession({
+        state: "connected",
+        connected: true,
+        completed_at: getNowIso(),
+        message: "Codex sikeresen bejelentkezve.",
+      })
+      markBootstrapped()
+      return
+    }
+
+    if (authSession.state === "expired") {
+      markBootstrapped()
+      return
+    }
+
+    const message =
+      stripAnsi(authOutput) ||
+      "A Codex bejelentkezés nem sikerült. Próbáld újra."
+
+    setAuthSession({
+      state: "failed",
+      connected: false,
+      completed_at: getNowIso(),
+      message,
+    })
+    markBootstrapped()
+  })
+
+  await Promise.race([
+    bootstrapPromise,
+    new Promise((resolve) => setTimeout(resolve, AUTH_BOOTSTRAP_WAIT_MS)),
+  ])
 }
 
 const extractJsonObject = (value) => {
@@ -321,7 +616,7 @@ const server = createServer(async (req, res) => {
   const url = req.url || "/"
 
   if (method === "GET" && url === "/health") {
-    const authStatus = await getHealthAuthStatus()
+    const authStatus = await syncAuthSessionWithAuthFile()
 
     return sendJson(res, 200, {
       ok: true,
@@ -332,6 +627,33 @@ const server = createServer(async (req, res) => {
         message: authStatus.message,
         remediation_command: LOGIN_COMMAND,
       },
+    })
+  }
+
+  if (method === "POST" && url === "/auth/start") {
+    try {
+      await startAuthSession()
+
+      return sendJson(res, 200, {
+        ok: true,
+        status: getAuthStatusPayload(),
+      })
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message.trim().length
+          ? error.message
+          : "Nem sikerült elindítani a Codex bejelentkezést."
+
+      return sendJson(res, 500, { message })
+    }
+  }
+
+  if (method === "GET" && url === "/auth/status") {
+    await syncAuthSessionWithAuthFile()
+
+    return sendJson(res, 200, {
+      ok: true,
+      status: getAuthStatusPayload(),
     })
   }
 
