@@ -30,9 +30,72 @@ type ProductImage = {
 } | null;
 
 const ABSOLUTE_URL_PREFIX_REGEX = /^[a-z][a-z\d+\-.]*:\/\//i;
+const DESCRIPTION_METADATA_KEYS = {
+  hu: ["description_hu", "description_hu_hu", "leiras_hu", "leiras_hu_hu"],
+  sk: ["description_sk", "description_sk_sk", "leiras_sk", "leiras_sk_sk"],
+} as const;
 
 export const formatPrice = (price: number, currencyCode: string) => {
   return `${Number(price).toFixed(2)} ${currencyCode.toUpperCase()}`;
+};
+
+const normalizeText = (value: unknown) => {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : undefined;
+};
+
+const resolveDescriptionFromMetadata = (
+  metadata: Record<string, unknown> | null | undefined,
+  keys: readonly string[]
+) => {
+  if (!metadata || typeof metadata !== "object") {
+    return undefined;
+  }
+
+  for (const key of keys) {
+    const value = normalizeText(metadata[key]);
+    if (value) {
+      return value;
+    }
+  }
+
+  return undefined;
+};
+
+export const resolveLocalizedFeedDescription = (
+  product: {
+    description?: unknown;
+    title?: unknown;
+    metadata?: Record<string, unknown> | null;
+  },
+  countryCode: string
+) => {
+  const normalizedCountryCode = countryCode.toLowerCase();
+  const metadataKeys = normalizedCountryCode.startsWith("sk")
+    ? DESCRIPTION_METADATA_KEYS.sk
+    : normalizedCountryCode.startsWith("hu")
+      ? DESCRIPTION_METADATA_KEYS.hu
+      : [];
+
+  const localizedDescription = resolveDescriptionFromMetadata(
+    product.metadata,
+    metadataKeys
+  );
+
+  if (localizedDescription) {
+    return localizedDescription;
+  }
+
+  const defaultDescription = normalizeText(product.description);
+  if (defaultDescription) {
+    return defaultDescription;
+  }
+
+  return normalizeText(product.title) || "";
 };
 
 const toAbsoluteUrl = (
@@ -130,7 +193,12 @@ export const getProductFeedItemsStep = createStep(
   "get-product-feed-items",
   async (input: StepInput, { container }) => {
     const feedItems: FeedItem[] = [];
-    const query = container.resolve("query");
+    const query = container.resolve("query") as {
+      graph: (queryConfig: Record<string, unknown>) => Promise<{
+        data: any[];
+        metadata?: { count?: number };
+      }>;
+    };
     const configModule = container.resolve("configModule") as {
       admin?: {
         storefrontUrl?: string | null;
@@ -162,6 +230,7 @@ export const getProductFeedItemsStep = createStep(
           "id",
           "title",
           "description",
+          "metadata",
           "handle",
           "thumbnail",
           "images.*",
@@ -205,10 +274,13 @@ export const getProductFeedItemsStep = createStep(
         });
 
         const availability = salesChannel?.id
-          ? await getVariantAvailability(query, {
-              variant_ids: product.variants.map((variant) => variant.id),
-              sales_channel_id: salesChannel.id,
-            })
+          ? await getVariantAvailability(
+              query as Parameters<typeof getVariantAvailability>[0],
+              {
+                variant_ids: product.variants.map((variant) => variant.id),
+                sales_channel_id: salesChannel.id,
+              }
+            )
           : undefined;
 
         const productHandle =
@@ -263,7 +335,7 @@ export const getProductFeedItemsStep = createStep(
           feedItems.push({
             id: variant.id,
             title: product.title,
-            description: product.description?.trim() || product.title,
+            description: resolveLocalizedFeedDescription(product, countryCode),
             link: productLink,
             image_link: primaryImageLink,
             additional_image_link: additionalImageLink,

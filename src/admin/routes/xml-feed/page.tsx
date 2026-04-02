@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react"
 import { defineRouteConfig } from "@medusajs/admin-sdk"
-import { LightBulb } from "@medusajs/icons"
+import { DocumentText } from "@medusajs/icons"
 import { Button, Container, Heading, Input, Select, Text, toast } from "@medusajs/ui"
 
 const FEED_MARKETS = {
@@ -109,7 +109,7 @@ const XmlFeedPage = () => {
       <div className="flex flex-col gap-y-4 px-6 py-4">
         <div>
           <div className="flex items-center gap-2">
-            <LightBulb className="text-ui-fg-subtle" />
+            <DocumentText className="text-ui-fg-subtle" />
             <Heading level="h1">XML FEED</Heading>
           </div>
           <Text size="small" className="text-ui-fg-subtle mt-1">
@@ -176,7 +176,7 @@ const XmlFeedPage = () => {
 
 export const config = defineRouteConfig({
   label: "XML FEED",
-  icon: LightBulb,
+  icon: DocumentText,
 })
 
 export default XmlFeedPage

@@ -12,6 +12,7 @@ import {
 import {
   cartContainsGepekItems,
   isAllowedShippingOptionForGepek,
+  isMagyarPostaShippingOption,
   resolveShippingOptionForRules,
 } from "../../../../../lib/gepek-cart-rules"
 
@@ -30,6 +31,14 @@ export async function POST(
     req.scope,
     payload.option_id
   )
+
+  if (isMagyarPostaShippingOption(option)) {
+    throw new MedusaError(
+      MedusaError.Types.NOT_ALLOWED,
+      "A Magyar Posta szállítási mód jelenleg nem elérhető."
+    )
+  }
+
   const hasGepekItems = await cartContainsGepekItems(req.scope, req.params.id)
 
   if (hasGepekItems && !isAllowedShippingOptionForGepek(option)) {

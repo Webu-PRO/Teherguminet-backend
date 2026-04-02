@@ -2,6 +2,7 @@ import { describe, expect, it } from "@jest/globals";
 
 import {
   formatPrice,
+  resolveLocalizedFeedDescription,
   resolveAdditionalImageLink,
   resolveFeedImageUrl,
   resolveStorefrontBaseUrl,
@@ -62,6 +63,67 @@ describe("product feed utils", () => {
       );
 
       expect(result).toBe("https://teherguminet.hu/uploads/additional.jpg");
+    });
+  });
+
+  describe("resolveLocalizedFeedDescription", () => {
+    it("uses SK metadata description for SK feed", () => {
+      const result = resolveLocalizedFeedDescription(
+        {
+          title: "Fallback title",
+          description: "Default description",
+          metadata: {
+            description_sk: "Slovenský popis",
+            description_hu: "Magyar leírás",
+          },
+        },
+        "sk"
+      );
+
+      expect(result).toBe("Slovenský popis");
+    });
+
+    it("uses HU metadata description for HU feed", () => {
+      const result = resolveLocalizedFeedDescription(
+        {
+          title: "Fallback title",
+          description: "Default description",
+          metadata: {
+            description_hu: "Magyar leírás",
+          },
+        },
+        "hu"
+      );
+
+      expect(result).toBe("Magyar leírás");
+    });
+
+    it("falls back to default description when localized value is missing", () => {
+      const result = resolveLocalizedFeedDescription(
+        {
+          title: "Fallback title",
+          description: "Default description",
+          metadata: {},
+        },
+        "sk"
+      );
+
+      expect(result).toBe("Default description");
+    });
+
+    it("falls back to title when all descriptions are missing", () => {
+      const result = resolveLocalizedFeedDescription(
+        {
+          title: "Fallback title",
+          description: "   ",
+          metadata: {
+            description_sk: "   ",
+          },
+        },
+        "sk"
+      );
+
+      expect(result).toBe("Fallback title");
     });
   });
 });

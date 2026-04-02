@@ -138,7 +138,9 @@ const isPickupOption = (option?: GepekShippingOptionLike | null) => {
   )
 }
 
-const isMagyarPostaOption = (option?: GepekShippingOptionLike | null) => {
+export const isMagyarPostaShippingOption = (
+  option?: GepekShippingOptionLike | null
+) => {
   if (!option) {
     return false
   }
@@ -192,7 +194,7 @@ export const isAllowedShippingOptionForGepek = (
   if (
     isGlsShippingOption(option) ||
     isTomketShippingOption(option) ||
-    isMagyarPostaOption(option)
+    isMagyarPostaShippingOption(option)
   ) {
     return false
   }
