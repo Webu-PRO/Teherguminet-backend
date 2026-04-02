@@ -14,7 +14,7 @@
   ],
   "scripts": {
     "build": "medusa build",
-    "turbo:build": "turbo run build --single-package",
+    "turbo:build": "turbo run build --single-package && if [ ! -d .medusa/server ]; then medusa build; fi",
     "seed": "medusa exec ./src/scripts/seed.ts",
     "resend:templates:sync": "ts-node --transpile-only ./src/scripts/sync-resend-templates.ts",
     "start": "medusa start",
