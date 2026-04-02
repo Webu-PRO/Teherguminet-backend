@@ -1,25 +1,74 @@
-import { useCallback, useMemo, useState } from "react"
+import {
+  type ComponentType,
+  type SVGProps,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react"
 import { defineRouteConfig } from "@medusajs/admin-sdk"
-import { DocumentText } from "@medusajs/icons"
-import { Button, Container, Heading, Input, Select, Text, toast } from "@medusajs/ui"
+import { DocumentText, Facebook, Google } from "@medusajs/icons"
+import {
+  Button,
+  Container,
+  Heading,
+  Input,
+  Select,
+  StatusBadge,
+  Switch,
+  Text,
+  toast,
+} from "@medusajs/ui"
 
-const FEED_MARKETS = {
+import {
+  type FeedStatusChannel,
+  type FeedStatusMarket,
+  getDefaultFeedChannelStatusByMarket,
+  normalizeFeedChannelStatusByMarket,
+} from "../../../lib/feed-status"
+
+const FEED_MARKETS: Record<
+  FeedStatusMarket,
+  {
+    country_code: "hu" | "sk"
+    currency_code: "huf" | "eur"
+    flag: string
+    label: string
+  }
+> = {
   hu_huf: {
     country_code: "hu",
     currency_code: "huf",
+    flag: "🇭🇺",
     label: "HU / HUF",
   },
   sk_eur: {
     country_code: "sk",
     currency_code: "eur",
+    flag: "🇸🇰",
     label: "SK / EUR",
   },
-} as const
+}
 
-type FeedMarketKey = keyof typeof FEED_MARKETS
-type FeedMarket = (typeof FEED_MARKETS)[FeedMarketKey]
-
-const FEED_MARKET_LIST = Object.values(FEED_MARKETS) as FeedMarket[]
+const FEED_CHANNELS: Array<{
+  key: FeedStatusChannel
+  label: string
+  description: string
+  Icon: ComponentType<SVGProps<SVGSVGElement>>
+}> = [
+  {
+    key: "facebook",
+    label: "Facebook",
+    description: "Meta/Facebook termékkatalógus feed állapot.",
+    Icon: Facebook,
+  },
+  {
+    key: "google",
+    label: "Google",
+    description: "Google Merchant termékfeed állapot.",
+    Icon: Google,
+  },
+]
 
 const copyToClipboard = async (value: string) => {
   if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
@@ -38,11 +87,34 @@ const copyToClipboard = async (value: string) => {
   document.body.removeChild(textarea)
 }
 
-const XmlFeedPage = () => {
-  const [selectedMarket, setSelectedMarket] = useState<FeedMarketKey>("hu_huf")
+const readErrorMessage = async (response: Response, fallback: string) => {
+  try {
+    const payload = (await response.json()) as {
+      message?: string
+      error?: string
+    }
 
-  const countryCode = FEED_MARKETS[selectedMarket].country_code
-  const currencyCode = FEED_MARKETS[selectedMarket].currency_code
+    const message = payload?.message ?? payload?.error
+    if (typeof message === "string" && message.trim().length) {
+      return message
+    }
+  } catch {
+    // ignore parse issues
+  }
+
+  return fallback
+}
+
+const XmlFeedPage = () => {
+  const [selectedMarket, setSelectedMarket] = useState<FeedStatusMarket>("hu_huf")
+  const [statusByMarket, setStatusByMarket] = useState(
+    getDefaultFeedChannelStatusByMarket()
+  )
+  const [statusLoading, setStatusLoading] = useState(true)
+  const [savingChannel, setSavingChannel] = useState<FeedStatusChannel | null>(null)
+
+  const selectedMarketConfig = FEED_MARKETS[selectedMarket]
+  const { country_code: countryCode, currency_code: currencyCode } = selectedMarketConfig
 
   const feedUrl = useMemo(() => {
     const params = new URLSearchParams({
@@ -59,11 +131,52 @@ const XmlFeedPage = () => {
     return `${window.location.origin}${relativePath}`
   }, [countryCode, currencyCode])
 
+  const loadStatus = useCallback(async () => {
+    setStatusLoading(true)
+
+    try {
+      const response = await fetch("/admin/feed-status", {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+      })
+
+      if (!response.ok) {
+        const message = await readErrorMessage(
+          response,
+          "Nem sikerült lekérni a feed kapcsolat állapotát."
+        )
+        throw new Error(message)
+      }
+
+      const payload = (await response.json()) as {
+        status?: unknown
+      }
+
+      setStatusByMarket(normalizeFeedChannelStatusByMarket(payload?.status))
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Nem sikerült lekérni a feed kapcsolat állapotát."
+
+      toast.error("Feed kapcsolatok", {
+        description: message,
+      })
+    } finally {
+      setStatusLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadStatus()
+  }, [loadStatus])
+
   const handleCopy = useCallback(async () => {
     try {
       await copyToClipboard(feedUrl)
       toast.success("XML feed", {
-        description: "Feed link copied to clipboard.",
+        description: "Feed link kimásolva a vágólapra.",
       })
     } catch {
       toast.error("XML feed", {
@@ -80,29 +193,67 @@ const XmlFeedPage = () => {
     window.open(feedUrl, "_blank", "noopener,noreferrer")
   }, [feedUrl])
 
-  const handleCountryChange = useCallback((value: string) => {
-    const matchingMarket = (Object.keys(FEED_MARKETS) as FeedMarketKey[]).find(
-      (key) => FEED_MARKETS[key].country_code === value
-    )
-
-    if (!matchingMarket) {
-      return
+  const handleMarketChange = useCallback((value: string) => {
+    if (value in FEED_MARKETS) {
+      setSelectedMarket(value as FeedStatusMarket)
     }
-
-    setSelectedMarket(matchingMarket)
   }, [])
 
-  const handleCurrencyChange = useCallback((value: string) => {
-    const matchingMarket = (Object.keys(FEED_MARKETS) as FeedMarketKey[]).find(
-      (key) => FEED_MARKETS[key].currency_code === value
-    )
+  const handleToggleChannel = useCallback(
+    async (channel: FeedStatusChannel, active: boolean) => {
+      setSavingChannel(channel)
 
-    if (!matchingMarket) {
-      return
-    }
+      try {
+        const response = await fetch("/admin/feed-status", {
+          method: "PATCH",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            market: selectedMarket,
+            channel,
+            active,
+          }),
+        })
 
-    setSelectedMarket(matchingMarket)
-  }, [])
+        if (!response.ok) {
+          const message = await readErrorMessage(
+            response,
+            "Nem sikerült menteni a feed kapcsolat állapotát."
+          )
+          throw new Error(message)
+        }
+
+        const payload = (await response.json()) as {
+          status?: unknown
+        }
+
+        setStatusByMarket(normalizeFeedChannelStatusByMarket(payload?.status))
+
+        const channelLabel = FEED_CHANNELS.find((item) => item.key === channel)?.label ||
+          channel
+
+        toast.success("Feed státusz frissítve", {
+          description: `${channelLabel}: ${active ? "aktív" : "inaktív"} (${FEED_MARKETS[selectedMarket].label}).`,
+        })
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Nem sikerült menteni a feed kapcsolat állapotát."
+
+        toast.error("Feed kapcsolatok", {
+          description: message,
+        })
+      } finally {
+        setSavingChannel(null)
+      }
+    },
+    [selectedMarket]
+  )
+
+  const selectedMarketStatus = statusByMarket[selectedMarket]
 
   return (
     <Container className="p-0">
@@ -110,64 +261,124 @@ const XmlFeedPage = () => {
         <div>
           <div className="flex items-center gap-2">
             <DocumentText className="text-ui-fg-subtle" />
-            <Heading level="h1">XML FEED</Heading>
+            <Heading level="h1">XML Feed kapcsolatok</Heading>
           </div>
           <Text size="small" className="text-ui-fg-subtle mt-1">
-            Generate and access the product XML feed URL for Meta and Google.
+            Feed URL kezelése, valamint Facebook és Google csatornaállapot piaconként.
           </Text>
         </div>
 
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <div>
-            <Text size="xsmall" weight="plus" className="mb-1">
-              country_code
-            </Text>
-            <Select value={countryCode} onValueChange={handleCountryChange}>
-              <Select.Trigger>
-                <Select.Value placeholder="Select country code" />
-              </Select.Trigger>
-              <Select.Content>
-                {FEED_MARKET_LIST.map((market) => (
-                  <Select.Item key={market.country_code} value={market.country_code}>
-                    {market.country_code} ({market.label})
-                  </Select.Item>
-                ))}
-              </Select.Content>
-            </Select>
+        <div className="rounded-lg border border-ui-border-base bg-ui-bg-subtle p-4">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div>
+              <Text size="xsmall" weight="plus" className="mb-1">
+                Piac
+              </Text>
+              <Select value={selectedMarket} onValueChange={handleMarketChange}>
+                <Select.Trigger>
+                  <Select.Value placeholder="Válassz piacot" />
+                </Select.Trigger>
+                <Select.Content>
+                  {(Object.keys(FEED_MARKETS) as FeedStatusMarket[]).map((market) => {
+                    const config = FEED_MARKETS[market]
+                    return (
+                      <Select.Item key={market} value={market}>
+                        {config.flag} {config.label}
+                      </Select.Item>
+                    )
+                  })}
+                </Select.Content>
+              </Select>
+            </div>
+            <div className="flex flex-col justify-end gap-y-1">
+              <Text size="xsmall" className="text-ui-fg-subtle">
+                országkód: {selectedMarketConfig.flag} {countryCode.toUpperCase()}
+              </Text>
+              <Text size="xsmall" className="text-ui-fg-subtle">
+                pénznemkód: {currencyCode.toUpperCase()}
+              </Text>
+            </div>
           </div>
-          <div>
+
+          <div className="mt-4">
             <Text size="xsmall" weight="plus" className="mb-1">
-              currency_code
+              Feed URL
             </Text>
-            <Select value={currencyCode} onValueChange={handleCurrencyChange}>
-              <Select.Trigger>
-                <Select.Value placeholder="Select currency code" />
-              </Select.Trigger>
-              <Select.Content>
-                {FEED_MARKET_LIST.map((market) => (
-                  <Select.Item key={market.currency_code} value={market.currency_code}>
-                    {market.currency_code} ({market.label})
-                  </Select.Item>
-                ))}
-              </Select.Content>
-            </Select>
+            <Input value={feedUrl} readOnly />
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <Button type="button" variant="secondary" onClick={handleOpen}>
+                XML megnyitása
+              </Button>
+              <Button type="button" onClick={() => void handleCopy()}>
+                Link másolása
+              </Button>
+            </div>
           </div>
         </div>
 
-        <div>
-          <Text size="xsmall" weight="plus" className="mb-1">
-            Feed URL
-          </Text>
-          <Input value={feedUrl} readOnly />
-        </div>
+        <div className="rounded-lg border border-ui-border-base bg-ui-bg-base p-4">
+          <div className="flex items-center justify-between">
+            <Heading level="h2">Csatorna állapotok</Heading>
+            <Text size="xsmall" className="text-ui-fg-subtle">
+              Piac: {selectedMarketConfig.flag} {selectedMarketConfig.label}
+            </Text>
+          </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" variant="secondary" onClick={handleOpen}>
-            Open XML
-          </Button>
-          <Button type="button" onClick={() => void handleCopy()}>
-            Copy link
-          </Button>
+          {statusLoading ? (
+            <Text size="small" className="mt-3 text-ui-fg-subtle">
+              Kapcsolati állapot betöltése...
+            </Text>
+          ) : (
+            <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+              {FEED_CHANNELS.map((channel) => {
+                const active = selectedMarketStatus[channel.key]
+                const isSaving = savingChannel === channel.key
+
+                return (
+                  <div
+                    key={channel.key}
+                    className="rounded-lg border border-ui-border-base bg-ui-bg-subtle p-4"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <channel.Icon className="text-ui-fg-subtle" />
+                        <div>
+                          <Text size="small" weight="plus">
+                            {channel.label}
+                          </Text>
+                          <Text size="xsmall" className="text-ui-fg-subtle mt-1">
+                            {channel.description}
+                          </Text>
+                        </div>
+                      </div>
+                      <StatusBadge color={active ? "green" : "grey"}>
+                        {active ? "Aktív" : "Inaktív"}
+                      </StatusBadge>
+                    </div>
+
+                    <div className="mt-4 flex items-center justify-between">
+                      <Text size="xsmall" className="text-ui-fg-subtle">
+                        Feed használat
+                      </Text>
+                      <Switch
+                        checked={active}
+                        onCheckedChange={(nextValue) => {
+                          void handleToggleChannel(channel.key, Boolean(nextValue))
+                        }}
+                        disabled={statusLoading || Boolean(savingChannel)}
+                      />
+                    </div>
+
+                    {isSaving ? (
+                      <Text size="xsmall" className="mt-2 text-ui-fg-subtle">
+                        Mentés folyamatban...
+                      </Text>
+                    ) : null}
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       </div>
     </Container>
