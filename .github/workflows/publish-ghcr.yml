@@ -56,3 +56,23 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Trigger Coolify deploy hooks
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        env:
+          KORONAKERT_HOOK: ${{ secrets.COOLIFY_KORONAKERT_DEPLOY_WEBHOOK }}
+          TEHERGUMINET_HOOK: ${{ secrets.COOLIFY_TEHERGUMINET_DEPLOY_WEBHOOK }}
+        run: |
+          trigger() {
+            local name="$1"
+            local url="$2"
+            if [ -n "$url" ]; then
+              echo "Triggering $name"
+              curl -fsSL -X POST "$url"
+            else
+              echo "Skipping $name (secret not configured)"
+            fi
+          }
+
+          trigger "KORONAKERT" "$KORONAKERT_HOOK"
+          trigger "TEHERGUMINET" "$TEHERGUMINET_HOOK"
