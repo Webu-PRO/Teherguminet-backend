@@ -1,8 +1,10 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "extends": ["//"],
   "tasks": {
     "build": {
-      "outputs": ["dist/**", ".medusa/**"]
+      "outputs": ["dist/**", ".medusa/**"],
+      "env": ["REDIS_URL", "EVENT_BUS_REDIS_URL", "EVENTS_REDIS_URL"]
     },
     "dev": {
       "cache": false,
