@@ -1,5 +1,6 @@
 import { CalculatedPriceSet } from "@medusajs/framework/types";
 import {
+  getTotalVariantAvailability,
   getVariantAvailability,
   QueryContext,
 } from "@medusajs/framework/utils";
@@ -13,6 +14,7 @@ export type FeedItem = {
   image_link?: string;
   additional_image_link?: string;
   availability: string;
+  quantity?: number;
   price: string;
   sale_price?: string;
   item_group_id: string;
@@ -70,6 +72,38 @@ const DESCRIPTION_METADATA_KEYS = {
 
 export const formatPrice = (price: number, currencyCode: string) => {
   return `${Number(price).toFixed(2)} ${currencyCode.toUpperCase()}`;
+};
+
+export const normalizeAvailabilityQuantity = (
+  quantity: number | null | undefined
+) => {
+  if (typeof quantity !== "number" || !Number.isFinite(quantity)) {
+    return 0;
+  }
+
+  return Math.max(0, Math.floor(quantity));
+};
+
+export const resolveFeedStock = ({
+  manageInventory,
+  quantity,
+}: {
+  manageInventory?: boolean | null;
+  quantity: number | null | undefined;
+}) => {
+  if (!manageInventory) {
+    return {
+      status: "in stock" as const,
+      quantity: undefined,
+    };
+  }
+
+  const normalizedQuantity = normalizeAvailabilityQuantity(quantity);
+
+  return {
+    status: normalizedQuantity > 0 ? ("in stock" as const) : ("out of stock" as const),
+    quantity: normalizedQuantity,
+  };
 };
 
 const normalizeText = (value: unknown) => {
@@ -414,6 +448,12 @@ export const getProductFeedItemsStep = createStep(
             )
           : undefined;
 
+        const fallbackAvailability = !salesChannel?.id
+          ? await getTotalVariantAvailability(query, {
+              variant_ids: variants.map((variant) => variant.id),
+            })
+          : undefined;
+
         const productHandle =
           typeof product.handle === "string" && product.handle.trim().length
             ? product.handle.trim()
@@ -462,11 +502,14 @@ export const getProductFeedItemsStep = createStep(
             continue;
           }
 
-          const stockStatus = !variant.manage_inventory
-            ? "in stock"
-            : !availability?.[variant.id]?.availability
-              ? "out of stock"
-              : "in stock";
+          const availabilityQuantity = salesChannel?.id
+            ? availability?.[variant.id]?.availability
+            : fallbackAvailability?.[variant.id]?.availability;
+
+          const stock = resolveFeedStock({
+            manageInventory: variant.manage_inventory,
+            quantity: availabilityQuantity,
+          });
 
           feedItems.push({
             id: variant.id,
@@ -475,7 +518,8 @@ export const getProductFeedItemsStep = createStep(
             link: productLink,
             image_link: primaryImageLink,
             additional_image_link: additionalImageLink,
-            availability: stockStatus,
+            availability: stock.status,
+            quantity: stock.quantity,
             price: formatPrice(originalPrice, currencyCode),
             sale_price:
               typeof salePrice === "number"

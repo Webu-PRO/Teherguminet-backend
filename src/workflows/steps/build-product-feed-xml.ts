@@ -32,6 +32,9 @@ export const buildProductFeedXmlStep = createStep(
             ? `<g:additional_image_link>${escapeXml(item.additional_image_link)}</g:additional_image_link>`
             : "") +
           `<g:availability>${escapeXml(item.availability)}</g:availability>` +
+          (typeof item.quantity === "number"
+            ? `<g:quantity>${escapeXml(String(item.quantity))}</g:quantity>`
+            : "") +
           `<g:price>${escapeXml(item.price)}</g:price>` +
           (item.sale_price
             ? `<g:sale_price>${escapeXml(item.sale_price)}</g:sale_price>`

@@ -2,6 +2,8 @@ import { describe, expect, it } from "@jest/globals";
 
 import {
   formatPrice,
+  normalizeAvailabilityQuantity,
+  resolveFeedStock,
   resolveLocalizedFeedDescription,
   resolveLocalizedFeedTitle,
   resolveAdditionalImageLink,
@@ -14,6 +16,52 @@ describe("product feed utils", () => {
     it("formats prices with two decimals and uppercase currency", () => {
       expect(formatPrice(19, "eur")).toBe("19.00 EUR");
       expect(formatPrice(19.5, "huf")).toBe("19.50 HUF");
+    });
+  });
+
+  describe("availability helpers", () => {
+    it("normalizes invalid availability values to zero", () => {
+      expect(normalizeAvailabilityQuantity(undefined)).toBe(0);
+      expect(normalizeAvailabilityQuantity(null)).toBe(0);
+      expect(normalizeAvailabilityQuantity(Number.NaN)).toBe(0);
+      expect(normalizeAvailabilityQuantity(-2)).toBe(0);
+      expect(normalizeAvailabilityQuantity(3.9)).toBe(3);
+    });
+
+    it("marks variant in stock when quantity is positive", () => {
+      expect(
+        resolveFeedStock({
+          manageInventory: true,
+          quantity: 2,
+        })
+      ).toEqual({
+        status: "in stock",
+        quantity: 2,
+      });
+    });
+
+    it("marks variant out of stock when quantity is missing", () => {
+      expect(
+        resolveFeedStock({
+          manageInventory: true,
+          quantity: undefined,
+        })
+      ).toEqual({
+        status: "out of stock",
+        quantity: 0,
+      });
+    });
+
+    it("keeps non-managed inventory always in stock and omits quantity", () => {
+      expect(
+        resolveFeedStock({
+          manageInventory: false,
+          quantity: 0,
+        })
+      ).toEqual({
+        status: "in stock",
+        quantity: undefined,
+      });
     });
   });
 
