@@ -49,7 +49,7 @@ services:
       - AI_AGENT_CODEX_MODEL=${AI_AGENT_CODEX_MODEL:-gpt-5.3-codex}
       - AI_AGENT_CODEX_LOGIN_COMMAND=${AI_AGENT_CODEX_LOGIN_COMMAND:-docker compose exec codex-sidecar codex login --device-auth}
     volumes:
-      - ${CODEX_AUTH_DIR:-${HOME}/.codex}:/home/node/.codex
+      - codex_auth_data:/home/node/.codex
     networks:
       - medusa_network
     healthcheck:
@@ -118,6 +118,7 @@ services:
 
 volumes:
   postgres_data:
+  codex_auth_data:
 
 networks:
   medusa_network:
