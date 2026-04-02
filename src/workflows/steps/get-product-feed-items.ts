@@ -29,7 +29,40 @@ type ProductImage = {
   url?: string | null;
 } | null;
 
+type QueryStockLocation = {
+  address?: {
+    country_code?: string | null;
+  } | null;
+};
+
+type QuerySalesChannel = {
+  id?: string | null;
+  stock_locations?: QueryStockLocation[] | null;
+};
+
+type QueryVariant = {
+  id: string;
+  manage_inventory?: boolean | null;
+  calculated_price?: CalculatedPriceSet | null;
+};
+
+type QueryProduct = {
+  id: string;
+  title?: unknown;
+  description?: unknown;
+  metadata?: Record<string, unknown> | null;
+  handle?: string | null;
+  thumbnail?: string | null;
+  images?: ProductImage[] | null;
+  variants?: QueryVariant[] | null;
+  sales_channels?: QuerySalesChannel[] | null;
+};
+
 const ABSOLUTE_URL_PREFIX_REGEX = /^[a-z][a-z\d+\-.]*:\/\//i;
+const TITLE_METADATA_KEYS = {
+  hu: ["title_hu"],
+  sk: ["title_sk"],
+} as const;
 const DESCRIPTION_METADATA_KEYS = {
   hu: ["description_hu", "description_hu_hu", "leiras_hu", "leiras_hu_hu"],
   sk: ["description_sk", "description_sk_sk", "leiras_sk", "leiras_sk_sk"],
@@ -74,10 +107,13 @@ export const resolveLocalizedFeedDescription = (
   },
   countryCode: string
 ) => {
+  const localizedTitle = resolveLocalizedFeedTitle(product, countryCode);
   const normalizedCountryCode = countryCode.toLowerCase();
-  const metadataKeys = normalizedCountryCode.startsWith("sk")
+  const isSk = normalizedCountryCode.startsWith("sk");
+  const isHu = normalizedCountryCode.startsWith("hu");
+  const metadataKeys = isSk
     ? DESCRIPTION_METADATA_KEYS.sk
-    : normalizedCountryCode.startsWith("hu")
+    : isHu
       ? DESCRIPTION_METADATA_KEYS.hu
       : [];
 
@@ -90,9 +126,55 @@ export const resolveLocalizedFeedDescription = (
     return localizedDescription;
   }
 
+  if (isSk) {
+    const fallbackToHuDescription = resolveDescriptionFromMetadata(
+      product.metadata,
+      DESCRIPTION_METADATA_KEYS.hu
+    );
+
+    if (fallbackToHuDescription) {
+      return fallbackToHuDescription;
+    }
+  }
+
   const defaultDescription = normalizeText(product.description);
   if (defaultDescription) {
     return defaultDescription;
+  }
+
+  return localizedTitle;
+};
+
+export const resolveLocalizedFeedTitle = (
+  product: {
+    title?: unknown;
+    metadata?: Record<string, unknown> | null;
+  },
+  countryCode: string
+) => {
+  const normalizedCountryCode = countryCode.toLowerCase();
+  const isSk = normalizedCountryCode.startsWith("sk");
+  const isHu = normalizedCountryCode.startsWith("hu");
+  const metadataKeys = isSk
+    ? TITLE_METADATA_KEYS.sk
+    : isHu
+      ? TITLE_METADATA_KEYS.hu
+      : [];
+
+  const localizedTitle = resolveDescriptionFromMetadata(product.metadata, metadataKeys);
+  if (localizedTitle) {
+    return localizedTitle;
+  }
+
+  if (isSk) {
+    const fallbackToHuTitle = resolveDescriptionFromMetadata(
+      product.metadata,
+      TITLE_METADATA_KEYS.hu
+    );
+
+    if (fallbackToHuTitle) {
+      return fallbackToHuTitle;
+    }
   }
 
   return normalizeText(product.title) || "";
@@ -193,9 +275,11 @@ export const getProductFeedItemsStep = createStep(
   "get-product-feed-items",
   async (input: StepInput, { container }) => {
     const feedItems: FeedItem[] = [];
-    const query = container.resolve("query") as {
+    const query = container.resolve("query") as unknown as Parameters<
+      typeof getVariantAvailability
+    >[0] & {
       graph: (queryConfig: Record<string, unknown>) => Promise<{
-        data: any[];
+        data: QueryProduct[];
         metadata?: { count?: number };
       }>;
     };
@@ -261,23 +345,28 @@ export const getProductFeedItemsStep = createStep(
       offset += limit;
 
       for (const product of products) {
-        if (!product.variants?.length) {
+        const variants = product.variants ?? [];
+        if (!variants.length) {
           continue;
         }
 
-        const salesChannel = product.sales_channels?.find((channel) => {
-          return channel?.stock_locations?.some((location) => {
-            const locationCountryCode =
-              location?.address?.country_code?.toLowerCase();
-            return locationCountryCode === countryCode;
-          });
-        });
+        const salesChannel = product.sales_channels?.find(
+          (channel: QuerySalesChannel) => {
+            return channel?.stock_locations?.some(
+              (location: QueryStockLocation) => {
+                const locationCountryCode =
+                  location?.address?.country_code?.toLowerCase();
+                return locationCountryCode === countryCode;
+              }
+            );
+          }
+        );
 
         const availability = salesChannel?.id
           ? await getVariantAvailability(
-              query as Parameters<typeof getVariantAvailability>[0],
+              query,
               {
-                variant_ids: product.variants.map((variant) => variant.id),
+                variant_ids: variants.map((variant: QueryVariant) => variant.id),
                 sales_channel_id: salesChannel.id,
               }
             )
@@ -300,11 +389,14 @@ export const getProductFeedItemsStep = createStep(
           primaryImageLink,
           storefrontBaseUrl
         );
+        const localizedTitle = resolveLocalizedFeedTitle(product, countryCode);
+        const localizedDescription = resolveLocalizedFeedDescription(
+          product,
+          countryCode
+        );
 
-        for (const variant of product.variants) {
-          const calculatedPrice = (
-            variant as { calculated_price?: CalculatedPriceSet | null }
-          ).calculated_price;
+        for (const variant of variants) {
+          const calculatedPrice = variant.calculated_price;
 
           if (!calculatedPrice) {
             continue;
@@ -334,8 +426,8 @@ export const getProductFeedItemsStep = createStep(
 
           feedItems.push({
             id: variant.id,
-            title: product.title,
-            description: resolveLocalizedFeedDescription(product, countryCode),
+            title: localizedTitle,
+            description: localizedDescription,
             link: productLink,
             image_link: primaryImageLink,
             additional_image_link: additionalImageLink,

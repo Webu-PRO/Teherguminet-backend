@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { defineWidgetConfig } from "@medusajs/admin-sdk";
-import { Button, Container, Heading, Text, Textarea, toast } from "@medusajs/ui";
+import { Button, Container, Input, Text, Textarea, toast } from "@medusajs/ui";
+
+import { sdk } from "../lib/client";
 
 type ProductData = {
   id: string;
@@ -11,13 +13,14 @@ type ProductData = {
 
 type ProductResponse = {
   product?: ProductData;
-  message?: string;
 };
 
 type WidgetProps = {
   data: ProductData;
 };
 
+const TITLE_HU_KEYS = ["title_hu"] as const;
+const TITLE_SK_KEYS = ["title_sk"] as const;
 const DESCRIPTION_HU_KEYS = [
   "description_hu",
   "description_hu_hu",
@@ -57,15 +60,21 @@ const readLocalizedDescription = (
   return "";
 };
 
-const readErrorMessage = async (response: Response, fallback: string) => {
-  try {
-    const payload = (await response.json()) as { message?: string; error?: string };
-    const message = payload?.message ?? payload?.error;
-    if (typeof message === "string" && message.trim().length) {
+const readErrorMessage = (error: unknown, fallback: string) => {
+  if (error instanceof Error && error.message.trim().length) {
+    return error.message;
+  }
+
+  if (
+    typeof error === "object" &&
+    error &&
+    "message" in error &&
+    typeof (error as { message?: unknown }).message === "string"
+  ) {
+    const message = (error as { message: string }).message.trim();
+    if (message.length) {
       return message;
     }
-  } catch {
-    // ignore json parse errors
   }
 
   return fallback;
@@ -74,10 +83,20 @@ const readErrorMessage = async (response: Response, fallback: string) => {
 const ProductLocalizedDescriptionsWidget = ({ data }: WidgetProps) => {
   const productId = data.id;
   const [product, setProduct] = useState<ProductData | null>(null);
+  const [titleHu, setTitleHu] = useState("");
+  const [titleSk, setTitleSk] = useState("");
   const [descriptionHu, setDescriptionHu] = useState("");
   const [descriptionSk, setDescriptionSk] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+
+  const fallbackTitle = useMemo(() => {
+    const loadedTitle = normalizeText(product?.title);
+    if (loadedTitle) {
+      return loadedTitle;
+    }
+    return normalizeText(data.title) || "-";
+  }, [data.title, product?.title]);
 
   const fallbackDescription = useMemo(() => {
     const loadedDescription = normalizeText(product?.description);
@@ -89,9 +108,13 @@ const ProductLocalizedDescriptionsWidget = ({ data }: WidgetProps) => {
 
   const hydrateForm = useCallback((nextProduct: ProductData | null) => {
     const metadata = nextProduct?.metadata;
+    const nextTitleHu = readLocalizedDescription(metadata, TITLE_HU_KEYS);
+    const nextTitleSk = readLocalizedDescription(metadata, TITLE_SK_KEYS);
     const nextHu = readLocalizedDescription(metadata, DESCRIPTION_HU_KEYS);
     const nextSk = readLocalizedDescription(metadata, DESCRIPTION_SK_KEYS);
 
+    setTitleHu(nextTitleHu);
+    setTitleSk(nextTitleSk);
     setDescriptionHu(nextHu);
     setDescriptionSk(nextSk);
   }, []);
@@ -104,35 +127,17 @@ const ProductLocalizedDescriptionsWidget = ({ data }: WidgetProps) => {
 
     setIsLoading(true);
     try {
-      const params = new URLSearchParams({
+      const payload = (await sdk.admin.product.retrieve(productId, {
         fields: "id,title,description,metadata",
-      });
-
-      const response = await fetch(
-        `/admin/products/${encodeURIComponent(productId)}?${params.toString()}`,
-        {
-          credentials: "include",
-          cache: "no-store",
-        }
-      );
-
-      if (!response.ok) {
-        const message = await readErrorMessage(
-          response,
-          "Nem sikerült betölteni a termék leírásait."
-        );
-        throw new Error(message);
-      }
-
-      const payload = (await response.json()) as ProductResponse;
+      })) as ProductResponse;
       const nextProduct = payload.product ?? null;
       setProduct(nextProduct);
       hydrateForm(nextProduct);
     } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Nem sikerült betölteni a termék leírásait.";
+      const message = readErrorMessage(
+        error,
+        "Nem sikerült betölteni a termék lokalizált adatait."
+      );
       toast.error("Lokalizált leírások", {
         description: message,
       });
@@ -165,8 +170,22 @@ const ProductLocalizedDescriptionsWidget = ({ data }: WidgetProps) => {
         delete (baseMetadata as Record<string, unknown>)[key];
       }
 
+      for (const key of [...TITLE_HU_KEYS, ...TITLE_SK_KEYS]) {
+        delete (baseMetadata as Record<string, unknown>)[key];
+      }
+
+      const nextTitleHu = normalizeText(titleHu);
+      const nextTitleSk = normalizeText(titleSk);
       const nextHu = normalizeText(descriptionHu);
       const nextSk = normalizeText(descriptionSk);
+
+      if (nextTitleHu) {
+        (baseMetadata as Record<string, unknown>).title_hu = nextTitleHu;
+      }
+
+      if (nextTitleSk) {
+        (baseMetadata as Record<string, unknown>).title_sk = nextTitleSk;
+      }
 
       if (nextHu) {
         (baseMetadata as Record<string, unknown>).description_hu = nextHu;
@@ -176,68 +195,103 @@ const ProductLocalizedDescriptionsWidget = ({ data }: WidgetProps) => {
         (baseMetadata as Record<string, unknown>).description_sk = nextSk;
       }
 
-      const response = await fetch(`/admin/products/${encodeURIComponent(productId)}`, {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          metadata: baseMetadata,
-        }),
+      await sdk.admin.product.update(productId, {
+        metadata: baseMetadata,
       });
 
-      if (!response.ok) {
-        const message = await readErrorMessage(
-          response,
-          "Nem sikerült menteni a lokalizált leírásokat."
-        );
-        throw new Error(message);
-      }
-
       toast.success("Lokalizált leírások", {
-        description: "A HU és SK leírások mentése sikeres.",
+        description: "A HU/SK címek és leírások mentése sikeres.",
       });
 
       await loadProduct();
     } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Nem sikerült menteni a lokalizált leírásokat.";
+      const message = readErrorMessage(
+        error,
+        "Nem sikerült menteni a lokalizált adatokat."
+      );
       toast.error("Lokalizált leírások", {
         description: message,
       });
     } finally {
       setIsSaving(false);
     }
-  }, [data.metadata, descriptionHu, descriptionSk, isSaving, loadProduct, product?.metadata, productId]);
+  }, [
+    data.metadata,
+    descriptionHu,
+    descriptionSk,
+    isSaving,
+    loadProduct,
+    product?.metadata,
+    productId,
+    titleHu,
+    titleSk,
+  ]);
 
   return (
     <Container className="p-0">
       <div className="flex flex-col gap-y-3 px-6 py-4">
         <div>
-          <Heading level="h3">Lokalizált termékleírások (HU / SK)</Heading>
-          <Text size="small" className="text-ui-fg-subtle mt-1">
-            A SK feed a <code>description_sk</code> mezőt használja, HU feed a{" "}
-            <code>description_hu</code> mezőt.
+          <Text size="small" leading="compact" weight="plus">
+            Lokalizált termék adatok (HU / SK)
           </Text>
-          <Text size="small" className="text-ui-fg-subtle">
-            Ha nincs SK leírás, a feed a default leírásra esik vissza.
+          <Text size="small" leading="compact" className="text-ui-fg-subtle mt-1">
+            A SK feed a <code>title_sk</code> és <code>description_sk</code> mezőket
+            használja, HU feed a <code>title_hu</code> és{" "}
+            <code>description_hu</code> mezőket.
+          </Text>
+          <Text size="small" leading="compact" className="text-ui-fg-subtle">
+            Ha az SK mezők üresek, a feed a HU értékekre esik vissza.
           </Text>
         </div>
 
         <div className="rounded-md border border-ui-border-base bg-ui-bg-subtle p-3">
-          <Text size="xsmall" weight="plus">
+          <Text size="xsmall" leading="compact" weight="plus">
+            Default cím (fallback)
+          </Text>
+          <Text size="small" leading="compact" className="text-ui-fg-subtle mt-1 whitespace-pre-wrap">
+            {fallbackTitle}
+          </Text>
+        </div>
+
+        <div className="rounded-md border border-ui-border-base bg-ui-bg-subtle p-3">
+          <Text size="xsmall" leading="compact" weight="plus">
             Default leírás (fallback)
           </Text>
-          <Text size="small" className="text-ui-fg-subtle mt-1 whitespace-pre-wrap">
+          <Text size="small" leading="compact" className="text-ui-fg-subtle mt-1 whitespace-pre-wrap">
             {fallbackDescription}
           </Text>
         </div>
 
         <div className="flex flex-col gap-y-2">
-          <Text size="xsmall" weight="plus">
+          <Text size="xsmall" leading="compact" weight="plus">
+            Cím (HU)
+          </Text>
+          <Input
+            value={titleHu}
+            onChange={(event) => {
+              setTitleHu(event.target.value);
+            }}
+            placeholder="Magyar cím..."
+            disabled={isLoading || isSaving}
+          />
+        </div>
+
+        <div className="flex flex-col gap-y-2">
+          <Text size="xsmall" leading="compact" weight="plus">
+            Názov (SK)
+          </Text>
+          <Input
+            value={titleSk}
+            onChange={(event) => {
+              setTitleSk(event.target.value);
+            }}
+            placeholder="Slovenský názov..."
+            disabled={isLoading || isSaving}
+          />
+        </div>
+
+        <div className="flex flex-col gap-y-2">
+          <Text size="xsmall" leading="compact" weight="plus">
             Leírás (HU)
           </Text>
           <Textarea
@@ -252,7 +306,7 @@ const ProductLocalizedDescriptionsWidget = ({ data }: WidgetProps) => {
         </div>
 
         <div className="flex flex-col gap-y-2">
-          <Text size="xsmall" weight="plus">
+          <Text size="xsmall" leading="compact" weight="plus">
             Popis (SK)
           </Text>
           <Textarea

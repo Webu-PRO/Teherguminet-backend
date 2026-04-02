@@ -3,6 +3,7 @@ import { describe, expect, it } from "@jest/globals";
 import {
   formatPrice,
   resolveLocalizedFeedDescription,
+  resolveLocalizedFeedTitle,
   resolveAdditionalImageLink,
   resolveFeedImageUrl,
   resolveStorefrontBaseUrl,
@@ -111,6 +112,21 @@ describe("product feed utils", () => {
       expect(result).toBe("Default description");
     });
 
+    it("falls back to HU description when SK description is missing", () => {
+      const result = resolveLocalizedFeedDescription(
+        {
+          title: "Fallback title",
+          description: "Default description",
+          metadata: {
+            description_hu: "Magyar leírás",
+          },
+        },
+        "sk"
+      );
+
+      expect(result).toBe("Magyar leírás");
+    });
+
     it("falls back to title when all descriptions are missing", () => {
       const result = resolveLocalizedFeedDescription(
         {
@@ -124,6 +140,49 @@ describe("product feed utils", () => {
       );
 
       expect(result).toBe("Fallback title");
+    });
+  });
+
+  describe("resolveLocalizedFeedTitle", () => {
+    it("uses SK metadata title for SK feed", () => {
+      const result = resolveLocalizedFeedTitle(
+        {
+          title: "Default title",
+          metadata: {
+            title_hu: "Magyar cím",
+            title_sk: "Slovenský názov",
+          },
+        },
+        "sk"
+      );
+
+      expect(result).toBe("Slovenský názov");
+    });
+
+    it("falls back to HU title when SK title is missing", () => {
+      const result = resolveLocalizedFeedTitle(
+        {
+          title: "Default title",
+          metadata: {
+            title_hu: "Magyar cím",
+          },
+        },
+        "sk"
+      );
+
+      expect(result).toBe("Magyar cím");
+    });
+
+    it("falls back to default title when localized titles are missing", () => {
+      const result = resolveLocalizedFeedTitle(
+        {
+          title: "Default title",
+          metadata: {},
+        },
+        "sk"
+      );
+
+      expect(result).toBe("Default title");
     });
   });
 });
