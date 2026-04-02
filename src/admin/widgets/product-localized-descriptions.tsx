@@ -15,6 +15,14 @@ type ProductResponse = {
   product?: ProductData;
 };
 
+type HuToSkTranslationResponse = {
+  title_sk?: string;
+  description_sk?: string;
+  translated_fields?: Array<"title_sk" | "description_sk">;
+  skipped_fields?: Array<"title_sk" | "description_sk">;
+  model?: string;
+};
+
 type WidgetProps = {
   data: ProductData;
 };
@@ -89,6 +97,7 @@ const ProductLocalizedDescriptionsWidget = ({ data }: WidgetProps) => {
   const [descriptionSk, setDescriptionSk] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isTranslating, setIsTranslating] = useState(false);
 
   const fallbackTitle = useMemo(() => {
     const loadedTitle = normalizeText(product?.title);
@@ -227,6 +236,87 @@ const ProductLocalizedDescriptionsWidget = ({ data }: WidgetProps) => {
     titleSk,
   ]);
 
+  const handleAutoTranslate = useCallback(async () => {
+    if (!productId || isLoading || isSaving || isTranslating) {
+      return;
+    }
+
+    const sourceTitleHu =
+      normalizeText(titleHu) ||
+      (fallbackTitle === "-" ? "" : normalizeText(fallbackTitle));
+    const sourceDescriptionHu =
+      normalizeText(descriptionHu) ||
+      (fallbackDescription === "-" ? "" : normalizeText(fallbackDescription));
+
+    if (!sourceTitleHu && !sourceDescriptionHu) {
+      toast.error("AI fordítás", {
+        description: "Nincs HU forrásszöveg a fordításhoz.",
+      });
+      return;
+    }
+
+    setIsTranslating(true);
+    try {
+      const payload = (await sdk.client.fetch("/admin/ai-agent/translate", {
+        method: "POST",
+        body: {
+          title_hu: sourceTitleHu,
+          description_hu: sourceDescriptionHu,
+          title_sk: normalizeText(titleSk),
+          description_sk: normalizeText(descriptionSk),
+          overwrite: false,
+        },
+      })) as HuToSkTranslationResponse;
+
+      const nextTitleSk = normalizeText(payload?.title_sk);
+      const nextDescriptionSk = normalizeText(payload?.description_sk);
+      const translatedFields = Array.isArray(payload?.translated_fields)
+        ? payload.translated_fields
+        : [];
+
+      if (nextTitleSk) {
+        setTitleSk(nextTitleSk);
+      }
+
+      if (nextDescriptionSk) {
+        setDescriptionSk(nextDescriptionSk);
+      }
+
+      if (!translatedFields.length) {
+        toast.success("AI fordítás", {
+          description: "Nincs üres SK mező, ezért nem történt új fordítás.",
+        });
+        return;
+      }
+
+      toast.success("AI fordítás", {
+        description:
+          "HU → SK fordítás elkészült. Ellenőrizd, majd kattints a Mentés gombra.",
+      });
+    } catch (error) {
+      const message = readErrorMessage(
+        error,
+        "Nem sikerült AI fordítást kérni."
+      );
+      toast.error("AI fordítás", {
+        description: message,
+      });
+    } finally {
+      setIsTranslating(false);
+    }
+  }, [
+    descriptionHu,
+    descriptionSk,
+    fallbackDescription,
+    fallbackTitle,
+    isLoading,
+    isSaving,
+    isTranslating,
+    productId,
+    titleHu,
+    titleSk,
+  ]);
+
   return (
     <Container className="p-0">
       <div className="flex flex-col gap-y-3 px-6 py-4">
@@ -241,6 +331,10 @@ const ProductLocalizedDescriptionsWidget = ({ data }: WidgetProps) => {
           </Text>
           <Text size="small" leading="compact" className="text-ui-fg-subtle">
             Ha az SK mezők üresek, a feed a HU értékekre esik vissza.
+          </Text>
+          <Text size="small" leading="compact" className="text-ui-fg-subtle">
+            Az AI fordítás csak az üres SK mezőket tölti ki. A módosítások mentéséhez
+            kattints a Mentés gombra.
           </Text>
         </div>
 
@@ -323,11 +417,22 @@ const ProductLocalizedDescriptionsWidget = ({ data }: WidgetProps) => {
         <div className="flex items-center gap-2">
           <Button
             size="small"
+            variant="secondary"
+            onClick={() => {
+              void handleAutoTranslate();
+            }}
+            isLoading={isTranslating}
+            disabled={isLoading || isSaving || isTranslating}
+          >
+            AI fordítás HU→SK
+          </Button>
+          <Button
+            size="small"
             onClick={() => {
               void handleSave();
             }}
             isLoading={isSaving}
-            disabled={isLoading || isSaving}
+            disabled={isLoading || isSaving || isTranslating}
           >
             Mentés
           </Button>
@@ -337,7 +442,7 @@ const ProductLocalizedDescriptionsWidget = ({ data }: WidgetProps) => {
             onClick={() => {
               void loadProduct();
             }}
-            disabled={isLoading || isSaving}
+            disabled={isLoading || isSaving || isTranslating}
           >
             Frissítés
           </Button>

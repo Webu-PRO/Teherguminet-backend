@@ -5,6 +5,8 @@ import {
 import { z } from "@medusajs/framework/zod";
 import { adminDiscountCodeMiddlewares } from "./admin/discount-code/middlewares";
 import { adminFeedStatusMiddlewares } from "./admin/feed-status/middlewares";
+import { adminAiAgentMiddlewares } from "./admin/ai-agent/middlewares";
+import { adminSeoSettingsMiddlewares } from "./admin/seo-settings/middlewares";
 
 const productFeedQuerySchema = z
   .object({
@@ -45,5 +47,7 @@ export default defineMiddlewares({
     },
     ...adminDiscountCodeMiddlewares,
     ...adminFeedStatusMiddlewares,
+    ...adminAiAgentMiddlewares,
+    ...adminSeoSettingsMiddlewares,
   ],
 });

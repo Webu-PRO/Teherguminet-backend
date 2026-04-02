@@ -2,14 +2,22 @@
 set -e
 
 NODE_ENV=${NODE_ENV:-development}
+RUN_MIGRATIONS=${RUN_MIGRATIONS:-true}
 RUN_SEED=${RUN_SEED:-false}
 HOST=${HOST:-0.0.0.0}
 PORT=${PORT:-9000}
-export NODE_ENV RUN_SEED HOST PORT
+CI=${CI:-1}
+MEDUSA_DISABLE_TELEMETRY=${MEDUSA_DISABLE_TELEMETRY:-1}
+export NODE_ENV RUN_MIGRATIONS RUN_SEED HOST PORT CI MEDUSA_DISABLE_TELEMETRY
 
-echo "Running database migrations..."
 echo "Working directory: $(pwd)"
-yarn medusa db:migrate
+
+if [ "$RUN_MIGRATIONS" = "true" ]; then
+  echo "Running database migrations..."
+  yarn medusa db:migrate
+else
+  echo "Skipping database migrations (RUN_MIGRATIONS=$RUN_MIGRATIONS)."
+fi
 
 if [ "$RUN_SEED" = "true" ]; then
   echo "Seeding database..."
@@ -19,13 +27,17 @@ else
 fi
 
 if [ "$NODE_ENV" = "production" ]; then
-  echo "Building Medusa project..."
-  yarn build
+  if [ ! -d ".medusa/server" ]; then
+    echo "Build artifacts missing. Building Medusa project..."
+    yarn build
 
-  if [ -d ".medusa/server/public" ]; then
-    echo "Syncing admin build to public directory..."
-    mkdir -p public
-    cp -R .medusa/server/public/* public/
+    if [ -d ".medusa/server/public" ]; then
+      echo "Syncing admin build to public directory..."
+      mkdir -p public
+      cp -R .medusa/server/public/* public/
+    fi
+  else
+    echo "Using prebuilt Medusa artifacts."
   fi
 
   echo "Starting Medusa production server..."

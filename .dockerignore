@@ -12,3 +12,5 @@ coverage
 *.log
 dist
 build
+.medusa
+.turbo

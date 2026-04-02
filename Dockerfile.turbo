@@ -2,7 +2,10 @@
 
 FROM node:20-alpine AS base
 WORKDIR /server
-ENV COREPACK_ENABLE_STRICT=0
+ENV COREPACK_ENABLE_STRICT=0 \
+    CI=1 \
+    MEDUSA_DISABLE_TELEMETRY=1 \
+    YARN_CACHE_FOLDER=/usr/local/share/.cache/yarn
 
 RUN apk add --no-cache libc6-compat python3 make g++ \
   && corepack enable \
@@ -12,6 +15,7 @@ FROM base AS deps
 COPY package.json yarn.lock .yarnrc.yml ./
 
 RUN --mount=type=cache,id=yarn-cache-backend,target=/usr/local/share/.cache/yarn \
+  --mount=type=cache,id=node-gyp-cache-backend,target=/root/.cache/node-gyp \
   sh -lc 'for attempt in 1 2 3 4 5; do \
     yarn install --frozen-lockfile --production=false --network-timeout 600000 && exit 0; \
     echo "yarn install failed (attempt ${attempt}/5), retrying..." >&2; \
@@ -22,9 +26,16 @@ RUN --mount=type=cache,id=yarn-cache-backend,target=/usr/local/share/.cache/yarn
 FROM deps AS builder
 WORKDIR /server
 COPY . .
-ENV NODE_ENV=production
+ENV NODE_ENV=production \
+    CI=1 \
+    MEDUSA_DISABLE_TELEMETRY=1
 
-RUN yarn build \
+RUN --mount=type=cache,id=turbo-cache-backend,target=/server/.turbo \
+  sh -lc 'if [ -n "${TURBO_TEAM:-}" ] && [ -n "${TURBO_TOKEN:-}" ]; then \
+    yarn turbo:build; \
+  else \
+    yarn build; \
+  fi' \
   && if [ -d ".medusa/server/public" ]; then \
     mkdir -p public && cp -R .medusa/server/public/* public/; \
   fi
@@ -33,10 +44,14 @@ FROM base AS runner
 WORKDIR /server
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \
-    PORT=9000
+    PORT=9000 \
+    CI=1 \
+    MEDUSA_DISABLE_TELEMETRY=1 \
+    RUN_MIGRATIONS=true \
+    RUN_SEED=false
 
 COPY --from=builder /server/. /server
 
 EXPOSE 9000
 
-CMD ["sh", "-lc", "yarn medusa db:migrate && if [ \"$RUN_SEED\" = \"true\" ]; then yarn seed || true; fi && yarn start"]
+CMD ["./start.sh"]
