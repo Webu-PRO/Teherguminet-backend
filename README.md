@@ -53,32 +53,6 @@ If you deploy the backend on `https://admin.teherguminet.hu` (for example throug
 Coolify exposes a “Environment Variables” panel per service—add or update the variables there so the values propagate to the container. The project now falls back to these domains automatically when the variables are omitted, so you can keep local origins for development and append production URLs separated by commas as needed.
 
 
-## AI AGENT translation via Codex CLI sidecar
-
-The HU → SK translation feature now uses an internal `codex-sidecar` service instead of direct `OPENAI_API_KEY` calls from Medusa.
-
-### Required setup
-
-1. Make sure Codex CLI auth exists on the host machine:
-   - `codex login --device-auth`
-2. Start compose so both `medusa` and `codex-sidecar` run:
-   - `yarn docker:up`
-3. If the sidecar is not logged in, you can now start login from Admin UI:
-   - `AI AGENT` oldal → `Codex bejelentkezés indítása`
-   - (Fallback) `docker compose exec codex-sidecar codex login --device-auth`
-
-### Environment variables
-
-- `AI_AGENT_CODEX_SIDECAR_URL` (default: `http://codex-sidecar:3210`)
-- `AI_AGENT_CODEX_MODEL` (default: `gpt-5.3-codex`)
-- `AI_AGENT_CODEX_LOGIN_COMMAND` (shown in Admin UI when auth is missing)
-
-### Security notes
-
-- Codex account credentials are read from `~/.codex/auth.json` (mounted into `codex-sidecar`).
-- Treat `~/.codex/auth.json` like a password: do not commit or share it.
-- The sidecar should stay internal-only (no public port exposure).
-
 ## Product Feed for Meta & Google
 
 The backend exposes a product feed endpoint that is compatible with Meta and Google catalog ingestion:

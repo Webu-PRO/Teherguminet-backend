@@ -11,12 +11,6 @@ type ProductData = {
   description?: string | null
 }
 
-type HuToSkTranslationResponse = {
-  title_sk?: string
-  description_sk?: string
-  translated_fields?: Array<"title_sk" | "description_sk">
-}
-
 type FieldSource = "db" | "metadata" | "default" | "empty"
 
 type LocalizationResponse = {
@@ -108,7 +102,6 @@ const ProductLocalizedDescriptionsWidget = ({ data }: WidgetProps) => {
 
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
-  const [isTranslating, setIsTranslating] = useState(false)
 
   const effectiveFallbackTitle = useMemo(() => {
     return normalizeText(fallbackTitle) || normalizeText(data.title) || "-"
@@ -203,80 +196,6 @@ const ProductLocalizedDescriptionsWidget = ({ data }: WidgetProps) => {
     descriptionSk,
     isSaving,
     loadLocalization,
-    productId,
-    titleHu,
-    titleSk,
-  ])
-
-  const handleAutoTranslate = useCallback(async () => {
-    if (!productId || isLoading || isSaving || isTranslating) {
-      return
-    }
-
-    const sourceTitleHu = normalizeText(titleHu) || normalizeText(effectiveFallbackTitle)
-    const sourceDescriptionHu =
-      normalizeText(descriptionHu) || normalizeText(effectiveFallbackDescription)
-
-    if (!sourceTitleHu && !sourceDescriptionHu) {
-      toast.error("AI fordítás", {
-        description: "Nincs HU forrásszöveg a fordításhoz.",
-      })
-      return
-    }
-
-    setIsTranslating(true)
-    try {
-      const payload = (await sdk.client.fetch("/admin/ai-agent/translate", {
-        method: "POST",
-        body: {
-          title_hu: sourceTitleHu,
-          description_hu: sourceDescriptionHu,
-          title_sk: normalizeText(titleSk),
-          description_sk: normalizeText(descriptionSk),
-          overwrite: false,
-        },
-      })) as HuToSkTranslationResponse
-
-      const nextTitleSk = normalizeText(payload?.title_sk)
-      const nextDescriptionSk = normalizeText(payload?.description_sk)
-      const translatedFields = Array.isArray(payload?.translated_fields)
-        ? payload.translated_fields
-        : []
-
-      if (nextTitleSk) {
-        setTitleSk(nextTitleSk)
-      }
-
-      if (nextDescriptionSk) {
-        setDescriptionSk(nextDescriptionSk)
-      }
-
-      if (!translatedFields.length) {
-        toast.success("AI fordítás", {
-          description: "Nincs üres SK mező, ezért nem történt új fordítás.",
-        })
-        return
-      }
-
-      toast.success("AI fordítás", {
-        description: "Fordítás kész. Ellenőrizd, majd mentsd az adatokat.",
-      })
-    } catch (error) {
-      const message = readErrorMessage(error, "Nem sikerült AI fordítást kérni.")
-      toast.error("AI fordítás", {
-        description: message,
-      })
-    } finally {
-      setIsTranslating(false)
-    }
-  }, [
-    descriptionHu,
-    descriptionSk,
-    effectiveFallbackDescription,
-    effectiveFallbackTitle,
-    isLoading,
-    isSaving,
-    isTranslating,
     productId,
     titleHu,
     titleSk,
@@ -395,18 +314,6 @@ const ProductLocalizedDescriptionsWidget = ({ data }: WidgetProps) => {
                 disabled={isLoading || isSaving}
               />
             </div>
-
-            <div className="mt-3">
-              <Button
-                size="small"
-                variant="secondary"
-                onClick={() => void handleAutoTranslate()}
-                isLoading={isTranslating}
-                disabled={isLoading || isSaving || isTranslating}
-              >
-                AI fordítás HU→SK
-              </Button>
-            </div>
           </div>
         </div>
 
@@ -415,7 +322,7 @@ const ProductLocalizedDescriptionsWidget = ({ data }: WidgetProps) => {
             size="small"
             onClick={() => void handleSave()}
             isLoading={isSaving}
-            disabled={isLoading || isSaving || isTranslating}
+            disabled={isLoading || isSaving}
           >
             Mentés
           </Button>
@@ -423,7 +330,7 @@ const ProductLocalizedDescriptionsWidget = ({ data }: WidgetProps) => {
             size="small"
             variant="secondary"
             onClick={() => void loadLocalization()}
-            disabled={isLoading || isSaving || isTranslating}
+            disabled={isLoading || isSaving}
           >
             Frissítés
           </Button>
@@ -438,4 +345,3 @@ export const config = defineWidgetConfig({
 })
 
 export default ProductLocalizedDescriptionsWidget
-
