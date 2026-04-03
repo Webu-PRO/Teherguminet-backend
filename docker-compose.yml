@@ -39,8 +39,15 @@ services:
 
   # Medusa Server
   medusa:
-    image: ${BACKEND_IMAGE:-ghcr.io/webu-pro/shared-medusa-backend:latest}
-    pull_policy: always
+    build:
+      context: .
+      dockerfile: ${BACKEND_DOCKERFILE:-Dockerfile.turbo}
+      args:
+        REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+        EVENTS_REDIS_URL: ${EVENTS_REDIS_URL:-redis://redis:6379}
+        EVENT_BUS_REDIS_URL: ${EVENT_BUS_REDIS_URL:-redis://redis:6379}
+    image: ${BACKEND_IMAGE:-teherguminet-medusa-backend:local}
+    pull_policy: ${BACKEND_PULL_POLICY:-never}
     container_name: medusa_backend_teherguminet
     restart: unless-stopped
     depends_on:

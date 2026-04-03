@@ -10,6 +10,16 @@ Workflow:
 - Push to `main` -> updates `:latest` and `:sha-<commit>` tags
 - Push `vX.Y.Z` tag -> publishes semver tags
 
+## Coolify deploy note (avoiding `pull access denied`)
+
+The default `docker-compose.yml` now builds the backend image locally on the target host.
+This avoids registry auth failures when GHCR access is missing.
+
+If you want to deploy directly from GHCR instead of building on-host, set:
+
+- `BACKEND_IMAGE=ghcr.io/<owner>/shared-medusa-backend:<tag>`
+- `BACKEND_PULL_POLICY=always`
+
 ## Recommended deployment pattern
 
 Use **separate deployment repositories** (or folders) per shop/domain, each with its own:
