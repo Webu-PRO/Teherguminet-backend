@@ -27,6 +27,7 @@ COPY . .
 ARG REDIS_URL
 ARG EVENT_BUS_REDIS_URL
 ARG EVENTS_REDIS_URL
+ARG USE_TURBO_BUILD=0
 ENV NODE_ENV=production \
     CI=1 \
     MEDUSA_DISABLE_TELEMETRY=1
@@ -35,7 +36,7 @@ RUN --mount=type=cache,id=turbo-cache-backend,target=/server/.turbo \
   REDIS_URL="$REDIS_URL" \
   EVENT_BUS_REDIS_URL="$EVENT_BUS_REDIS_URL" \
   EVENTS_REDIS_URL="$EVENTS_REDIS_URL" \
-  sh -lc 'if [ -n "${TURBO_TEAM:-}" ] && [ -n "${TURBO_TOKEN:-}" ]; then \
+  sh -lc 'if [ "${USE_TURBO_BUILD:-0}" = "1" ] && [ -n "${TURBO_TEAM:-}" ] && [ -n "${TURBO_TOKEN:-}" ]; then \
     yarn turbo:build; \
   else \
     yarn build; \
