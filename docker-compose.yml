@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   # PostgreSQL Database
   postgres:
@@ -46,7 +44,7 @@ services:
         REDIS_URL: ${REDIS_URL:-redis://redis:6379}
         EVENTS_REDIS_URL: ${EVENTS_REDIS_URL:-redis://redis:6379}
         EVENT_BUS_REDIS_URL: ${EVENT_BUS_REDIS_URL:-redis://redis:6379}
-    image: ${BACKEND_IMAGE:-teherguminet-medusa-backend:local}
+    image: ${BACKEND_RUNTIME_IMAGE:-teherguminet-medusa-backend:local}
     pull_policy: ${BACKEND_PULL_POLICY:-never}
     container_name: medusa_backend_teherguminet
     restart: unless-stopped

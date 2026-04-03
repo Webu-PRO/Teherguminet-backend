@@ -17,7 +17,7 @@ This avoids registry auth failures when GHCR access is missing.
 
 If you want to deploy directly from GHCR instead of building on-host, set:
 
-- `BACKEND_IMAGE=ghcr.io/<owner>/shared-medusa-backend:<tag>`
+- `BACKEND_RUNTIME_IMAGE=ghcr.io/<owner>/shared-medusa-backend:<tag>`
 - `BACKEND_PULL_POLICY=always`
 
 ## Recommended deployment pattern
