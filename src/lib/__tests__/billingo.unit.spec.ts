@@ -496,4 +496,95 @@ describe("billingo invoice generation", () => {
     >
     expect(payload.conversion_rate).toBe(385.12)
   })
+
+  it("maps Stripe card payments to bankcard when metadata payment_method is 'egyeb'", async () => {
+    let sentDocumentPayload: Record<string, unknown> | null = null
+
+    global.fetch = jest
+      .fn<typeof fetch>()
+      .mockImplementation(async (input, init) => {
+        const url = String(input)
+        if (url.includes("/currencies?")) {
+          return jsonResponse(200, {
+            from_currency: "EUR",
+            to_currency: "HUF",
+            conversation_rate: 378.35,
+            date: "2026-04-01",
+          }) as unknown as Response
+        }
+
+        if (url.endsWith("/documents")) {
+          sentDocumentPayload = JSON.parse(
+            String(init?.body ?? "{}")
+          ) as Record<string, unknown>
+          return jsonResponse(200, {
+            id: 1003,
+            invoice_number: "TG-2026-1003",
+          }) as unknown as Response
+        }
+
+        throw new Error(`Unexpected fetch URL: ${url}`)
+      })
+
+    await createBillingoInvoice(
+      buildOrder({
+        metadata: {
+          payment_method: "egyéb",
+          payment_provider: "pp_stripe_stripe",
+        },
+      }),
+      baseConfig
+    )
+
+    const payload = sentDocumentPayload as unknown as Record<
+      string,
+      unknown
+    >
+    expect(payload.payment_method).toBe("bankcard")
+  })
+
+  it("defaults invoice payment method to wire_transfer when provider cannot be inferred", async () => {
+    let sentDocumentPayload: Record<string, unknown> | null = null
+
+    global.fetch = jest
+      .fn<typeof fetch>()
+      .mockImplementation(async (input, init) => {
+        const url = String(input)
+        if (url.includes("/currencies?")) {
+          return jsonResponse(200, {
+            from_currency: "EUR",
+            to_currency: "HUF",
+            conversation_rate: 378.35,
+            date: "2026-04-01",
+          }) as unknown as Response
+        }
+
+        if (url.endsWith("/documents")) {
+          sentDocumentPayload = JSON.parse(
+            String(init?.body ?? "{}")
+          ) as Record<string, unknown>
+          return jsonResponse(200, {
+            id: 1004,
+            invoice_number: "TG-2026-1004",
+          }) as unknown as Response
+        }
+
+        throw new Error(`Unexpected fetch URL: ${url}`)
+      })
+
+    await createBillingoInvoice(
+      buildOrder({
+        metadata: {
+          payment_method: "egyeb",
+        },
+      }),
+      baseConfig
+    )
+
+    const payload = sentDocumentPayload as unknown as Record<
+      string,
+      unknown
+    >
+    expect(payload.payment_method).toBe("wire_transfer")
+  })
 })

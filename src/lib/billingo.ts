@@ -979,39 +979,104 @@ const resolvePaymentMethod = (
   order: OrderDTO,
   fallback: string
 ) => {
+  const normalizeToken = (value: string) =>
+    value
+      .trim()
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+
+  const normalizePaymentMethod = (value?: string | null) => {
+    if (typeof value !== "string") {
+      return null
+    }
+
+    const trimmed = value.trim()
+    if (!trimmed) {
+      return null
+    }
+
+    const normalized = normalizeToken(trimmed).replace(/[\s-]+/g, "_")
+
+    if (normalized === "other" || normalized === "egyeb") {
+      return null
+    }
+    if (
+      normalized.includes("wire_transfer") ||
+      normalized.includes("bank_transfer") ||
+      normalized.includes("atutalas") ||
+      normalized.includes("utalas")
+    ) {
+      return "wire_transfer"
+    }
+    if (
+      normalized.includes("bankcard") ||
+      normalized.includes("bankkartya") ||
+      normalized.includes("kartya") ||
+      normalized.includes("card")
+    ) {
+      return "bankcard"
+    }
+    if (
+      normalized.includes("cash_on_delivery") ||
+      normalized.includes("utanvet") ||
+      normalized === "cod"
+    ) {
+      return "cash_on_delivery"
+    }
+
+    return trimmed
+  }
+
   const metadata = (order.metadata as Record<string, unknown> | null) ?? {}
-  const direct =
+  const direct = normalizePaymentMethod(
     typeof metadata.payment_method === "string"
-      ? metadata.payment_method.trim()
-      : ""
+      ? metadata.payment_method
+      : null
+  )
   if (direct) {
     return direct
   }
 
-  const provider = [
-    metadata.payment_provider,
-    metadata.payment_provider_id,
-    metadata.payment_method_id,
-  ]
-    .map((value) => (typeof value === "string" ? value : ""))
-    .join(" ")
-    .toLowerCase()
+  const provider = normalizeToken(
+    [
+      metadata.payment_provider,
+      metadata.payment_provider_id,
+      metadata.payment_method_id,
+    ]
+      .map((value) => (typeof value === "string" ? value : ""))
+      .join(" ")
+  )
 
-  if (provider.includes("stripe") || provider.includes("bankcard")) {
+  if (
+    provider.includes("stripe") ||
+    provider.includes("bankcard") ||
+    provider.includes("simplepay") ||
+    provider.includes("barion") ||
+    provider.includes("kartya") ||
+    provider.includes("card")
+  ) {
     return "bankcard"
   }
   if (
     provider.includes("manual") ||
     provider.includes("wire") ||
-    provider.includes("bank")
+    provider.includes("bank") ||
+    provider.includes("transfer") ||
+    provider.includes("atutalas") ||
+    provider.includes("utalas")
   ) {
     return "wire_transfer"
   }
-  if (provider.includes("cod") || provider.includes("cash_on_delivery")) {
+  if (
+    provider.includes("cod") ||
+    provider.includes("cash_on_delivery") ||
+    provider.includes("utanvet")
+  ) {
     return "cash_on_delivery"
   }
 
-  return fallback
+  return normalizePaymentMethod(fallback) ?? "wire_transfer"
 }
 
 const resolveVendorId = (
