@@ -1,4 +1,8 @@
-import { createPricePreferencesWorkflow, updatePricePreferencesWorkflow } from "@medusajs/core-flows"
+import {
+  createPricePreferencesWorkflow,
+  updatePricePreferencesWorkflow,
+  updateRegionsWorkflow,
+} from "@medusajs/core-flows"
 import type { ExecArgs, Logger } from "@medusajs/types"
 import { ContainerRegistrationKeys } from "@medusajs/utils"
 
@@ -30,7 +34,7 @@ const readAllRegions = async (query: QueryService) => {
   do {
     const { data, metadata } = await query.graph<QueryRegion>({
       entity: "region",
-      fields: ["id", "countries.iso_2"],
+      fields: ["id", "is_tax_inclusive", "countries.iso_2"],
       pagination: {
         take: PAGE_SIZE,
         skip,
@@ -130,7 +134,20 @@ export default async function ensureNetPricePreferences({
     })
   }
 
+  if (plan.regionIdsToMakeTaxExclusive.length) {
+    await updateRegionsWorkflow(container).run({
+      input: {
+        selector: {
+          id: plan.regionIdsToMakeTaxExclusive,
+        },
+        update: {
+          is_tax_inclusive: false,
+        },
+      },
+    })
+  }
+
   logger.info(
-    `pricing:ensure-net done. countries=${netCountries.join(",")} target_regions=${targetRegionIds.length} created=${plan.create.length} updated=${plan.updateIds.length}`
+    `pricing:ensure-net done. countries=${netCountries.join(",")} target_regions=${targetRegionIds.length} created=${plan.create.length} updated=${plan.updateIds.length} regions_tax_exclusive_updated=${plan.regionIdsToMakeTaxExclusive.length}`
   )
 }

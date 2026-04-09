@@ -5,6 +5,7 @@ export type RegionCountry = {
 export type QueryRegion = {
   id: string
   countries?: RegionCountry[] | null
+  is_tax_inclusive?: boolean | null
 }
 
 export type QueryPricePreference = {
@@ -23,6 +24,7 @@ export type PricePreferenceCreateInput = {
 export type RegionNetPreferencePlan = {
   create: PricePreferenceCreateInput[]
   updateIds: string[]
+  regionIdsToMakeTaxExclusive: string[]
 }
 
 const normalizeText = (value: unknown) => {
@@ -85,11 +87,16 @@ export const buildRegionNetPreferencePlan = (input: {
 
   const create: PricePreferenceCreateInput[] = []
   const updateIds: string[] = []
+  const regionIdsToMakeTaxExclusive: string[] = []
 
   for (const region of input.targetRegions) {
     const regionId = normalizeText(region.id)
     if (!regionId) {
       continue
+    }
+
+    if (region.is_tax_inclusive === true) {
+      regionIdsToMakeTaxExclusive.push(regionId)
     }
 
     const existingPreference = preferenceByRegionId.get(regionId)
@@ -114,5 +121,6 @@ export const buildRegionNetPreferencePlan = (input: {
   return {
     create,
     updateIds,
+    regionIdsToMakeTaxExclusive,
   }
 }

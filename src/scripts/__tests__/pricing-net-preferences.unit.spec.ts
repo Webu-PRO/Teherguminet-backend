@@ -34,6 +34,7 @@ describe("pricing-net-preferences helpers", () => {
       },
     ])
     expect(plan.updateIds).toEqual([])
+    expect(plan.regionIdsToMakeTaxExclusive).toEqual([])
   })
 
   it("filters regions by configured country code membership", () => {
@@ -55,7 +56,10 @@ describe("pricing-net-preferences helpers", () => {
 
   it("plans update only for tax-inclusive region preferences", () => {
     const plan = buildRegionNetPreferencePlan({
-      targetRegions: [{ id: "reg_hu" }, { id: "reg_sk" }],
+      targetRegions: [
+        { id: "reg_hu", is_tax_inclusive: true },
+        { id: "reg_sk", is_tax_inclusive: false },
+      ],
       preferences: [
         {
           id: "pp_hu",
@@ -74,5 +78,6 @@ describe("pricing-net-preferences helpers", () => {
 
     expect(plan.create).toEqual([])
     expect(plan.updateIds).toEqual(["pp_hu"])
+    expect(plan.regionIdsToMakeTaxExclusive).toEqual(["reg_hu"])
   })
 })
