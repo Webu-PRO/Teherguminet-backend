@@ -4,11 +4,12 @@ set -e
 NODE_ENV=${NODE_ENV:-development}
 RUN_MIGRATIONS=${RUN_MIGRATIONS:-true}
 RUN_SEED=${RUN_SEED:-false}
+RUN_PRICING_ENSURE_NET=${RUN_PRICING_ENSURE_NET:-true}
 HOST=${HOST:-0.0.0.0}
 PORT=${PORT:-9000}
 CI=${CI:-1}
 MEDUSA_DISABLE_TELEMETRY=${MEDUSA_DISABLE_TELEMETRY:-1}
-export NODE_ENV RUN_MIGRATIONS RUN_SEED HOST PORT CI MEDUSA_DISABLE_TELEMETRY
+export NODE_ENV RUN_MIGRATIONS RUN_SEED RUN_PRICING_ENSURE_NET HOST PORT CI MEDUSA_DISABLE_TELEMETRY
 
 echo "Working directory: $(pwd)"
 
@@ -24,6 +25,13 @@ if [ "$RUN_SEED" = "true" ]; then
   yarn seed || echo "Seeding failed, continuing..."
 else
   echo "Skipping database seed (RUN_SEED=$RUN_SEED)."
+fi
+
+if [ "$RUN_PRICING_ENSURE_NET" = "true" ]; then
+  echo "Ensuring tax-exclusive pricing preferences for HU/SK..."
+  yarn pricing:ensure-net || echo "pricing:ensure-net failed, continuing startup..."
+else
+  echo "Skipping net-pricing preference enforcement (RUN_PRICING_ENSURE_NET=$RUN_PRICING_ENSURE_NET)."
 fi
 
 if [ "$NODE_ENV" = "production" ]; then

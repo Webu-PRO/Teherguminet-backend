@@ -16,6 +16,7 @@
     "build": "medusa build",
     "turbo:build": "turbo run build --single-package --cache=local:rw,remote:r && if [ ! -d .medusa/server ]; then medusa build; fi",
     "seed": "medusa exec ./src/scripts/seed.ts",
+    "pricing:ensure-net": "medusa exec ./src/scripts/ensure-net-price-preferences.ts",
     "localization:backfill": "medusa exec ./src/scripts/backfill-product-localizations.ts",
     "resend:templates:sync": "ts-node --transpile-only ./src/scripts/sync-resend-templates.ts",
     "start": "medusa start",
