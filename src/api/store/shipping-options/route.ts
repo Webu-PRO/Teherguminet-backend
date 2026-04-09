@@ -17,6 +17,14 @@ type ShippingOptionsQuery = {
   is_return?: string | boolean
 }
 
+type ShippingOptionLike = {
+  id?: string | null
+}
+
+type LoggerLike = {
+  warn?: (...args: unknown[]) => void
+}
+
 const readQueryValue = (value: unknown): string | undefined => {
   if (typeof value === "string" && value.trim().length) {
     return value
@@ -30,6 +38,16 @@ const readQueryValue = (value: unknown): string | undefined => {
   }
 
   return undefined
+}
+
+const resolveLogger = (req: MedusaRequest): LoggerLike | null => {
+  try {
+    return (req.scope as { resolve?: (name: string) => unknown })?.resolve?.(
+      "logger"
+    ) as LoggerLike
+  } catch {
+    return null
+  }
 }
 
 export async function GET(
@@ -90,16 +108,88 @@ export async function GET(
       : {}),
   }))
 
-  const pricingWorkflow = listShippingOptionsForCartWithPricingWorkflow(
-    req.scope
-  )
-  const { result: shipping_options } = await pricingWorkflow.run({
-    input: {
-      cart_id: cartId,
-      is_return: isReturnRaw === "true" || isReturnRaw === true,
-      options,
-    },
-  })
+  const pricingWorkflow = listShippingOptionsForCartWithPricingWorkflow(req.scope)
+  const pricingInput = {
+    cart_id: cartId,
+    is_return: isReturnRaw === "true" || isReturnRaw === true,
+  }
 
-  res.json({ shipping_options })
+  try {
+    const { result: shipping_options } = await pricingWorkflow.run({
+      input: {
+        ...pricingInput,
+        options,
+      },
+    })
+
+    res.json({ shipping_options })
+    return
+  } catch (pricingError) {
+    const settled = await Promise.allSettled(
+      options.map(async (option) => {
+        const { result } = await pricingWorkflow.run({
+          input: {
+            ...pricingInput,
+            options: [option],
+          },
+        })
+
+        return Array.isArray(result) ? (result[0] as ShippingOptionLike) : null
+      })
+    )
+
+    const pricedById = new Map<string, ShippingOptionLike>()
+    let recoveredCount = 0
+
+    for (const result of settled) {
+      if (result.status !== "fulfilled") {
+        continue
+      }
+
+      const option = result.value
+      if (!option) {
+        continue
+      }
+      const optionId =
+        typeof option.id === "string" && option.id.trim().length
+          ? option.id.trim()
+          : null
+
+      if (!optionId) {
+        continue
+      }
+
+      pricedById.set(optionId, option)
+      recoveredCount += 1
+    }
+
+    const logger = resolveLogger(req)
+    logger?.warn?.(
+      "[store/shipping-options] pricing workflow failed, returning partial/fallback options",
+      {
+        cartId,
+        optionCount: options.length,
+        recoveredCount,
+        error:
+          pricingError instanceof Error
+            ? pricingError.message
+            : String(pricingError),
+      }
+    )
+
+    const shipping_options = eligibleOptions.map((option) => {
+      const optionId =
+        typeof option.id === "string" && option.id.trim().length
+          ? option.id.trim()
+          : null
+
+      if (!optionId) {
+        return option
+      }
+
+      return (pricedById.get(optionId) as typeof option) ?? option
+    })
+
+    res.json({ shipping_options })
+  }
 }

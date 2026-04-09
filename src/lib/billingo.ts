@@ -42,6 +42,7 @@ export type BillingoConfig = {
   invoiceLanguage: string
   invoiceUnit: string
   invoiceUnitPriceType: "gross" | "net"
+  invoiceOrderUnitPriceAsNet?: boolean
   invoiceBankAccountId?: number
 }
 
@@ -178,9 +179,18 @@ const CURRENCY_DECIMALS = parseCurrencyDecimals(
   process.env.BILLINGO_CURRENCY_DECIMALS
 )
 
+const readBooleanFlag = (value?: string | null) => {
+  const normalized = value?.trim().toLowerCase()
+  return (
+    normalized === "1" ||
+    normalized === "true" ||
+    normalized === "yes" ||
+    normalized === "on"
+  )
+}
+
 export const isBillingoDebugEnabled = () => {
-  const raw = process.env.BILLINGO_DEBUG?.trim().toLowerCase()
-  return raw === "1" || raw === "true" || raw === "yes" || raw === "on"
+  return readBooleanFlag(process.env.BILLINGO_DEBUG)
 }
 
 export class BillingoRequestError extends Error {
@@ -750,6 +760,24 @@ const readString = (...values: unknown[]) => {
     }
   }
   return ""
+}
+
+const readBoolean = (...values: unknown[]) => {
+  for (const value of values) {
+    if (typeof value === "boolean") {
+      return value
+    }
+    if (typeof value === "string") {
+      const normalized = value.trim().toLowerCase()
+      if (["1", "true", "yes", "on"].includes(normalized)) {
+        return true
+      }
+      if (["0", "false", "no", "off"].includes(normalized)) {
+        return false
+      }
+    }
+  }
+  return null
 }
 
 const SHIPPING_TITLE_PATTERN = /\bshipping\b|\bdelivery\b|szállítás/i
@@ -1341,6 +1369,9 @@ export const getBillingoConfig = (): BillingoConfig | null => {
     process.env.BILLINGO_INVOICE_UNIT_PRICE_TYPE?.trim().toLowerCase() === "net"
       ? "net"
       : DEFAULT_INVOICE_UNIT_PRICE_TYPE
+  const invoiceOrderUnitPriceAsNet = readBooleanFlag(
+    process.env.BILLINGO_INVOICE_ORDER_UNIT_PRICE_NET
+  )
   const invoiceBankAccountId = parsePositiveNumber(
     process.env.BILLINGO_INVOICE_BANK_ACCOUNT_ID?.trim() ??
       process.env.BILLINGO_BANK_ACCOUNT_ID?.trim()
@@ -1359,6 +1390,7 @@ export const getBillingoConfig = (): BillingoConfig | null => {
     invoiceLanguage,
     invoiceUnit,
     invoiceUnitPriceType,
+    invoiceOrderUnitPriceAsNet,
     invoiceBankAccountId: invoiceBankAccountId ?? undefined,
   }
 }
@@ -1972,6 +2004,17 @@ export const createBillingoDocument = async (
         quantity,
         lineTotal,
         vat,
+        isTaxInclusive: readBoolean(
+          record.is_tax_inclusive,
+          detail?.is_tax_inclusive
+        ),
+        orderUnitPrice:
+          readNumber(
+            record.unit_price,
+            record.raw_unit_price,
+            detail?.unit_price,
+            detail?.raw_unit_price
+          ) ?? null,
       }
     })
     .filter(
@@ -1982,6 +2025,8 @@ export const createBillingoDocument = async (
         quantity: number
         lineTotal: number
         vat: string
+        isTaxInclusive: boolean | null
+        orderUnitPrice: number | null
       } => Boolean(item)
     )
 
@@ -1991,6 +2036,8 @@ export const createBillingoDocument = async (
       quantity: 1,
       lineTotal: effectiveShippingLineGross,
       vat: shippingVat,
+      isTaxInclusive: null,
+      orderUnitPrice: null,
     })
   }
 
@@ -2136,6 +2183,8 @@ export const createBillingoDocument = async (
             quantity: 1,
             lineTotal: fallbackItemTotal,
             vat: resolveItemVat(shippingMethod?.tax_lines ?? null),
+            isTaxInclusive: null,
+            orderUnitPrice: null,
           },
         ]
       }
@@ -2202,18 +2251,35 @@ export const createBillingoDocument = async (
 
   const items: BillingoInvoiceItem[] = baseItems
     .map((item) => {
-      const unitPrice = resolveInvoiceUnitPrice({
-        lineTotal: item.lineTotal,
-        quantity: item.quantity,
-        currency,
-        vat: item.vat,
-        unitPriceType: config.invoiceUnitPriceType,
-        amountMode,
-      })
+      const forceNetFromOrderUnitPrice =
+        config.invoiceOrderUnitPriceAsNet === true &&
+        item.isTaxInclusive === false &&
+        typeof item.orderUnitPrice === "number" &&
+        Number.isFinite(item.orderUnitPrice) &&
+        item.orderUnitPrice > 0
+      const unitPriceType: BillingoConfig["invoiceUnitPriceType"] =
+        forceNetFromOrderUnitPrice ? "net" : config.invoiceUnitPriceType
+      const unitPrice = forceNetFromOrderUnitPrice
+        ? roundTo(
+            normalizeAmountForBillingo({
+              amount: item.orderUnitPrice!,
+              currency,
+              mode: amountMode,
+            }),
+            decimals
+          )
+        : resolveInvoiceUnitPrice({
+            lineTotal: item.lineTotal,
+            quantity: item.quantity,
+            currency,
+            vat: item.vat,
+            unitPriceType,
+            amountMode,
+          })
       return {
         name: item.title,
         unit_price: unitPrice,
-        unit_price_type: config.invoiceUnitPriceType,
+        unit_price_type: unitPriceType,
         quantity: item.quantity,
         unit: config.invoiceUnit,
         vat: item.vat,

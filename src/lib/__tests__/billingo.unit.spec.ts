@@ -302,6 +302,168 @@ describe("billingo invoice generation", () => {
     expect(items[0]?.quantity).toBe(2)
   })
 
+  it("can force invoice net unit prices from Medusa order unit_price", async () => {
+    let sentDocumentPayload: Record<string, unknown> | null = null
+
+    global.fetch = jest
+      .fn<typeof fetch>()
+      .mockImplementation(async (input, init) => {
+        const url = String(input)
+        if (url.endsWith("/documents")) {
+          sentDocumentPayload = JSON.parse(
+            String(init?.body ?? "{}")
+          ) as Record<string, unknown>
+          return jsonResponse(200, {
+            id: 1105,
+            invoice_number: "TG-2026-1105",
+          }) as unknown as Response
+        }
+
+        throw new Error(`Unexpected fetch URL: ${url}`)
+      })
+
+    const created = await createBillingoInvoice(
+      buildMajorUnitOrder({
+        currency_code: "huf",
+        total: 400,
+        item_total: 400,
+        subtotal: 314.96062992125985,
+        item_subtotal: 314.96062992125985,
+        item_tax_total: 85.03937007874016,
+        tax_total: 85.03937007874016,
+        items: [
+          {
+            id: "item_huf_1",
+            title: "test",
+            quantity: 2,
+            is_tax_inclusive: false,
+            unit_price: 200,
+            total: 400,
+            subtotal: 314.96062992125985,
+            tax_total: 85.03937007874016,
+            detail: {
+              quantity: 2,
+              is_tax_inclusive: false,
+              unit_price: 200,
+              total: 400,
+              subtotal: 314.96062992125985,
+              tax_total: 85.03937007874016,
+              raw_unit_price: { value: "200", precision: 20 },
+              raw_total: { value: "400", precision: 20 },
+              raw_subtotal: {
+                value: "314.9606299212598425",
+                precision: 20,
+              },
+              raw_tax_total: {
+                value: "85.0393700787401575",
+                precision: 20,
+              },
+            },
+            tax_lines: [{ rate: 27 }],
+          },
+        ],
+      }),
+      {
+        ...baseConfig,
+        invoiceOrderUnitPriceAsNet: true,
+      }
+    )
+
+    expect(created.id).toBe(1105)
+    const payload = sentDocumentPayload as unknown as Record<
+      string,
+      unknown
+    >
+    const items = payload.items as Array<{
+      unit_price: number
+      unit_price_type: string
+      quantity: number
+    }>
+    expect(items[0]?.unit_price_type).toBe("net")
+    expect(items[0]?.unit_price).toBe(200)
+    expect(items[0]?.quantity).toBe(2)
+  })
+
+  it("does not force net invoice unit prices when order line is tax inclusive", async () => {
+    let sentDocumentPayload: Record<string, unknown> | null = null
+
+    global.fetch = jest
+      .fn<typeof fetch>()
+      .mockImplementation(async (input, init) => {
+        const url = String(input)
+        if (url.endsWith("/documents")) {
+          sentDocumentPayload = JSON.parse(
+            String(init?.body ?? "{}")
+          ) as Record<string, unknown>
+          return jsonResponse(200, {
+            id: 1106,
+            invoice_number: "TG-2026-1106",
+          }) as unknown as Response
+        }
+
+        throw new Error(`Unexpected fetch URL: ${url}`)
+      })
+
+    const created = await createBillingoInvoice(
+      buildMajorUnitOrder({
+        currency_code: "huf",
+        total: 400,
+        item_total: 400,
+        subtotal: 314.96062992125985,
+        item_subtotal: 314.96062992125985,
+        item_tax_total: 85.03937007874016,
+        tax_total: 85.03937007874016,
+        items: [
+          {
+            id: "item_huf_2",
+            title: "test",
+            quantity: 2,
+            is_tax_inclusive: true,
+            unit_price: 200,
+            total: 400,
+            subtotal: 314.96062992125985,
+            tax_total: 85.03937007874016,
+            detail: {
+              quantity: 2,
+              is_tax_inclusive: true,
+              unit_price: 200,
+              total: 400,
+              subtotal: 314.96062992125985,
+              tax_total: 85.03937007874016,
+              raw_unit_price: { value: "200", precision: 20 },
+              raw_total: { value: "400", precision: 20 },
+              raw_subtotal: {
+                value: "314.9606299212598425",
+                precision: 20,
+              },
+              raw_tax_total: {
+                value: "85.0393700787401575",
+                precision: 20,
+              },
+            },
+            tax_lines: [{ rate: 27 }],
+          },
+        ],
+      }),
+      {
+        ...baseConfig,
+        invoiceOrderUnitPriceAsNet: true,
+      }
+    )
+
+    expect(created.id).toBe(1106)
+    const payload = sentDocumentPayload as unknown as Record<
+      string,
+      unknown
+    >
+    const items = payload.items as Array<{
+      unit_price_type: string
+      quantity: number
+    }>
+    expect(items[0]?.unit_price_type).toBe("gross")
+    expect(items[0]?.quantity).toBe(2)
+  })
+
   it("keeps major-unit EUR receipt totals without scaling by 100", async () => {
     let sentReceiptPayload: Record<string, unknown> | null = null
 
