@@ -61,16 +61,20 @@ class MagyarPostaFulfillmentService extends AbstractFulfillmentProviderService {
   }
 
   private resolveCalculatedAmount(
-    optionData: Record<string, unknown>,
-    data: Record<string, unknown>
+    optionData?: Record<string, unknown> | null,
+    data?: Record<string, unknown> | null
   ) {
+    const safeOptionData =
+      optionData && typeof optionData === "object" ? optionData : {};
+    const safeData = data && typeof data === "object" ? data : {};
+
     const candidates = [
-      data.calculated_price,
-      data.price,
-      data.amount,
-      optionData.calculated_price,
-      optionData.price,
-      optionData.amount,
+      safeData.calculated_price,
+      safeData.price,
+      safeData.amount,
+      safeOptionData.calculated_price,
+      safeOptionData.price,
+      safeOptionData.amount,
       this.options_["calculated_price"],
       process.env.MAGYAR_POSTA_CALCULATED_PRICE,
     ];
