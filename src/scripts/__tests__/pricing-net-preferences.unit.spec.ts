@@ -15,8 +15,8 @@ describe("pricing-net-preferences helpers", () => {
   it("plans creation when target regions have no region price preference", () => {
     const plan = buildRegionNetPreferencePlan({
       targetRegions: [
-        { id: "reg_hu" },
-        { id: "reg_sk" },
+        { id: "reg_hu", currency_code: "huf" },
+        { id: "reg_sk", currency_code: "eur" },
       ],
       preferences: [],
     })
@@ -35,6 +35,7 @@ describe("pricing-net-preferences helpers", () => {
     ])
     expect(plan.updateIds).toEqual([])
     expect(plan.regionIdsToMakeTaxExclusive).toEqual([])
+    expect(plan.currencyPreferenceUpdateIds).toEqual([])
   })
 
   it("filters regions by configured country code membership", () => {
@@ -57,8 +58,8 @@ describe("pricing-net-preferences helpers", () => {
   it("plans update only for tax-inclusive region preferences", () => {
     const plan = buildRegionNetPreferencePlan({
       targetRegions: [
-        { id: "reg_hu", is_tax_inclusive: true },
-        { id: "reg_sk", is_tax_inclusive: false },
+        { id: "reg_hu", is_tax_inclusive: true, currency_code: "huf" },
+        { id: "reg_sk", is_tax_inclusive: false, currency_code: "eur" },
       ],
       preferences: [
         {
@@ -73,11 +74,18 @@ describe("pricing-net-preferences helpers", () => {
           value: "reg_sk",
           is_tax_inclusive: false,
         },
+        {
+          id: "pp_huf",
+          attribute: "currency_code",
+          value: "huf",
+          is_tax_inclusive: true,
+        },
       ],
     })
 
     expect(plan.create).toEqual([])
     expect(plan.updateIds).toEqual(["pp_hu"])
     expect(plan.regionIdsToMakeTaxExclusive).toEqual(["reg_hu"])
+    expect(plan.currencyPreferenceUpdateIds).toEqual(["pp_huf"])
   })
 })

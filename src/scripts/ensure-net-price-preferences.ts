@@ -34,7 +34,12 @@ const readAllRegions = async (query: QueryService) => {
   do {
     const { data, metadata } = await query.graph<QueryRegion>({
       entity: "region",
-      fields: ["id", "is_tax_inclusive", "countries.iso_2"],
+      fields: [
+        "id",
+        "currency_code",
+        "is_tax_inclusive",
+        "countries.iso_2",
+      ],
       pagination: {
         take: PAGE_SIZE,
         skip,
@@ -49,7 +54,7 @@ const readAllRegions = async (query: QueryService) => {
   return rows
 }
 
-const readAllRegionPricePreferences = async (query: QueryService) => {
+const readAllPricePreferences = async (query: QueryService) => {
   const rows: QueryPricePreference[] = []
   let skip = 0
   let count = 0
@@ -58,9 +63,6 @@ const readAllRegionPricePreferences = async (query: QueryService) => {
     const { data, metadata } = await query.graph<QueryPricePreference>({
       entity: "price_preference",
       fields: ["id", "attribute", "value", "is_tax_inclusive"],
-      filters: {
-        attribute: "region_id",
-      },
       pagination: {
         take: PAGE_SIZE,
         skip,
@@ -103,12 +105,34 @@ export default async function ensureNetPricePreferences({
     return
   }
 
-  const allRegionPreferences = await readAllRegionPricePreferences(query)
+  const allRegionPreferences = await readAllPricePreferences(query)
   const targetRegionIdSet = new Set(targetRegionIds)
+  const targetCurrencyCodeSet = new Set(
+    targetRegions
+      .map((region) => {
+        return typeof region.currency_code === "string"
+          ? region.currency_code.trim().toLowerCase()
+          : ""
+      })
+      .filter(Boolean)
+  )
   const preferences = allRegionPreferences.filter((preference) => {
-    const regionId =
+    const attribute =
+      typeof preference.attribute === "string"
+        ? preference.attribute.trim()
+        : ""
+    const value =
       typeof preference.value === "string" ? preference.value.trim() : ""
-    return targetRegionIdSet.has(regionId)
+
+    if (attribute === "region_id") {
+      return targetRegionIdSet.has(value)
+    }
+
+    if (attribute === "currency_code") {
+      return targetCurrencyCodeSet.has(value.toLowerCase())
+    }
+
+    return false
   })
   const plan = buildRegionNetPreferencePlan({
     targetRegions,
@@ -121,11 +145,15 @@ export default async function ensureNetPricePreferences({
     })
   }
 
-  if (plan.updateIds.length) {
+  const preferenceIdsToUpdate = [
+    ...new Set([...plan.updateIds, ...plan.currencyPreferenceUpdateIds]),
+  ]
+
+  if (preferenceIdsToUpdate.length) {
     await updatePricePreferencesWorkflow(container).run({
       input: {
         selector: {
-          id: plan.updateIds,
+          id: preferenceIdsToUpdate,
         },
         update: {
           is_tax_inclusive: false,
@@ -148,6 +176,6 @@ export default async function ensureNetPricePreferences({
   }
 
   logger.info(
-    `pricing:ensure-net done. countries=${netCountries.join(",")} target_regions=${targetRegionIds.length} created=${plan.create.length} updated=${plan.updateIds.length} regions_tax_exclusive_updated=${plan.regionIdsToMakeTaxExclusive.length}`
+    `pricing:ensure-net done. countries=${netCountries.join(",")} target_regions=${targetRegionIds.length} created=${plan.create.length} region_pref_updated=${plan.updateIds.length} currency_pref_updated=${plan.currencyPreferenceUpdateIds.length} regions_tax_exclusive_updated=${plan.regionIdsToMakeTaxExclusive.length}`
   )
 }

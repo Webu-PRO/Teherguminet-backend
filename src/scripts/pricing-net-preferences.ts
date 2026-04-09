@@ -4,6 +4,7 @@ export type RegionCountry = {
 
 export type QueryRegion = {
   id: string
+  currency_code?: string | null
   countries?: RegionCountry[] | null
   is_tax_inclusive?: boolean | null
 }
@@ -25,6 +26,7 @@ export type RegionNetPreferencePlan = {
   create: PricePreferenceCreateInput[]
   updateIds: string[]
   regionIdsToMakeTaxExclusive: string[]
+  currencyPreferenceUpdateIds: string[]
 }
 
 const normalizeText = (value: unknown) => {
@@ -88,6 +90,7 @@ export const buildRegionNetPreferencePlan = (input: {
   const create: PricePreferenceCreateInput[] = []
   const updateIds: string[] = []
   const regionIdsToMakeTaxExclusive: string[] = []
+  const currencyPreferenceUpdateIds = new Set<string>()
 
   for (const region of input.targetRegions) {
     const regionId = normalizeText(region.id)
@@ -116,11 +119,28 @@ export const buildRegionNetPreferencePlan = (input: {
         updateIds.push(preferenceId)
       }
     }
+
+    const currencyCode = normalizeText(region.currency_code).toLowerCase()
+    if (currencyCode) {
+      const currencyPreference = input.preferences.find((preference) => {
+        return (
+          normalizeText(preference.attribute) === "currency_code" &&
+          normalizeText(preference.value).toLowerCase() === currencyCode &&
+          preference.is_tax_inclusive === true
+        )
+      })
+
+      const currencyPreferenceId = normalizeText(currencyPreference?.id)
+      if (currencyPreferenceId) {
+        currencyPreferenceUpdateIds.add(currencyPreferenceId)
+      }
+    }
   }
 
   return {
     create,
     updateIds,
     regionIdsToMakeTaxExclusive,
+    currencyPreferenceUpdateIds: [...currencyPreferenceUpdateIds],
   }
 }
