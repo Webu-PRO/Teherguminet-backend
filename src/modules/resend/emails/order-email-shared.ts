@@ -72,16 +72,16 @@ export const INVOICE_COMPANY_DETAILS = {
   taxNumber: envOrDefault("INVOICE_COMPANY_TAX_NUMBER", "32630871-2-11"),
   registryNumber: envOrDefault(
     "INVOICE_COMPANY_REGISTRY_NUMBER",
-    "11-09-031179"
+    "11-09-031179",
   ),
   euTaxNumber: envOrDefault("INVOICE_COMPANY_EU_TAX_NUMBER", "HU32630871"),
   bankAccount: envOrDefault(
     "INVOICE_COMPANY_BANK_ACCOUNT",
-    "10402032-50527166-87671009"
+    "10402032-50527166-87671009",
   ),
   iban: envOrDefault(
     "INVOICE_COMPANY_IBAN",
-    "HU09 1040 2032 5052 7166 8767 1009"
+    "HU09 1040 2032 5052 7166 8767 1009",
   ),
   bankName: envOrDefault("INVOICE_COMPANY_BANK_NAME", "K&H Bank Zrt"),
   swift: envOrDefault("INVOICE_COMPANY_SWIFT", "OKHBHUHB"),
@@ -117,7 +117,7 @@ const normalizeBaseUrl = (raw?: string | null) => {
     return DEFAULT_STOREFRONT_URL;
   }
 
-  const trimmed = raw.trim().replace(/therguminet\.hu/gi, "teherguminet.hu");
+  const trimmed = raw.trim().replace(/teherguminet\.hu/gi, "teherguminet.hu");
 
   if (!trimmed) {
     return DEFAULT_STOREFRONT_URL;
@@ -138,7 +138,7 @@ const normalizeBaseUrl = (raw?: string | null) => {
 
 export const buildOrderUrl = (
   orderId: string | null | undefined,
-  languageCode: LanguageCode
+  languageCode: LanguageCode,
 ) => {
   const base =
     process.env.ORDER_CONFIRMATION_URL_BASE ??
@@ -164,7 +164,7 @@ export const buildOrderUrl = (
 export const formatAmount = (
   value: number | null | undefined,
   currencyCode: string,
-  locale: string = "hu-HU"
+  locale: string = "hu-HU",
 ) => {
   if (typeof value !== "number" || Number.isNaN(value)) {
     return "—";
@@ -212,7 +212,7 @@ export type PreparedOrderItem = {
 
 export const prepareOrderItems = (
   order: OrderEmailOrder,
-  fallbackLabel: string
+  fallbackLabel: string,
 ): PreparedOrderItem[] => {
   const items = Array.isArray(order.items) ? order.items : [];
 

@@ -45,9 +45,11 @@ const readString = (value: unknown) => {
 
 const normalizeBaseUrl = (value: string) => value.replace(/\/$/, "");
 const normalizeStorefrontDomain = (value: string) =>
-  value.replace(/therguminet\.hu/gi, "teherguminet.hu");
+  value.replace(/teherguminet\.hu/gi, "teherguminet.hu");
 
-const normalizeLanguage = (value: string | null | undefined): PasswordResetLanguage | null => {
+const normalizeLanguage = (
+  value: string | null | undefined,
+): PasswordResetLanguage | null => {
   const normalized = (value ?? "").trim().toLowerCase();
   if (!normalized) {
     return null;
@@ -76,7 +78,7 @@ const applyTemplate = (
   template: string,
   token: string,
   entityId: string,
-  actorType: string
+  actorType: string,
 ) => {
   const encodedToken = encodeURIComponent(token);
   return template
@@ -96,12 +98,18 @@ const resolveTemplate = (actorType: string) => {
       ? process.env.ADMIN_RESET_PASSWORD_URL_TEMPLATE
       : process.env.STOREFRONT_RESET_PASSWORD_URL_TEMPLATE;
 
-  const resolved = (process.env.RESET_PASSWORD_URL_TEMPLATE || fallback || "").trim();
+  const resolved = (
+    process.env.RESET_PASSWORD_URL_TEMPLATE ||
+    fallback ||
+    ""
+  ).trim();
   if (!resolved) {
     return "";
   }
 
-  return isAdminActor(actorType) ? resolved : normalizeStorefrontDomain(resolved);
+  return isAdminActor(actorType)
+    ? resolved
+    : normalizeStorefrontDomain(resolved);
 };
 
 const resolveBaseUrl = (actorType: string) => {
@@ -116,7 +124,7 @@ const resolveBaseUrl = (actorType: string) => {
   }
 
   return normalizeStorefrontDomain(
-    process.env.STOREFRONT_URL || DEFAULT_STOREFRONT_BASE_URL
+    process.env.STOREFRONT_URL || DEFAULT_STOREFRONT_BASE_URL,
   );
 };
 
@@ -131,7 +139,7 @@ const resolvePath = (actorType: string) => {
 const resolveResetUrl = (
   actorType: string,
   token: string,
-  entityId: string
+  entityId: string,
 ) => {
   const template = resolveTemplate(actorType);
   if (template) {
@@ -169,7 +177,7 @@ const resolveResetUrl = (
 };
 
 const resolveLanguageFromResetUrl = (
-  resetUrl: string
+  resetUrl: string,
 ): PasswordResetLanguage | null => {
   if (!resetUrl) {
     return null;
@@ -205,7 +213,7 @@ const resolveDefaultStorefrontLanguage = (): PasswordResetLanguage => {
 
 const applyLanguagePrefixToStorefrontUrl = (
   resetUrl: string,
-  language: PasswordResetLanguage
+  language: PasswordResetLanguage,
 ) => {
   if (!resetUrl) {
     return resetUrl;
@@ -220,8 +228,11 @@ const applyLanguagePrefixToStorefrontUrl = (
       return url.toString();
     }
 
-    url.pathname = `/${language}${url.pathname.startsWith("/") ? "" : "/"}${url.pathname}`
-      .replace(/\/{2,}/g, "/");
+    url.pathname =
+      `/${language}${url.pathname.startsWith("/") ? "" : "/"}${url.pathname}`.replace(
+        /\/{2,}/g,
+        "/",
+      );
     return url.toString();
   } catch {
     return resetUrl;
@@ -238,9 +249,7 @@ export default async function passwordResetHandler({
   const actorType = readString(payload.actor_type) || "customer";
 
   const recipientEmail =
-    readString(payload.email) ||
-    readString(payload.identifier) ||
-    entityId;
+    readString(payload.email) || readString(payload.identifier) || entityId;
 
   const urlEntityId = entityId || recipientEmail;
 
@@ -251,7 +260,7 @@ export default async function passwordResetHandler({
   let notificationModuleService: INotificationModuleService;
   try {
     notificationModuleService = container.resolve<INotificationModuleService>(
-      Modules.NOTIFICATION
+      Modules.NOTIFICATION,
     );
   } catch {
     return;
@@ -265,7 +274,8 @@ export default async function passwordResetHandler({
 
   const resetLanguage = isAdminActor(actorType)
     ? "hu"
-    : resolveLanguageFromResetUrl(resetUrl) ?? resolveDefaultStorefrontLanguage();
+    : (resolveLanguageFromResetUrl(resetUrl) ??
+      resolveDefaultStorefrontLanguage());
   const localizedResetUrl = isAdminActor(actorType)
     ? resetUrl
     : applyLanguagePrefixToStorefrontUrl(resetUrl, resetLanguage);
@@ -297,12 +307,12 @@ export default async function passwordResetHandler({
     {
       concurrency: 1,
       failOnError: true,
-    }
+    },
   );
 
   if (!created.length) {
     throw new Error(
-      `password-reset subscriber: notification was not created for ${recipientEmail}`
+      `password-reset subscriber: notification was not created for ${recipientEmail}`,
     );
   }
 }

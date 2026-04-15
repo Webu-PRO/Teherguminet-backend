@@ -608,7 +608,14 @@ export const resolveFeedAvailabilityDate = (input: {
     return normalizedMetadataDate;
   }
 
-  if (input.availability === "backorder") {
+  const normalizedAvailability = input.availability
+    .toLowerCase()
+    .replace(/[\s_-]+/g, "");
+
+  if (
+    normalizedAvailability === "backorder" ||
+    normalizedAvailability === "preorder"
+  ) {
     return resolveDefaultBackorderAvailabilityDate();
   }
 

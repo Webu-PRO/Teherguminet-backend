@@ -50,7 +50,7 @@ const normalizeStorefrontUrl = (raw?: string | null) => {
   if (!trimmed) {
     return "https://teherguminet.hu";
   }
-  return trimmed.replace(/therguminet\.hu/gi, "teherguminet.hu");
+  return trimmed.replace(/teherguminet\.hu/gi, "teherguminet.hu");
 };
 
 const prepareCartItems = (cart: AbandonedCart) =>
@@ -69,9 +69,7 @@ export const sendAbandonedNotificationsStep = createStep(
       return new StepResponse({ notifications: [] });
     }
 
-    const storefrontUrl = normalizeStorefrontUrl(
-      process.env.STOREFRONT_URL
-    );
+    const storefrontUrl = normalizeStorefrontUrl(process.env.STOREFRONT_URL);
 
     const notificationModuleService =
       container.resolve<INotificationModuleService>(Modules.NOTIFICATION);
@@ -82,7 +80,7 @@ export const sendAbandonedNotificationsStep = createStep(
         const metadata = (cart.metadata ?? {}) as Record<string, unknown>;
         const recoverUrl = new URL(
           `/cart/recover/${cart.id}`,
-          storefrontUrl
+          storefrontUrl,
         ).toString();
         const firstName =
           cart.customer?.first_name ??
@@ -138,11 +136,11 @@ export const sendAbandonedNotificationsStep = createStep(
     const notifications = await dispatchNotificationsIndividually(
       notificationModuleService,
       notificationsPayload,
-      logger
+      logger,
     );
 
     return new StepResponse({
       notifications,
     });
-  }
+  },
 );

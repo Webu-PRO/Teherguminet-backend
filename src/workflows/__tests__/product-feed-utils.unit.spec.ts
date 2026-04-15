@@ -524,6 +524,26 @@ describe("product feed utils", () => {
       expect(result).toBe("2026-05-01T00:00:00.000Z");
     });
 
+    it("returns default availability_date when availability is backorder and metadata is missing", () => {
+      const result = resolveFeedAvailabilityDate({
+        availability: "backorder",
+        productMetadata: {},
+        variantMetadata: {},
+      });
+
+      expect(result).toBeDefined();
+    });
+
+    it("returns default availability_date when availability is preorder", () => {
+      const result = resolveFeedAvailabilityDate({
+        availability: "pre_order",
+        productMetadata: {},
+        variantMetadata: {},
+      });
+
+      expect(result).toBeDefined();
+    });
+
     it("returns certification from metadata", () => {
       const result = resolveFeedCertification({
         productMetadata: {
