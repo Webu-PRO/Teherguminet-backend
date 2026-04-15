@@ -53,7 +53,9 @@ ENV NODE_ENV=production \
     CI=1 \
     MEDUSA_DISABLE_TELEMETRY=1 \
     RUN_MIGRATIONS=true \
-    RUN_SEED=false
+    RUN_SEED=false \
+    RUN_VARIANTS_BACKFILL_DEFAULT_DIMENSIONS=false \
+    RUN_VARIANTS_BACKFILL_FAIL_ON_ERROR=false
 
 COPY --from=builder /server/. /server
 

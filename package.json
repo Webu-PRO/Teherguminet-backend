@@ -18,6 +18,7 @@
     "seed": "medusa exec ./src/scripts/seed.ts",
     "pricing:ensure-net": "medusa exec ./src/scripts/ensure-net-price-preferences.ts",
     "localization:backfill": "medusa exec ./src/scripts/backfill-product-localizations.ts",
+    "variants:backfill-default-dimensions": "medusa exec ./src/scripts/backfill-default-variant-dimensions.ts",
     "resend:templates:sync": "ts-node --transpile-only ./src/scripts/sync-resend-templates.ts",
     "start": "medusa start",
     "turbo:start": "turbo run start --single-package",

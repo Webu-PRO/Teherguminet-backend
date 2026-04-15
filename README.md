@@ -73,6 +73,12 @@ Requirements:
 
 The endpoint returns `application/rss+xml` and includes product-variant feed items with availability and price fields.
 
+Default-variant dimension backfill on deploy:
+
+- Enable `RUN_VARIANTS_BACKFILL_DEFAULT_DIMENSIONS=true` to auto-run `variants:backfill-default-dimensions -- --apply` during backend startup.
+- Optional: set `RUN_VARIANTS_BACKFILL_FAIL_ON_ERROR=true` to fail startup if the backfill command fails.
+- Backfill is idempotent: it only fills missing (`null`/`0`) default-variant `weight`/`width`/`height` from matching inventory-item SKU dimensions.
+
 ## Email Delivery (Resend)
 
 This backend exclusively uses the custom Resend notification provider defined in `medusa-config.ts`. To avoid silent delivery failures:
