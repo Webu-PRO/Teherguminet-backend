@@ -18,7 +18,9 @@ import {
   resolvePrimaryImageLink,
   resolveFeedSize,
   resolveFeedSizeChart,
+  resolveFeedShippingCountryCodes,
   resolveStorefrontBaseUrl,
+  resolveStorefrontLinkBaseUrl,
 } from "../steps/get-product-feed-items";
 
 describe("product feed utils", () => {
@@ -147,6 +149,36 @@ describe("product feed utils", () => {
       );
 
       expect(result).toBe("https://localhost:8000");
+    });
+  });
+
+  describe("resolveStorefrontLinkBaseUrl", () => {
+    it("prefers explicit feed link URL override when provided", () => {
+      const result = resolveStorefrontLinkBaseUrl(
+        "https://www.teherguminet.hu/",
+        "https://teherguminet.hu"
+      );
+
+      expect(result).toBe("https://www.teherguminet.hu");
+    });
+
+    it("falls back to storefront base URL when link override is missing", () => {
+      const result = resolveStorefrontLinkBaseUrl(
+        "",
+        "https://teherguminet.hu"
+      );
+
+      expect(result).toBe("https://teherguminet.hu");
+    });
+  });
+
+  describe("resolveFeedShippingCountryCodes", () => {
+    it("parses unique uppercase country codes from env-style string", () => {
+      const result = resolveFeedShippingCountryCodes(
+        "hu, sk;cz|HU invalid"
+      );
+
+      expect(result).toEqual(["HU", "SK", "CZ"]);
     });
   });
 
@@ -468,6 +500,18 @@ describe("product feed utils", () => {
       expect(result).toBe("12.5 kg");
     });
 
+    it("resolves shipping weight from gls metadata keys", () => {
+      const result = resolveFeedShippingWeight({
+        variantWeight: undefined,
+        productMetadata: {
+          gls_weight_kg: "18.4",
+        },
+        variantMetadata: {},
+      });
+
+      expect(result).toBe("18.4 kg");
+    });
+
     it("returns metadata availability_date when present", () => {
       const result = resolveFeedAvailabilityDate({
         availability: "backorder",
@@ -502,6 +546,34 @@ describe("product feed utils", () => {
       expect(result).toEqual([
         {
           country: "HU",
+          price: "0.00 HUF",
+          service: "Standard",
+        },
+      ]);
+    });
+
+    it("builds shipping entries for additional configured countries", () => {
+      const result = resolveFeedShippingEntries({
+        countryCode: "hu",
+        currencyCode: "huf",
+        shippingCountryCodes: ["sk", "HU", "cz"],
+        productMetadata: {},
+        variantMetadata: {},
+      });
+
+      expect(result).toEqual([
+        {
+          country: "HU",
+          price: "0.00 HUF",
+          service: "Standard",
+        },
+        {
+          country: "SK",
+          price: "0.00 HUF",
+          service: "Standard",
+        },
+        {
+          country: "CZ",
           price: "0.00 HUF",
           service: "Standard",
         },

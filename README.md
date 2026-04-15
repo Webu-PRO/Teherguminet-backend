@@ -65,6 +65,8 @@ Requirements:
 - If none of the above is set, the feed falls back to the first non-localhost origin in `STORE_CORS`.
 - The storefront URL must be absolute (for example `https://teherguminet.hu`).
 - Optional feed tuning:
+  - `PRODUCT_FEED_LINK_BASE_URL` (override product-page domain in `<link>` when Merchant requires exact canonical domain, for example `https://www.teherguminet.hu`)
+  - `PRODUCT_FEED_SHIPPING_COUNTRIES` (comma-separated ISO country codes, for example `HU,SK`, to emit shipping blocks for multiple countries from one feed)
   - `PRODUCT_FEED_DEFAULT_SHIPPING_PRICE` (defaults to `0`)
   - `PRODUCT_FEED_SHIPPING_SERVICE` (defaults to `Standard`)
   - `PRODUCT_FEED_BACKORDER_DAYS` (defaults to `14`)

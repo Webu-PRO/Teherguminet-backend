@@ -153,12 +153,16 @@ const SHIPPING_WEIGHT_KG_METADATA_KEYS = [
   "shippingWeightKg",
   "weight_kg",
   "weightKg",
+  "gls_weight_kg",
+  "glsWeightKg",
 ] as const;
 const SHIPPING_WEIGHT_G_METADATA_KEYS = [
   "shipping_weight_g",
   "shippingWeightG",
   "weight_g",
   "weightG",
+  "gls_weight_g",
+  "glsWeightG",
 ] as const;
 const SHIPPING_WEIGHT_RAW_METADATA_KEYS = [
   "shipping_weight",
@@ -666,14 +670,61 @@ const resolveFeedShippingService = (input: {
   );
 };
 
+const COUNTRY_CODE_PATTERN = /^[A-Z]{2}$/;
+
+const normalizeCountryCode = (value: unknown) => {
+  const normalized = normalizeText(value)?.toUpperCase();
+  if (!normalized || !COUNTRY_CODE_PATTERN.test(normalized)) {
+    return undefined;
+  }
+
+  return normalized;
+};
+
+export const resolveFeedShippingCountryCodes = (
+  rawValue: string | null | undefined
+) => {
+  const value = normalizeText(rawValue);
+  if (!value) {
+    return [] as string[];
+  }
+
+  const uniqueCountryCodes = new Set<string>();
+  for (const token of value.split(/[,\s;|]+/)) {
+    const countryCode = normalizeCountryCode(token);
+    if (!countryCode) {
+      continue;
+    }
+    uniqueCountryCodes.add(countryCode);
+  }
+
+  return [...uniqueCountryCodes];
+};
+
 export const resolveFeedShippingEntries = (input: {
   countryCode: string;
   currencyCode: string;
+  shippingCountryCodes?: string[];
   productMetadata?: Record<string, unknown> | null;
   variantMetadata?: Record<string, unknown> | null;
 }) => {
-  const country = normalizeText(input.countryCode)?.toUpperCase();
-  if (!country) {
+  const countries = new Set<string>();
+  const primaryCountry = normalizeCountryCode(input.countryCode);
+  if (primaryCountry) {
+    countries.add(primaryCountry);
+  }
+
+  if (Array.isArray(input.shippingCountryCodes)) {
+    for (const country of input.shippingCountryCodes) {
+      const countryCode = normalizeCountryCode(country);
+      if (!countryCode) {
+        continue;
+      }
+      countries.add(countryCode);
+    }
+  }
+
+  if (!countries.size) {
     return undefined;
   }
 
@@ -687,13 +738,23 @@ export const resolveFeedShippingEntries = (input: {
     variantMetadata: input.variantMetadata,
   });
 
-  return [
-    {
-      country,
-      price,
-      ...(service ? { service } : {}),
-    },
-  ] satisfies FeedShipping[];
+  return [...countries].map((country) => ({
+    country,
+    price,
+    ...(service ? { service } : {}),
+  })) satisfies FeedShipping[];
+};
+
+export const resolveStorefrontLinkBaseUrl = (
+  feedLinkUrl: string | null | undefined,
+  storefrontBaseUrl: string
+) => {
+  const explicitLinkUrl = normalizeStorefrontUrl(feedLinkUrl);
+  if (explicitLinkUrl) {
+    return explicitLinkUrl;
+  }
+
+  return storefrontBaseUrl;
 };
 
 const resolveDescriptionFromSource = (
@@ -1143,6 +1204,13 @@ export const getProductFeedItemsStep = createStep(
         "Product feed requires an absolute storefront URL. Set PRODUCT_FEED_STOREFRONT_URL, admin.storefrontUrl, STOREFRONT_URL, or STORE_CORS."
       );
     }
+    const storefrontLinkBaseUrl = resolveStorefrontLinkBaseUrl(
+      process.env.PRODUCT_FEED_LINK_BASE_URL,
+      storefrontBaseUrl
+    );
+    const shippingCountryCodes = resolveFeedShippingCountryCodes(
+      process.env.PRODUCT_FEED_SHIPPING_COUNTRIES
+    );
 
     const limit = 100;
     let offset = 0;
@@ -1242,7 +1310,7 @@ export const getProductFeedItemsStep = createStep(
             ? product.handle.trim()
             : product.id;
 
-        const productLink = `${storefrontBaseUrl}/${encodeURIComponent(countryCode)}/${encodeURIComponent(productHandle)}`;
+        const productLink = `${storefrontLinkBaseUrl}/${encodeURIComponent(countryCode)}/${encodeURIComponent(productHandle)}`;
 
         const primaryImageLink = resolvePrimaryImageLink({
           thumbnail: product.thumbnail,
@@ -1339,6 +1407,7 @@ export const getProductFeedItemsStep = createStep(
           const shipping = resolveFeedShippingEntries({
             countryCode,
             currencyCode,
+            shippingCountryCodes,
             productMetadata: product.metadata,
             variantMetadata: variant.metadata,
           });
