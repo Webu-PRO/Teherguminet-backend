@@ -30,6 +30,11 @@ export default defineMiddlewares({
       methods: ["GET"],
       middlewares: [validateAndTransformQuery(productFeedQuerySchema, {})],
     },
+    {
+      matcher: "/local-inventory-feed",
+      methods: ["GET"],
+      middlewares: [validateAndTransformQuery(productFeedQuerySchema, {})],
+    },
     ...adminDiscountCodeMiddlewares,
     ...adminFeedStatusMiddlewares,
     ...adminSeoSettingsMiddlewares,

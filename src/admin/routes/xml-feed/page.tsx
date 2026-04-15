@@ -149,6 +149,25 @@ const XmlFeedPage = () => {
     return `${window.location.origin}${relativePath}`
   }, [selectedMarket])
 
+  const localInventoryFeedUrl = useMemo(() => {
+    if (!selectedMarket) {
+      return ""
+    }
+
+    const params = new URLSearchParams({
+      country_code: selectedMarket.country_code,
+      currency_code: selectedMarket.currency_code,
+    })
+
+    const relativePath = `/local-inventory-feed?${params.toString()}`
+
+    if (typeof window === "undefined") {
+      return relativePath
+    }
+
+    return `${window.location.origin}${relativePath}`
+  }, [selectedMarket])
+
   const applyPayload = useCallback((payload: FeedStatusResponse) => {
     const normalized = normalizeFeedStatusPayload(payload)
 
@@ -214,6 +233,31 @@ const XmlFeedPage = () => {
 
     window.open(feedUrl, "_blank", "noopener,noreferrer")
   }, [feedUrl])
+
+  const handleLocalInventoryCopy = useCallback(async () => {
+    if (!localInventoryFeedUrl) {
+      return
+    }
+
+    try {
+      await copyToClipboard(localInventoryFeedUrl)
+      toast.success("Local inventory feed", {
+        description: "Local inventory feed link kimásolva a vágólapra.",
+      })
+    } catch {
+      toast.error("Local inventory feed", {
+        description: "Nem sikerült a local inventory feed link másolása.",
+      })
+    }
+  }, [localInventoryFeedUrl])
+
+  const handleLocalInventoryOpen = useCallback(() => {
+    if (typeof window === "undefined" || !localInventoryFeedUrl) {
+      return
+    }
+
+    window.open(localInventoryFeedUrl, "_blank", "noopener,noreferrer")
+  }, [localInventoryFeedUrl])
 
   const handleMarketChange = useCallback((value: string) => {
     if (markets.some((market) => market.id === value)) {
@@ -332,6 +376,30 @@ const XmlFeedPage = () => {
                 disabled={!selectedMarket}
               >
                 Link másolása
+              </Button>
+            </div>
+          </div>
+
+          <div className="mt-4">
+            <Text size="xsmall" weight="plus" className="mb-1">
+              Local inventory feed URL
+            </Text>
+            <Input value={localInventoryFeedUrl} readOnly />
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={handleLocalInventoryOpen}
+                disabled={!selectedMarket}
+              >
+                Local XML megnyitása
+              </Button>
+              <Button
+                type="button"
+                onClick={() => void handleLocalInventoryCopy()}
+                disabled={!selectedMarket}
+              >
+                Local link másolása
               </Button>
             </div>
           </div>
