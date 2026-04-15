@@ -27,9 +27,19 @@ export type FeedItem = {
   google_product_category?: string;
   size?: string;
   size_chart?: string;
+  shipping_weight?: string;
+  availability_date?: string;
+  certification?: string;
+  shipping?: FeedShipping[];
   item_group_id: string;
   condition?: string;
   brand?: string;
+};
+
+type FeedShipping = {
+  country: string;
+  price: string;
+  service?: string;
 };
 
 type StepInput = {
@@ -56,6 +66,7 @@ type QueryVariant = {
   id: string;
   manage_inventory?: boolean | null;
   allow_backorder?: boolean | null;
+  weight?: unknown;
   metadata?: Record<string, unknown> | null;
   calculated_price?: CalculatedPriceSet | null;
 } | null;
@@ -117,6 +128,66 @@ const SIZE_CHART_METADATA_KEYS = [
   "sizechart",
   "mérettáblázat",
   "merettablazat",
+] as const;
+const AVAILABILITY_DATE_METADATA_KEYS = [
+  "availability_date",
+  "availability date",
+  "availabilityDate",
+  "backorder_date",
+  "backorder date",
+  "backorderDate",
+  "expected_availability_date",
+  "expected availability date",
+  "expectedAvailabilityDate",
+] as const;
+const CERTIFICATION_METADATA_KEYS = [
+  "certification",
+  "certification_code",
+  "certification code",
+  "eprel",
+  "eprel_code",
+  "eprel code",
+] as const;
+const SHIPPING_WEIGHT_KG_METADATA_KEYS = [
+  "shipping_weight_kg",
+  "shippingWeightKg",
+  "weight_kg",
+  "weightKg",
+] as const;
+const SHIPPING_WEIGHT_G_METADATA_KEYS = [
+  "shipping_weight_g",
+  "shippingWeightG",
+  "weight_g",
+  "weightG",
+] as const;
+const SHIPPING_WEIGHT_RAW_METADATA_KEYS = [
+  "shipping_weight",
+  "shippingWeight",
+  "weight",
+] as const;
+const SHIPPING_PRICE_METADATA_KEYS = [
+  "shipping_price",
+  "shippingPrice",
+  "shipping_cost",
+  "shippingCost",
+] as const;
+const SHIPPING_SERVICE_METADATA_KEYS = [
+  "shipping_service",
+  "shippingService",
+  "shipping_method",
+  "shippingMethod",
+] as const;
+const LABEL_IMAGE_HINTS = [
+  "label",
+  "eprel",
+  "energylabel",
+  "energy-label",
+  "tirelabel",
+  "tyrelabel",
+  "tire-label",
+  "tyre-label",
+  "eu-label",
+  "eulabel",
 ] as const;
 
 export const formatPrice = (price: number, currencyCode: string) => {
@@ -200,6 +271,58 @@ const getMetadataValue = (
   return undefined;
 };
 
+const getMetadataRawValue = (
+  metadata: Record<string, unknown> | null | undefined,
+  keys: readonly string[]
+) => {
+  if (!metadata) {
+    return undefined;
+  }
+
+  const normalizedKeys = keys.map((key) => key.toLowerCase());
+  for (const [metadataKey, metadataValue] of Object.entries(metadata)) {
+    if (!normalizedKeys.includes(metadataKey.toLowerCase())) {
+      continue;
+    }
+
+    if (metadataValue === null || metadataValue === undefined) {
+      continue;
+    }
+
+    return metadataValue;
+  }
+
+  return undefined;
+};
+
+const resolveNumber = (value: unknown): number | null => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string" && value.trim().length) {
+    const normalized = Number(value.replace(",", "."));
+    return Number.isFinite(normalized) ? normalized : null;
+  }
+
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+
+    if (typeof record.numeric === "number" && Number.isFinite(record.numeric)) {
+      return record.numeric;
+    }
+
+    if (record.value !== undefined) {
+      const nested = resolveNumber(record.value);
+      if (nested !== null) {
+        return nested;
+      }
+    }
+  }
+
+  return null;
+};
+
 const inferKnownBrandFromText = (value: string | undefined) => {
   if (!value) {
     return undefined;
@@ -256,6 +379,17 @@ const resolveMetadataFieldFromProductVariant = (input: {
   return (
     getMetadataValue(toRecord(input.variantMetadata), input.keys) ??
     getMetadataValue(toRecord(input.productMetadata), input.keys)
+  );
+};
+
+const resolveRawMetadataFieldFromProductVariant = (input: {
+  productMetadata?: Record<string, unknown> | null;
+  variantMetadata?: Record<string, unknown> | null;
+  keys: readonly string[];
+}) => {
+  return (
+    getMetadataRawValue(toRecord(input.variantMetadata), input.keys) ??
+    getMetadataRawValue(toRecord(input.productMetadata), input.keys)
   );
 };
 
@@ -321,6 +455,245 @@ export const resolveFeedSizeChart = (input: {
   });
 
   return maybeResolveAbsoluteUrl(rawValue, input.storefrontBaseUrl);
+};
+
+const transformUpperTokenToTitleCase = (token: string) => {
+  if (!token || !/[A-Za-z]/.test(token)) {
+    return token;
+  }
+
+  if (/[a-z]/.test(token)) {
+    return token;
+  }
+
+  if (/\d/.test(token) || token.length <= 2) {
+    return token;
+  }
+
+  const first = token.charAt(0);
+  const rest = token.slice(1).toLowerCase();
+  return `${first}${rest}`;
+};
+
+const normalizeUppercaseToken = (token: string) => {
+  return token
+    .split("-")
+    .map((part) => transformUpperTokenToTitleCase(part))
+    .join("-");
+};
+
+export const normalizeGoogleFeedTitle = (title: string) => {
+  const normalized = normalizeText(title);
+  if (!normalized) {
+    return "";
+  }
+
+  if (!/[A-Z]/.test(normalized) || /[a-z]/.test(normalized)) {
+    return normalized;
+  }
+
+  return normalized
+    .split(/(\s+)/)
+    .map((token) => (/\s+/.test(token) ? token : normalizeUppercaseToken(token)))
+    .join("")
+    .trim();
+};
+
+const formatWeight = (value: number) => {
+  return Number(value.toFixed(3)).toString();
+};
+
+export const resolveFeedShippingWeight = (input: {
+  variantWeight?: unknown;
+  productMetadata?: Record<string, unknown> | null;
+  variantMetadata?: Record<string, unknown> | null;
+}) => {
+  const variantWeight = resolveNumber(input.variantWeight);
+  if (variantWeight && variantWeight > 0) {
+    return `${formatWeight(variantWeight)} kg`;
+  }
+
+  const kgFromMetadata = resolveNumber(
+    resolveRawMetadataFieldFromProductVariant({
+      productMetadata: input.productMetadata,
+      variantMetadata: input.variantMetadata,
+      keys: SHIPPING_WEIGHT_KG_METADATA_KEYS,
+    })
+  );
+  if (kgFromMetadata && kgFromMetadata > 0) {
+    return `${formatWeight(kgFromMetadata)} kg`;
+  }
+
+  const gramsFromMetadata = resolveNumber(
+    resolveRawMetadataFieldFromProductVariant({
+      productMetadata: input.productMetadata,
+      variantMetadata: input.variantMetadata,
+      keys: SHIPPING_WEIGHT_G_METADATA_KEYS,
+    })
+  );
+  if (gramsFromMetadata && gramsFromMetadata > 0) {
+    return `${formatWeight(gramsFromMetadata / 1000)} kg`;
+  }
+
+  const rawWeightFromMetadata = resolveNumber(
+    resolveRawMetadataFieldFromProductVariant({
+      productMetadata: input.productMetadata,
+      variantMetadata: input.variantMetadata,
+      keys: SHIPPING_WEIGHT_RAW_METADATA_KEYS,
+    })
+  );
+  if (rawWeightFromMetadata && rawWeightFromMetadata > 0) {
+    return `${formatWeight(rawWeightFromMetadata)} kg`;
+  }
+
+  return undefined;
+};
+
+const normalizeFeedDate = (value: unknown) => {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString();
+  }
+
+  const text = normalizeText(value);
+  if (!text) {
+    return undefined;
+  }
+
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.getTime())) {
+    return undefined;
+  }
+
+  return parsed.toISOString();
+};
+
+const resolveBackorderDays = () => {
+  const parsed = Number.parseInt(process.env.PRODUCT_FEED_BACKORDER_DAYS ?? "", 10);
+  if (Number.isFinite(parsed) && parsed > 0 && parsed <= 365) {
+    return parsed;
+  }
+
+  return 14;
+};
+
+const resolveDefaultBackorderAvailabilityDate = () => {
+  const days = resolveBackorderDays();
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() + days);
+  date.setUTCHours(0, 0, 0, 0);
+  return date.toISOString();
+};
+
+export const resolveFeedAvailabilityDate = (input: {
+  availability: string;
+  productMetadata?: Record<string, unknown> | null;
+  variantMetadata?: Record<string, unknown> | null;
+}) => {
+  const metadataDate = resolveMetadataFieldFromProductVariant({
+    productMetadata: input.productMetadata,
+    variantMetadata: input.variantMetadata,
+    keys: AVAILABILITY_DATE_METADATA_KEYS,
+  });
+
+  const normalizedMetadataDate = normalizeFeedDate(metadataDate);
+  if (normalizedMetadataDate) {
+    return normalizedMetadataDate;
+  }
+
+  if (input.availability === "backorder") {
+    return resolveDefaultBackorderAvailabilityDate();
+  }
+
+  return undefined;
+};
+
+export const resolveFeedCertification = (input: {
+  productMetadata?: Record<string, unknown> | null;
+  variantMetadata?: Record<string, unknown> | null;
+}) => {
+  return resolveMetadataFieldFromProductVariant({
+    productMetadata: input.productMetadata,
+    variantMetadata: input.variantMetadata,
+    keys: CERTIFICATION_METADATA_KEYS,
+  });
+};
+
+const resolveFeedShippingPrice = (input: {
+  currencyCode: string;
+  productMetadata?: Record<string, unknown> | null;
+  variantMetadata?: Record<string, unknown> | null;
+}) => {
+  const metadataPrice = resolveRawMetadataFieldFromProductVariant({
+    productMetadata: input.productMetadata,
+    variantMetadata: input.variantMetadata,
+    keys: SHIPPING_PRICE_METADATA_KEYS,
+  });
+
+  const numericPrice = resolveNumber(metadataPrice);
+  if (numericPrice !== null && numericPrice >= 0) {
+    return formatPrice(numericPrice, input.currencyCode);
+  }
+
+  const textPrice = normalizeText(metadataPrice);
+  if (textPrice) {
+    return textPrice;
+  }
+
+  const defaultShippingPrice = resolveNumber(process.env.PRODUCT_FEED_DEFAULT_SHIPPING_PRICE);
+  if (defaultShippingPrice !== null && defaultShippingPrice >= 0) {
+    return formatPrice(defaultShippingPrice, input.currencyCode);
+  }
+
+  return formatPrice(0, input.currencyCode);
+};
+
+const resolveFeedShippingService = (input: {
+  productMetadata?: Record<string, unknown> | null;
+  variantMetadata?: Record<string, unknown> | null;
+}) => {
+  return (
+    resolveMetadataFieldFromProductVariant({
+      productMetadata: input.productMetadata,
+      variantMetadata: input.variantMetadata,
+      keys: SHIPPING_SERVICE_METADATA_KEYS,
+    }) ??
+    normalizeText(process.env.PRODUCT_FEED_SHIPPING_SERVICE) ??
+    "Standard"
+  );
+};
+
+export const resolveFeedShippingEntries = (input: {
+  countryCode: string;
+  currencyCode: string;
+  productMetadata?: Record<string, unknown> | null;
+  variantMetadata?: Record<string, unknown> | null;
+}) => {
+  const country = normalizeText(input.countryCode)?.toUpperCase();
+  if (!country) {
+    return undefined;
+  }
+
+  const price = resolveFeedShippingPrice({
+    currencyCode: input.currencyCode,
+    productMetadata: input.productMetadata,
+    variantMetadata: input.variantMetadata,
+  });
+  const service = resolveFeedShippingService({
+    productMetadata: input.productMetadata,
+    variantMetadata: input.variantMetadata,
+  });
+
+  return [
+    {
+      country,
+      price,
+      ...(service ? { service } : {}),
+    },
+  ] satisfies FeedShipping[];
 };
 
 const resolveDescriptionFromSource = (
@@ -538,13 +911,62 @@ const normalizeStorefrontUrl = (rawValue: string | null | undefined) => {
   return absoluteUrl.replace(/\/+$/, "");
 };
 
+const isLikelyLocalOrigin = (value: string) => {
+  try {
+    const parsed = new URL(value);
+    const host = parsed.hostname.toLowerCase();
+    return (
+      host === "localhost" ||
+      host === "127.0.0.1" ||
+      host.endsWith(".local")
+    );
+  } catch {
+    return true;
+  }
+};
+
+const resolveStorefrontUrlFromCors = (storeCors: string | null | undefined) => {
+  if (!storeCors) {
+    return undefined;
+  }
+
+  const candidates = storeCors
+    .split(",")
+    .map((entry) => normalizeStorefrontUrl(entry))
+    .filter((entry): entry is string => Boolean(entry));
+
+  if (!candidates.length) {
+    return undefined;
+  }
+
+  for (const candidate of candidates) {
+    if (!isLikelyLocalOrigin(candidate)) {
+      return candidate;
+    }
+  }
+
+  return candidates[0];
+};
+
 export const resolveStorefrontBaseUrl = (
+  feedStorefrontUrl: string | null | undefined,
   configStorefrontUrl: string | null | undefined,
-  envStorefrontUrl: string | null | undefined
+  envStorefrontUrl: string | null | undefined,
+  storeCors: string | null | undefined
 ) => {
+  const fromFeedEnv = normalizeStorefrontUrl(feedStorefrontUrl);
+  if (fromFeedEnv) {
+    return fromFeedEnv;
+  }
+
   const fromConfig = normalizeStorefrontUrl(configStorefrontUrl);
   if (fromConfig) {
     return fromConfig;
+  }
+
+  const fromStoreCors = resolveStorefrontUrlFromCors(storeCors);
+  if (fromStoreCors) {
+    return fromStoreCors;
   }
 
   const fromEnv = normalizeStorefrontUrl(envStorefrontUrl);
@@ -562,6 +984,56 @@ export const resolveFeedImageUrl = (
   return toAbsoluteUrl(rawImageUrl, storefrontBaseUrl);
 };
 
+const isLikelyLabelImageUrl = (url: string | undefined) => {
+  if (!url) {
+    return false;
+  }
+
+  const normalized = url.toLowerCase();
+  return LABEL_IMAGE_HINTS.some((hint) => normalized.includes(hint));
+};
+
+export const resolvePrimaryImageLink = (input: {
+  thumbnail?: string | null;
+  images?: ProductImage[] | null;
+  storefrontBaseUrl: string;
+}) => {
+  const thumbnailUrl = resolveFeedImageUrl(
+    input.thumbnail,
+    input.storefrontBaseUrl
+  );
+
+  if (thumbnailUrl && !isLikelyLabelImageUrl(thumbnailUrl)) {
+    return thumbnailUrl;
+  }
+
+  if (Array.isArray(input.images)) {
+    for (const image of input.images) {
+      const imageUrl = resolveFeedImageUrl(image?.url, input.storefrontBaseUrl);
+      if (!imageUrl || isLikelyLabelImageUrl(imageUrl)) {
+        continue;
+      }
+
+      return imageUrl;
+    }
+  }
+
+  if (thumbnailUrl) {
+    return thumbnailUrl;
+  }
+
+  if (Array.isArray(input.images)) {
+    for (const image of input.images) {
+      const imageUrl = resolveFeedImageUrl(image?.url, input.storefrontBaseUrl);
+      if (imageUrl) {
+        return imageUrl;
+      }
+    }
+  }
+
+  return undefined;
+};
+
 export const resolveAdditionalImageLink = (
   images: ProductImage[] | null | undefined,
   primaryImageUrl: string | undefined,
@@ -574,7 +1046,7 @@ export const resolveAdditionalImageLink = (
   for (const image of images) {
     const normalized = resolveFeedImageUrl(image?.url, storefrontBaseUrl);
 
-    if (!normalized) {
+    if (!normalized || isLikelyLabelImageUrl(normalized)) {
       continue;
     }
 
@@ -660,13 +1132,15 @@ export const getProductFeedItemsStep = createStep(
     };
 
     const storefrontBaseUrl = resolveStorefrontBaseUrl(
+      process.env.PRODUCT_FEED_STOREFRONT_URL,
       configModule.admin?.storefrontUrl,
-      process.env.STOREFRONT_URL
+      process.env.STOREFRONT_URL,
+      process.env.STORE_CORS
     );
 
     if (!storefrontBaseUrl) {
       throw new Error(
-        "Product feed requires an absolute storefront URL. Set admin.storefrontUrl or STOREFRONT_URL."
+        "Product feed requires an absolute storefront URL. Set PRODUCT_FEED_STOREFRONT_URL, admin.storefrontUrl, STOREFRONT_URL, or STORE_CORS."
       );
     }
 
@@ -770,10 +1244,11 @@ export const getProductFeedItemsStep = createStep(
 
         const productLink = `${storefrontBaseUrl}/${encodeURIComponent(countryCode)}/${encodeURIComponent(productHandle)}`;
 
-        const primaryImageLink = resolveFeedImageUrl(
-          product.thumbnail ?? product.images?.[0]?.url,
-          storefrontBaseUrl
-        );
+        const primaryImageLink = resolvePrimaryImageLink({
+          thumbnail: product.thumbnail,
+          images: product.images,
+          storefrontBaseUrl,
+        });
 
         const additionalImageLink = resolveAdditionalImageLink(
           product.images,
@@ -786,6 +1261,7 @@ export const getProductFeedItemsStep = createStep(
           countryCode,
           localization
         );
+        const normalizedTitle = normalizeGoogleFeedTitle(localizedTitle);
         const localizedDescription = resolveLocalizedFeedDescription(
           product,
           countryCode,
@@ -846,15 +1322,36 @@ export const getProductFeedItemsStep = createStep(
             productMetadata: product.metadata,
             variantMetadata: variant.metadata,
           });
+          const shippingWeight = resolveFeedShippingWeight({
+            variantWeight: variant.weight,
+            productMetadata: product.metadata,
+            variantMetadata: variant.metadata,
+          });
+          const availabilityDate = resolveFeedAvailabilityDate({
+            availability: stock.status,
+            productMetadata: product.metadata,
+            variantMetadata: variant.metadata,
+          });
+          const certification = resolveFeedCertification({
+            productMetadata: product.metadata,
+            variantMetadata: variant.metadata,
+          });
+          const shipping = resolveFeedShippingEntries({
+            countryCode,
+            currencyCode,
+            productMetadata: product.metadata,
+            variantMetadata: variant.metadata,
+          });
 
           feedItems.push({
             id: variant.id,
-            title: localizedTitle,
+            title: normalizedTitle,
             description: localizedDescription,
             link: productLink,
             image_link: primaryImageLink,
             additional_image_link: additionalImageLink,
             availability: stock.status,
+            availability_date: availabilityDate,
             quantity: stock.quantity,
             price: formatPrice(originalPrice, currencyCode),
             sale_price:
@@ -864,6 +1361,9 @@ export const getProductFeedItemsStep = createStep(
             google_product_category: googleProductCategory,
             size,
             size_chart: sizeChart,
+            shipping_weight: shippingWeight,
+            certification,
+            shipping,
             item_group_id: product.id,
             condition: "new",
             brand,

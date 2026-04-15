@@ -2,7 +2,12 @@ import { describe, expect, it } from "@jest/globals";
 
 import {
   formatPrice,
+  normalizeGoogleFeedTitle,
   normalizeAvailabilityQuantity,
+  resolveFeedAvailabilityDate,
+  resolveFeedCertification,
+  resolveFeedShippingEntries,
+  resolveFeedShippingWeight,
   resolveFeedStock,
   resolveLocalizedFeedDescription,
   resolveLocalizedFeedTitle,
@@ -10,6 +15,7 @@ import {
   resolveFeedBrand,
   resolveFeedGoogleProductCategory,
   resolveFeedImageUrl,
+  resolvePrimaryImageLink,
   resolveFeedSize,
   resolveFeedSizeChart,
   resolveStorefrontBaseUrl,
@@ -99,28 +105,48 @@ describe("product feed utils", () => {
   });
 
   describe("resolveStorefrontBaseUrl", () => {
-    it("prefers config storefront URL", () => {
+    it("prefers feed-specific storefront URL env", () => {
       const result = resolveStorefrontBaseUrl(
+        "https://feed.example.com",
         "https://teherguminet.hu/",
-        "https://fallback.example.com"
+        "https://fallback.example.com",
+        "https://store.example.com"
       );
 
-      expect(result).toBe("https://teherguminet.hu");
+      expect(result).toBe("https://feed.example.com");
     });
 
     it("falls back to env storefront URL", () => {
       const result = resolveStorefrontBaseUrl(
         "",
-        "teherguminet.hu"
+        "",
+        "teherguminet.hu",
+        ""
       );
 
       expect(result).toBe("https://teherguminet.hu");
     });
 
-    it("returns undefined when neither value is a valid absolute URL", () => {
-      const result = resolveStorefrontBaseUrl("", "not a valid url");
+    it("falls back to first non-local STORE_CORS origin", () => {
+      const result = resolveStorefrontBaseUrl(
+        "",
+        "",
+        "",
+        "http://localhost:8000,https://teherguminet.hu,https://www.teherguminet.hu"
+      );
 
-      expect(result).toBeUndefined();
+      expect(result).toBe("https://teherguminet.hu");
+    });
+
+    it("falls back to localhost STORE_CORS origin when no other value is valid", () => {
+      const result = resolveStorefrontBaseUrl(
+        "",
+        "not a valid url",
+        "also invalid",
+        "localhost:8000"
+      );
+
+      expect(result).toBe("https://localhost:8000");
     });
   });
 
@@ -145,6 +171,19 @@ describe("product feed utils", () => {
       );
 
       expect(result).toBe("https://teherguminet.hu/uploads/additional.jpg");
+    });
+
+    it("skips known label images when picking primary image", () => {
+      const result = resolvePrimaryImageLink({
+        thumbnail: "https://cdn.example.com/energy-label.jpg",
+        images: [
+          { url: "https://cdn.example.com/eprel-sheet.png" },
+          { url: "/uploads/product-main.jpg" },
+        ],
+        storefrontBaseUrl,
+      });
+
+      expect(result).toBe("https://teherguminet.hu/uploads/product-main.jpg");
     });
   });
 
@@ -405,6 +444,68 @@ describe("product feed utils", () => {
       });
 
       expect(result).toBe("https://teherguminet.hu/uploads/size-chart-s11.png");
+    });
+  });
+
+  describe("google feed compliance helpers", () => {
+    it("normalizes all-uppercase titles while preserving size codes", () => {
+      const result = normalizeGoogleFeedTitle(
+        "315/70R22.5-18 156/150L HIGHWAY D11 HUBTRAC"
+      );
+
+      expect(result).toBe("315/70R22.5-18 156/150L Highway D11 Hubtrac");
+    });
+
+    it("resolves shipping weight in kg from variant metadata grams", () => {
+      const result = resolveFeedShippingWeight({
+        variantWeight: undefined,
+        productMetadata: {},
+        variantMetadata: {
+          shipping_weight_g: 12500,
+        },
+      });
+
+      expect(result).toBe("12.5 kg");
+    });
+
+    it("returns metadata availability_date when present", () => {
+      const result = resolveFeedAvailabilityDate({
+        availability: "backorder",
+        productMetadata: {
+          availability_date: "2026-05-01",
+        },
+        variantMetadata: {},
+      });
+
+      expect(result).toBe("2026-05-01T00:00:00.000Z");
+    });
+
+    it("returns certification from metadata", () => {
+      const result = resolveFeedCertification({
+        productMetadata: {
+          certification: "EC|EPREL|12345",
+        },
+        variantMetadata: {},
+      });
+
+      expect(result).toBe("EC|EPREL|12345");
+    });
+
+    it("builds shipping entries with default service and zero fallback price", () => {
+      const result = resolveFeedShippingEntries({
+        countryCode: "hu",
+        currencyCode: "huf",
+        productMetadata: {},
+        variantMetadata: {},
+      });
+
+      expect(result).toEqual([
+        {
+          country: "HU",
+          price: "0.00 HUF",
+          service: "Standard",
+        },
+      ]);
     });
   });
 });

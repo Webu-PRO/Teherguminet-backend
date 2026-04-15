@@ -61,8 +61,13 @@ The backend exposes a product feed endpoint that is compatible with Meta and Goo
 
 Requirements:
 
-- Set `admin.storefrontUrl` in `medusa-config.ts` **or** define `STOREFRONT_URL` in the backend environment.
+- Set `PRODUCT_FEED_STOREFRONT_URL` (recommended), `admin.storefrontUrl`, or `STOREFRONT_URL`.
+- If none of the above is set, the feed falls back to the first non-localhost origin in `STORE_CORS`.
 - The storefront URL must be absolute (for example `https://teherguminet.hu`).
+- Optional feed tuning:
+  - `PRODUCT_FEED_DEFAULT_SHIPPING_PRICE` (defaults to `0`)
+  - `PRODUCT_FEED_SHIPPING_SERVICE` (defaults to `Standard`)
+  - `PRODUCT_FEED_BACKORDER_DAYS` (defaults to `14`)
 
 The endpoint returns `application/rss+xml` and includes product-variant feed items with availability and price fields.
 

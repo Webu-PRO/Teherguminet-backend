@@ -14,6 +14,26 @@ const escapeXml = (str: string) =>
     .replace(/\"/g, "&quot;")
     .replace(/'/g, "&apos;");
 
+const buildShippingXml = (item: FeedItem) => {
+  if (!Array.isArray(item.shipping) || !item.shipping.length) {
+    return "";
+  }
+
+  return item.shipping
+    .map((shipping) => {
+      return (
+        "<g:shipping>" +
+        `<g:country>${escapeXml(shipping.country)}</g:country>` +
+        (shipping.service
+          ? `<g:service>${escapeXml(shipping.service)}</g:service>`
+          : "") +
+        `<g:price>${escapeXml(shipping.price)}</g:price>` +
+        "</g:shipping>"
+      );
+    })
+    .join("");
+};
+
 export const buildProductFeedXmlStep = createStep(
   "build-product-feed-xml",
   async (input: StepInput) => {
@@ -32,6 +52,9 @@ export const buildProductFeedXmlStep = createStep(
             ? `<g:additional_image_link>${escapeXml(item.additional_image_link)}</g:additional_image_link>`
             : "") +
           `<g:availability>${escapeXml(item.availability)}</g:availability>` +
+          (item.availability_date
+            ? `<g:availability_date>${escapeXml(item.availability_date)}</g:availability_date>`
+            : "") +
           (typeof item.quantity === "number"
             ? `<g:quantity>${escapeXml(String(item.quantity))}</g:quantity>`
             : "") +
@@ -44,8 +67,15 @@ export const buildProductFeedXmlStep = createStep(
             : "") +
           (item.size ? `<g:size>${escapeXml(item.size)}</g:size>` : "") +
           (item.size_chart
-            ? `<size_chart>${escapeXml(item.size_chart)}</size_chart>`
+            ? `<g:size_chart>${escapeXml(item.size_chart)}</g:size_chart>`
             : "") +
+          (item.shipping_weight
+            ? `<g:shipping_weight>${escapeXml(item.shipping_weight)}</g:shipping_weight>`
+            : "") +
+          (item.certification
+            ? `<g:certification>${escapeXml(item.certification)}</g:certification>`
+            : "") +
+          buildShippingXml(item) +
           `<g:condition>${escapeXml(item.condition || "new")}</g:condition>` +
           (item.brand ? `<g:brand>${escapeXml(item.brand)}</g:brand>` : "") +
           `<g:item_group_id>${escapeXml(item.item_group_id)}</g:item_group_id>` +
