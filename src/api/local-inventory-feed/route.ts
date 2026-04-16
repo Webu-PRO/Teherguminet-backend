@@ -7,6 +7,58 @@ import {
 import { isSupportedFeedPair } from "../../lib/feed-markets";
 import generateLocalInventoryFeedWorkflow from "../../workflows/generate-local-inventory-feed";
 
+const KNOWN_LOCAL_INVENTORY_FEED_CONFIG_ERRORS = [
+  "Local inventory feed requires store codes.",
+  "Product feed requires an absolute storefront URL.",
+] as const;
+
+export const LOCAL_INVENTORY_FEED_FALLBACK_ERROR_MESSAGE =
+  "Failed to generate local inventory feed.";
+
+export const readLocalInventoryFeedErrorMessage = (error: unknown) => {
+  if (error instanceof Error) {
+    const message = error.message.trim();
+    if (message.length) {
+      return message;
+    }
+  }
+
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof (error as { message?: unknown }).message === "string"
+  ) {
+    const message = (error as { message: string }).message.trim();
+    if (message.length) {
+      return message;
+    }
+  }
+
+  return null;
+};
+
+export const mapLocalInventoryFeedError = (error: unknown) => {
+  const message = readLocalInventoryFeedErrorMessage(error);
+
+  if (
+    message &&
+    KNOWN_LOCAL_INVENTORY_FEED_CONFIG_ERRORS.some((prefix) =>
+      message.startsWith(prefix)
+    )
+  ) {
+    return {
+      status: 400 as const,
+      message,
+    };
+  }
+
+  return {
+    status: 500 as const,
+    message: LOCAL_INVENTORY_FEED_FALLBACK_ERROR_MESSAGE,
+  };
+};
+
 export async function GET(req: MedusaRequest, res: MedusaResponse) {
   const { currency_code, country_code } = req.validatedQuery as {
     currency_code: string;
@@ -30,12 +82,22 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
     return;
   }
 
-  const { result } = await generateLocalInventoryFeedWorkflow(req.scope).run({
-    input: {
-      currency_code,
-      country_code,
-    },
-  });
+  let result: { xml: string };
+  try {
+    const workflowRun = await generateLocalInventoryFeedWorkflow(req.scope).run({
+      input: {
+        currency_code,
+        country_code,
+      },
+    });
+    result = workflowRun.result as { xml: string };
+  } catch (error) {
+    const mappedError = mapLocalInventoryFeedError(error);
+    res.status(mappedError.status).json({
+      message: mappedError.message,
+    });
+    return;
+  }
 
   res.setHeader("Content-Type", "application/xml; charset=utf-8");
   res.setHeader(
@@ -44,4 +106,3 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
   );
   res.status(200).send(result.xml);
 }
-
