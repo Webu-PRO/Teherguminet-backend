@@ -10,6 +10,7 @@ import generateLocalInventoryFeedWorkflow from "../../workflows/generate-local-i
 const KNOWN_LOCAL_INVENTORY_FEED_CONFIG_ERRORS = [
   "Local inventory feed requires store codes.",
   "Product feed requires an absolute storefront URL.",
+  "Invalid local inventory store code",
 ] as const;
 
 export const LOCAL_INVENTORY_FEED_FALLBACK_ERROR_MESSAGE =

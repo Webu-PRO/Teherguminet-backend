@@ -29,6 +29,17 @@ describe("local inventory feed route error mapping", () => {
     });
   });
 
+  it("returns 400 for invalid Google store code format", () => {
+    const error = new Error(
+      "Invalid local inventory store code 'HU_STORE_1'. Google requires an alphanumeric store_code that matches your Business Profile store code exactly (case-sensitive)."
+    );
+
+    expect(mapLocalInventoryFeedError(error)).toEqual({
+      status: 400,
+      message: error.message,
+    });
+  });
+
   it("returns generic 500 for unknown failures", () => {
     expect(mapLocalInventoryFeedError(new Error("Database timeout"))).toEqual({
       status: 500,

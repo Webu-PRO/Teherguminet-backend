@@ -68,8 +68,8 @@ Requirements:
 - Optional feed tuning:
   - `PRODUCT_FEED_LINK_BASE_URL` (override product-page domain in `<link>` when Merchant requires exact canonical domain, for example `https://www.teherguminet.hu`)
   - `PRODUCT_FEED_SHIPPING_COUNTRIES` (comma-separated ISO country codes, for example `HU,SK`, to emit shipping blocks for multiple countries from one feed)
-  - `PRODUCT_FEED_LOCAL_INVENTORY_STORE_CODES` (comma-separated Google Business Profile store codes for local inventory feed, for example `HU_STORE_1,HU_STORE_2`)
-  - `PRODUCT_FEED_LOCAL_INVENTORY_STORE_CODES_<COUNTRY_CODE>` (country-specific override, for example `PRODUCT_FEED_LOCAL_INVENTORY_STORE_CODES_HU=HU_STORE_1`)
+  - `PRODUCT_FEED_LOCAL_INVENTORY_STORE_CODES` (comma-separated Google Business Profile store codes for local inventory feed, for example `HU001,HU002`; values must be alphanumeric and must exactly match Business Profile store codes)
+  - `PRODUCT_FEED_LOCAL_INVENTORY_STORE_CODES_<COUNTRY_CODE>` (country-specific override, for example `PRODUCT_FEED_LOCAL_INVENTORY_STORE_CODES_HU=HU001`)
   - `PRODUCT_FEED_DEFAULT_SHIPPING_PRICE` (defaults to `0`)
   - `PRODUCT_FEED_SHIPPING_SERVICE` (defaults to `Standard`)
   - `PRODUCT_FEED_BACKORDER_DAYS` (defaults to `14`)

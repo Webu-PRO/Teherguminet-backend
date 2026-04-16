@@ -5,6 +5,7 @@ import {
   normalizeLocalInventoryAvailability,
   parseLocalInventoryStoreCodes,
   resolveLocalInventoryStoreCodes,
+  validateLocalInventoryStoreCodes,
 } from "../steps/build-local-inventory-feed-xml";
 
 const GLOBAL_STORE_CODES_ENV = "PRODUCT_FEED_LOCAL_INVENTORY_STORE_CODES";
@@ -41,6 +42,18 @@ describe("local inventory feed xml helpers", () => {
         restoreEnv(GLOBAL_STORE_CODES_ENV, originalGlobal);
         restoreEnv(HU_STORE_CODES_ENV, originalHu);
       }
+    });
+
+    it("rejects non-alphanumeric store codes", () => {
+      expect(() =>
+        validateLocalInventoryStoreCodes(["HU_STORE_1"])
+      ).toThrow("Invalid local inventory store code");
+    });
+
+    it("accepts alphanumeric store codes", () => {
+      expect(() =>
+        validateLocalInventoryStoreCodes(["HU001", "SKBRATISLAVA1"])
+      ).not.toThrow();
     });
   });
 
@@ -88,11 +101,11 @@ describe("local inventory feed xml helpers", () => {
             item_group_id: "prod_123",
           },
         ],
-        storeCodes: ["HU_STORE_1", "SK_STORE_1"],
+        storeCodes: ["HU001", "SK001"],
       });
 
-      expect(xml).toContain("<g:store_code>HU_STORE_1</g:store_code>");
-      expect(xml).toContain("<g:store_code>SK_STORE_1</g:store_code>");
+      expect(xml).toContain("<g:store_code>HU001</g:store_code>");
+      expect(xml).toContain("<g:store_code>SK001</g:store_code>");
       expect(xml).toContain("<g:id>variant_123</g:id>");
       expect(xml).toContain("<g:availability>in stock</g:availability>");
       expect(xml).toContain("<g:quantity>4</g:quantity>");
@@ -111,11 +124,10 @@ describe("local inventory feed xml helpers", () => {
             item_group_id: "prod_456",
           },
         ],
-        storeCodes: ["HU_STORE_1"],
+        storeCodes: ["HU001"],
       });
 
       expect(xml).toContain("<g:quantity>1</g:quantity>");
     });
   });
 });
-

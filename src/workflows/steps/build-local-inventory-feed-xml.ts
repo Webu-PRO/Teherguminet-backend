@@ -13,6 +13,8 @@ type BuildLocalInventoryFeedXmlInput = {
 };
 
 const LOCAL_INVENTORY_STORE_CODES_ENV = "PRODUCT_FEED_LOCAL_INVENTORY_STORE_CODES";
+const LOCAL_INVENTORY_STORE_CODE_MAX_LENGTH = 64;
+const LOCAL_INVENTORY_STORE_CODE_PATTERN = /^[A-Za-z0-9]+$/;
 
 const escapeXml = (str: string) =>
   str
@@ -58,6 +60,25 @@ export const parseLocalInventoryStoreCodes = (
   }
 
   return [...uniqueCodes];
+};
+
+export const validateLocalInventoryStoreCodes = (storeCodes: string[]) => {
+  for (const storeCode of storeCodes) {
+    if (
+      storeCode.length < 1 ||
+      storeCode.length > LOCAL_INVENTORY_STORE_CODE_MAX_LENGTH
+    ) {
+      throw new Error(
+        `Invalid local inventory store code '${storeCode}'. Google requires store_code to be 1-64 characters and match your Business Profile store code exactly (case-sensitive).`
+      );
+    }
+
+    if (!LOCAL_INVENTORY_STORE_CODE_PATTERN.test(storeCode)) {
+      throw new Error(
+        `Invalid local inventory store code '${storeCode}'. Google requires an alphanumeric store_code that matches your Business Profile store code exactly (case-sensitive).`
+      );
+    }
+  }
 };
 
 export const resolveLocalInventoryStoreCodes = (countryCode: string) => {
@@ -169,6 +190,8 @@ export const buildLocalInventoryFeedXmlStep = createStep(
       );
     }
 
+    validateLocalInventoryStoreCodes(storeCodes);
+
     const xml = buildLocalInventoryFeedXml({
       items: input.items,
       storeCodes,
@@ -177,4 +200,3 @@ export const buildLocalInventoryFeedXmlStep = createStep(
     return new StepResponse(xml);
   }
 );
-
