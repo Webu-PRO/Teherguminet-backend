@@ -764,6 +764,14 @@ export const resolveStorefrontLinkBaseUrl = (
   return storefrontBaseUrl;
 };
 
+export const resolveProductFeedLink = (input: {
+  storefrontLinkBaseUrl: string;
+  countryCode: string;
+  productHandle: string;
+}) => {
+  return `${input.storefrontLinkBaseUrl}/${encodeURIComponent(input.countryCode)}/products/${encodeURIComponent(input.productHandle)}`;
+};
+
 const resolveDescriptionFromSource = (
   source: Record<string, unknown> | null | undefined,
   keys: readonly string[]
@@ -1317,7 +1325,11 @@ export const getProductFeedItemsStep = createStep(
             ? product.handle.trim()
             : product.id;
 
-        const productLink = `${storefrontLinkBaseUrl}/${encodeURIComponent(countryCode)}/${encodeURIComponent(productHandle)}`;
+        const productLink = resolveProductFeedLink({
+          storefrontLinkBaseUrl,
+          countryCode,
+          productHandle,
+        });
 
         const primaryImageLink = resolvePrimaryImageLink({
           thumbnail: product.thumbnail,

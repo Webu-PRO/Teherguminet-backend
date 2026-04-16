@@ -20,6 +20,7 @@ import {
   resolveFeedSizeChart,
   resolveFeedShippingCountryCodes,
   resolveStorefrontBaseUrl,
+  resolveProductFeedLink,
   resolveStorefrontLinkBaseUrl,
 } from "../steps/get-product-feed-items";
 
@@ -169,6 +170,20 @@ describe("product feed utils", () => {
       );
 
       expect(result).toBe("https://teherguminet.hu");
+    });
+  });
+
+  describe("resolveProductFeedLink", () => {
+    it("builds localized product links under /products route", () => {
+      const result = resolveProductFeedLink({
+        storefrontLinkBaseUrl: "https://www.teherguminet.hu",
+        countryCode: "hu",
+        productHandle: "385-65r22.5-24-164j-mixed-g12-hubtrac",
+      });
+
+      expect(result).toBe(
+        "https://www.teherguminet.hu/hu/products/385-65r22.5-24-164j-mixed-g12-hubtrac"
+      );
     });
   });
 
