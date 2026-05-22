@@ -3,7 +3,6 @@
 .DS_Store
 /uploads
 /node_modules
-mcp/node_modules
 yarn-error.log
 
 .idea
