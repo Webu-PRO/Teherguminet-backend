@@ -4,7 +4,10 @@ import {
   type SendAbandonedCartsWorkflowInput,
 } from "../workflows/send-abandoned-carts"
 
-const DEFAULT_THRESHOLD_MINUTES = 60 * 24 // 1 day
+// 3 hours is the published sweet spot for cart-abandonment recovery emails —
+// long enough that the user isn't actively shopping, short enough that intent
+// is still warm. Override via ABANDONED_CART_THRESHOLD_MINUTES env var.
+const DEFAULT_THRESHOLD_MINUTES = 60 * 3
 
 export default async function abandonedCartJob(
   container: MedusaContainer
@@ -102,5 +105,8 @@ export default async function abandonedCartJob(
 
 export const config = {
   name: "abandoned-cart-notification",
-  schedule: "0 0 * * *", // every day at midnight
+  // Every 2 hours — keeps recovery emails landing within ~5h of abandonment
+  // (3h threshold + up to 2h job lag). Override via ABANDONED_CART_SCHEDULE
+  // only requires a code change; this constant is read at boot.
+  schedule: "0 */2 * * *",
 }

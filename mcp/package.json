@@ -1,0 +1,21 @@
+{
+  "name": "teherguminet-admin-mcp",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "MCP server exposing teherguminet Medusa admin API (orders, products, inventory, customers) as agent-callable tools. Auth via email+password JWT or MEDUSA_ADMIN_TOKEN.",
+  "main": "server.ts",
+  "scripts": {
+    "start": "tsx server.ts",
+    "dev": "tsx --watch server.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.2",
+    "@types/node": "^22.10.0"
+  }
+}
