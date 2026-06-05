@@ -40,6 +40,8 @@ export default async function abandonedCartJob(
         "items.quantity",
         "items.unit_price",
         "items.thumbnail",
+        "items.variant.thumbnail",
+        "items.variant.product.thumbnail",
         "customer.id",
         "customer.email",
         "customer.first_name",

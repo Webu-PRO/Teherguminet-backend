@@ -14,7 +14,7 @@ import {
   Text,
 } from "@react-email/components";
 import { LanguageCode, resolveLanguageFromHints } from "../email-language";
-import { F1_RED } from "./order-email-shared";
+import { F1_RED, formatAmount } from "./order-email-shared";
 
 const FONT_STACK =
   '"Helvetica Neue",Helvetica,Arial,"Nimbus Sans L",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';
@@ -35,25 +35,6 @@ export type AbandonedCartEmailProps = {
     unit_price?: number | null;
     thumbnail?: string | null;
   }>;
-};
-
-const formatAmount = (
-  value?: number | null,
-  currencyCode?: string | null,
-  locale: string = "hu-HU"
-) => {
-  if (typeof value !== "number") return "—";
-
-  try {
-    return new Intl.NumberFormat(locale, {
-      style: "currency",
-      currency: (currencyCode || "EUR").toUpperCase(),
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2,
-    }).format(value / 100);
-  } catch {
-    return `${(value / 100).toFixed(2)} ${(currencyCode || "EUR").toUpperCase()}`;
-  }
 };
 
 type LanguageBlock = {
@@ -280,7 +261,7 @@ export const AbandonedCartEmail = ({
                                 <Text className="m-0 text-[13px] text-[#6B7280]">
                                   {formatAmount(
                                     item.unit_price,
-                                    currencyCode,
+                                    currencyCode ?? "EUR",
                                     lang.locale
                                   )}{" "}
                                   · {item.quantity ?? 1} {lang.quantitySuffix}
@@ -366,7 +347,7 @@ export default () => (
         id: "item_1",
         title: "Michelin X Multi Z 315/80 R22.5",
         quantity: 4,
-        unit_price: 187000,
+        unit_price: 215,
         thumbnail:
           "https://cdn11.bigcommerce.com/s-ykpvhku8bx/images/stencil/original/products/114/498/retread-tires.1__59244.1562264741.png",
       },
