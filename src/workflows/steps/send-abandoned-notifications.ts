@@ -14,6 +14,9 @@ export type AbandonedCartItem = CartLineItemDTO & {
   variant?: {
     title?: string | null;
     thumbnail?: string | null;
+    product?: {
+      thumbnail?: string | null;
+    } | null;
   } | null;
 };
 
@@ -59,7 +62,11 @@ const prepareCartItems = (cart: AbandonedCart) =>
     title: item.title ?? item.variant?.title ?? null,
     quantity: typeof item.quantity === "number" ? item.quantity : 1,
     unit_price: item.unit_price ?? 0,
-    thumbnail: item.thumbnail,
+    thumbnail:
+      item.thumbnail ??
+      item.variant?.thumbnail ??
+      item.variant?.product?.thumbnail ??
+      null,
   }));
 
 export const sendAbandonedNotificationsStep = createStep(
