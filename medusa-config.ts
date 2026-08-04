@@ -344,6 +344,18 @@ module.exports = defineConfig({
   },
   plugins: [
     {
+      // Google Maps lead scraping: module, admin page, API routes and the
+      // polling job. Its modules register themselves, so nothing goes in
+      // `modules`.
+      //
+      // The scraper service it talks to runs as its own project, shared with
+      // the other shops on this host. SCRAPER_URL needs no value: the plugin
+      // defaults to http://gmaps-scraper:8080, which is the network alias that
+      // shared service registers — verified reachable from this backend.
+      resolve: "@webupro/medusa-scraper",
+      options: {},
+    },
+    {
       resolve: "@rsc-labs/medusa-store-analytics-v2",
       options: {},
     },
