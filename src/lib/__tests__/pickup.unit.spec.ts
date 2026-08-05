@@ -5,18 +5,20 @@ import { isOwnDeliveryShippingMethod, isPickupShippingMethod } from "../own-deli
 import {
   PICKUP_LOCATIONS,
   PICKUP_OPTION_CODE,
-  isManagedPickupOption,
+  PICKUP_OPTION_LABEL,
+  findExistingOption,
   pickupOptionData,
   pickupOptionDescription,
   pickupOptionName,
   pickupOptionType,
+  sameOptionName,
 } from "../pickup"
 
 const asMethod = (
   input: Partial<OrderShippingMethodDTO> & Record<string, unknown>
 ) => input as unknown as OrderShippingMethodDTO
 
-/** What the store returns for an option this config creates. */
+/** What the store returns for an option once this config has run. */
 const shippingMethodFor = (location: (typeof PICKUP_LOCATIONS)[number]) =>
   asMethod({
     name: pickupOptionName(location),
@@ -41,24 +43,21 @@ describe("pickup locations", () => {
     }
   })
 
-  it("keeps every point's id unique", () => {
+  it("keeps every point's id and option name unique", () => {
     const ids = PICKUP_LOCATIONS.map((l) => l.id)
+    const names = PICKUP_LOCATIONS.map((l) => l.option_name)
     expect(new Set(ids).size).toBe(ids.length)
+    expect(new Set(names).size).toBe(names.length)
   })
 
-  it("names a single point without a redundant suffix", () => {
-    // A "Személyes átvétel — Bakonyszombathely" row reads as though a second
-    // one exists. Only distinguish them once there is something to distinguish.
-    if (PICKUP_LOCATIONS.length === 1) {
-      expect(pickupOptionName(PICKUP_LOCATIONS[0])).toBe("Személyes átvétel")
-    } else {
-      const names = PICKUP_LOCATIONS.map(pickupOptionName)
-      expect(new Set(names).size).toBe(names.length)
-    }
+  it("names each point after a row the store already has", () => {
+    // The whole point of the conversion: matching the existing name is what
+    // makes this update that row instead of adding a duplicate next to it.
+    expect(PICKUP_LOCATIONS[0].option_name).toBe("Helyszíni átvétel")
   })
 })
 
-describe("the option this config creates", () => {
+describe("the option this config produces", () => {
   it("is recognised by the order flow's pickup detector", () => {
     // own-delivery-shipping.ts already routes pickup orders differently. If
     // this ever stops matching, collection silently becomes a delivery.
@@ -79,9 +78,15 @@ describe("the option this config creates", () => {
     }
   })
 
+  it("carries a type label the storefront's second check also matches", () => {
+    // "átvétel" is the substring isPickupOption looks for, so the label alone
+    // would still group it correctly if the code were ever lost.
+    expect(PICKUP_OPTION_LABEL.toLowerCase()).toContain("átvétel")
+  })
+
   it("puts the address in data as an object, not a string", () => {
-    // The checkout hands data.pickup_address to formatAddress. A string there
-    // is silently dropped and the buyer sees a pickup row with no address.
+    // The checkout hands data.pickup_address to formatAddress, which drops a
+    // string silently — the buyer would see a pickup row with no address.
     for (const location of PICKUP_LOCATIONS) {
       const data = pickupOptionData(location)
       expect(typeof data.pickup_address).toBe("object")
@@ -100,6 +105,14 @@ describe("the option this config creates", () => {
     }
   })
 
+  it("keeps whatever the row already carried in data", () => {
+    // data.id is what the manual fulfillment provider keys off. Replacing the
+    // blob instead of merging it would break fulfilling these orders.
+    const merged = pickupOptionData(PICKUP_LOCATIONS[0], { id: "manual-fulfillment" })
+    expect(merged.id).toBe("manual-fulfillment")
+    expect(merged.type).toBe(PICKUP_OPTION_CODE)
+  })
+
   it("names the collection point in the description an operator reads", () => {
     for (const location of PICKUP_LOCATIONS) {
       const description = pickupOptionDescription(location)
@@ -109,21 +122,33 @@ describe("the option this config creates", () => {
   })
 })
 
-describe("isManagedPickupOption", () => {
-  it("claims options carrying our type code", () => {
-    expect(isManagedPickupOption({ name: "Bármi", type: { code: "pickup" } })).toBe(true)
+describe("matching the row already in the store", () => {
+  it("compares names on trimmed text", () => {
+    // This store has a row literally named "Osobný odber " — with the trailing
+    // space. An exact-match lookup would miss rows like that.
+    expect(sameOptionName("Helyszíni átvétel ", "Helyszíni átvétel")).toBe(true)
+    expect(sameOptionName(" Osobný odber", "Osobný odber ")).toBe(true)
+    expect(sameOptionName("Helyszíni átvétel", "Osobný odber")).toBe(false)
+    expect(sameOptionName(null, "Helyszíni átvétel")).toBe(false)
   })
 
-  it("claims an option created by hand under the name we use", () => {
-    // So a re-run converges on one row instead of stacking a duplicate next to
-    // a copy somebody made in Admin before this script existed.
-    expect(
-      isManagedPickupOption({ name: pickupOptionName(PICKUP_LOCATIONS[0]), type: null })
-    ).toBe(true)
+  it("finds the existing row for a collection point", () => {
+    const options = [
+      { id: "so_1", name: "GLS Házhozszállítás (1-2 nap)" },
+      { id: "so_2", name: "Helyszíni átvétel" },
+      { id: "so_3", name: "Osobný odber " },
+    ]
+    expect(findExistingOption(options, PICKUP_LOCATIONS[0])?.id).toBe("so_2")
   })
 
-  it("leaves courier options alone", () => {
-    expect(isManagedPickupOption({ name: "GLS futár", type: { code: "gls" } })).toBe(false)
-    expect(isManagedPickupOption({ name: "Saját szállítás", type: null })).toBe(false)
+  it("leaves the Slovak leftover row alone", () => {
+    // "Osobný odber " is a base-template leftover in this Hungarian shop.
+    // Removing it is a separate decision — this config must never claim it.
+    const options = [{ id: "so_3", name: "Osobný odber " }]
+    expect(findExistingOption(options, PICKUP_LOCATIONS[0])).toBeUndefined()
+  })
+
+  it("reports nothing to convert on a store without the row", () => {
+    expect(findExistingOption([{ id: "so_1", name: "GLS" }], PICKUP_LOCATIONS[0])).toBeUndefined()
   })
 })
