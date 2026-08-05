@@ -48,6 +48,7 @@
     "@webupro/medusa-power-seo": "^0.1.0",
     "@webupro/medusa-scraper": "^0.1.2",
     "awilix": "^8.0.1",
+    "medusa-customer-analytics": "^0.2.0",
     "medusa-file-s3": "^1.4.2",
     "nodemailer": "^6.9.16",
     "pg": "^8.13.0",

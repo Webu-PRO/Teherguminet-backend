@@ -344,6 +344,18 @@ module.exports = defineConfig({
   },
   plugins: [
     {
+      // Checkout funnel: how far each shopper got on the way to an order.
+      // The module derives address / delivery / payment / completed from the
+      // cart row for every shopper, so the funnel is complete without any
+      // storefront change; the beacon only adds the rung a cart cannot show —
+      // that /checkout was opened at all.
+      //
+      // Its module registers itself, so nothing goes in `modules`. The table
+      // is created by the migration the container already runs on start.
+      resolve: "medusa-customer-analytics",
+      options: {},
+    },
+    {
       // Google Maps lead scraping: module, admin page, API routes and the
       // polling job. Its modules register themselves, so nothing goes in
       // `modules`.
