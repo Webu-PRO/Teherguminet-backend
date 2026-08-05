@@ -4653,6 +4653,18 @@
   resolved "https://registry.yarnpkg.com/@popperjs/core/-/core-2.11.8.tgz#6b79032e760a0899cd4204710beede972a3a185f"
   integrity sha512-P1st0aksCrn9sGZhp8GMYwBnQsbvAWsZAX44oXNNvLHGqAOcoVxmjZiohstwQ7SqKnbR47akdNi+uleWD8+g6A==
 
+"@power-seo/content-analysis@^1.0.19":
+  version "1.0.19"
+  resolved "https://registry.yarnpkg.com/@power-seo/content-analysis/-/content-analysis-1.0.19.tgz#d9198d393f8513bdf9bf280c700ce96725713198"
+  integrity sha512-qnLjEuRnTnPLmou4pGQz+wj0zTVqU2o/l/mceWGaba3zveIwCYvzD+E8B0G0EMh5nllf+b9EUNhYVSen69neuQ==
+  dependencies:
+    "@power-seo/core" "1.0.19"
+
+"@power-seo/core@1.0.19":
+  version "1.0.19"
+  resolved "https://registry.yarnpkg.com/@power-seo/core/-/core-1.0.19.tgz#15bd1a21e37dc95eef2011039c1e7a17cc592eeb"
+  integrity sha512-VkBKWL+0iB2gz94MdxUSTmV0VcbkopM2x0bjVDm6bH821mPtQIfZHU/ie6huiiULpyq3asIfFCjNKM6JNHyIMw==
+
 "@protobufjs/aspromise@^1.1.1", "@protobufjs/aspromise@^1.1.2":
   version "1.1.2"
   resolved "https://registry.yarnpkg.com/@protobufjs/aspromise/-/aspromise-1.1.2.tgz#9b8b0cc663d669a7d8f6f5d0893a14d348f30fbf"
@@ -8842,6 +8854,13 @@
     "@babel/plugin-transform-react-jsx-source" "^7.25.9"
     "@types/babel__core" "^7.20.5"
     react-refresh "^0.14.2"
+
+"@webupro/medusa-power-seo@^0.1.0":
+  version "0.1.0"
+  resolved "https://registry.yarnpkg.com/@webupro/medusa-power-seo/-/medusa-power-seo-0.1.0.tgz#072ef04c169959c1862d1108a85af154a61c3ab1"
+  integrity sha512-8+e/FcdMJHClnYEEZx+03gcWdNBf79PHWkTJ8fL0tu5Pe/94QGNept0Uc0k8Sw2asto8qYZSU/Uw5eO2iHgi+g==
+  dependencies:
+    "@power-seo/content-analysis" "^1.0.19"
 
 "@webupro/medusa-scraper@^0.1.2":
   version "0.1.2"

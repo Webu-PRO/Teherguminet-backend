@@ -356,6 +356,30 @@ module.exports = defineConfig({
       options: {},
     },
     {
+      // SEO scoring: a Rank Math-style score and checklist on the product
+      // page, a catalogue-wide worst-first list, and the /admin/seo-score
+      // routes behind both. Built on @power-seo/content-analysis.
+      //
+      // Configured through POWER_SEO_* environment variables rather than the
+      // options below — the plugin registers no module, and Medusa forwards
+      // plugin options to a plugin's modules. This shop needs:
+      //   POWER_SEO_STOREFRONT_URL=https://teherguminet.hu
+      //   POWER_SEO_SOURCE_LOCALE=hu
+      //   POWER_SEO_BRAND_SUFFIX=| TehergumiNet
+      //   POWER_SEO_ADMIN_LANG=hu
+      //
+      // Deliberately single-locale for now. The plugin reads locale overlays
+      // from a translations module shaped as (resource, locale, field, value)
+      // rows; this shop's `productLocalization` module is a wide table
+      // (title_hu / title_sk / description_hu / description_sk) with no
+      // per-locale SEO fields, so no overlay matches and only the Hungarian
+      // source copy is graded. That degrades cleanly — it does not error — and
+      // POWER_SEO_LOCALES stays unset until the plugin grows a wide-table
+      // overlay strategy.
+      resolve: "@webupro/medusa-power-seo",
+      options: {},
+    },
+    {
       resolve: "@rsc-labs/medusa-store-analytics-v2",
       options: {},
     },
