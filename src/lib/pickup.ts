@@ -98,9 +98,20 @@ export const pickupOptionData = (
   },
 })
 
-export const pickupOptionType = (location: PickupLocation) => ({
+/**
+ * One shared type across every collection point.
+ *
+ * The type says *what kind* of shipping this is; which point the buyer collects
+ * from lives on each option's own `data.pickup_address`. Keeping it shared also
+ * means a store ends up with exactly one `pickup` type row no matter how many
+ * points it grows.
+ */
+export const PICKUP_OPTION_DESCRIPTION =
+  "Átvétel egyeztetés után, a megadott telephelyen."
+
+export const pickupOptionType = () => ({
   label: PICKUP_OPTION_LABEL,
-  description: pickupOptionDescription(location),
+  description: PICKUP_OPTION_DESCRIPTION,
   code: PICKUP_OPTION_CODE,
 })
 
