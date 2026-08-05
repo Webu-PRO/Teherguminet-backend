@@ -146,9 +146,21 @@ class MagyarPostaFulfillmentService extends AbstractFulfillmentProviderService {
     return unit === "kg" ? "kg" : "g";
   }
 
+  /**
+   * Weight in kg, or null when the item does not declare one.
+   *
+   * Unknown is not zero. Returning 0 for a missing weight put every item in
+   * the lightest tier, so a cart of four truck tyres — none of which carries a
+   * weight — was quoted 4 x 1567 = 6268 HUF for a carrier with a 40 kg parcel
+   * limit. The number looked deliberate and was entirely fabricated.
+   */
   private resolveItemWeightKg(weight: number | null, unit: "g" | "kg") {
-    if (!weight || !Number.isFinite(weight)) {
-      return 0;
+    if (weight === null || weight === undefined || !Number.isFinite(weight)) {
+      return null;
+    }
+
+    if (weight <= 0) {
+      return null;
     }
 
     return unit === "kg" ? weight : weight / 1000;
@@ -179,7 +191,12 @@ class MagyarPostaFulfillmentService extends AbstractFulfillmentProviderService {
     const tiers = this.resolveWeightTiers(optionData);
     const unit = this.resolveWeightUnit(optionData);
 
-    return items.reduce((total, item) => {
+    // One unweighed item makes the whole quote a guess, so decline the tier
+    // calculation entirely and let the caller fall back to the configured
+    // amount. A quote invented from missing data is worse than a flat one:
+    // it is wrong in the shop's favour and nothing downstream can tell.
+    let total = 0;
+    for (const item of items) {
       const quantity =
         typeof item.quantity === "number" && Number.isFinite(item.quantity)
           ? item.quantity
@@ -188,9 +205,13 @@ class MagyarPostaFulfillmentService extends AbstractFulfillmentProviderService {
         item.variant?.weight ?? null,
         unit
       );
-      const amount = this.resolveTierAmount(weightKg, tiers);
-      return total + amount * quantity;
-    }, 0);
+      if (weightKg === null) {
+        return null;
+      }
+      total += this.resolveTierAmount(weightKg, tiers) * quantity;
+    }
+
+    return total;
   }
 
   private resolveTaxInclusive() {
