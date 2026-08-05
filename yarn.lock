@@ -13134,6 +13134,11 @@ medusa-core-utils@^1.2.3:
   dependencies:
     awilix "^8.0.0"
 
+medusa-customer-analytics@^0.2.0:
+  version "0.2.0"
+  resolved "https://registry.yarnpkg.com/medusa-customer-analytics/-/medusa-customer-analytics-0.2.0.tgz#e2f0a63e6e4f06e74aa67eb2d5848be55e944db9"
+  integrity sha512-QNmGDsaLm302OKoJ7vtWNdVyuF5szrhj2qjYB2hf4k3VEFKbC54OJPLtvfUmtVxEfK+YjMn3W1u7+N26lhCU2w==
+
 medusa-file-s3@^1.4.2:
   version "1.4.2"
   resolved "https://registry.yarnpkg.com/medusa-file-s3/-/medusa-file-s3-1.4.2.tgz#4b7e0467c1590d2fc5908ba5d844f48d12ebb176"
