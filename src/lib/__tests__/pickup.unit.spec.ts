@@ -5,6 +5,7 @@ import { isOwnDeliveryShippingMethod, isPickupShippingMethod } from "../own-deli
 import {
   PICKUP_LOCATIONS,
   PICKUP_OPTION_CODE,
+  PICKUP_OPTION_DESCRIPTION,
   PICKUP_OPTION_LABEL,
   findExistingOption,
   pickupOptionData,
@@ -23,7 +24,7 @@ const shippingMethodFor = (location: (typeof PICKUP_LOCATIONS)[number]) =>
   asMethod({
     name: pickupOptionName(location),
     provider_id: "manual_manual",
-    type: pickupOptionType(location),
+    type: pickupOptionType(),
     data: pickupOptionData(location),
   })
 
@@ -73,9 +74,19 @@ describe("the option this config produces", () => {
   })
 
   it("carries the type code the storefront checks first", () => {
-    for (const location of PICKUP_LOCATIONS) {
-      expect(pickupOptionType(location).code).toBe(PICKUP_OPTION_CODE)
-    }
+    expect(pickupOptionType().code).toBe(PICKUP_OPTION_CODE)
+  })
+
+  it("shares one type across every collection point", () => {
+    // The type says what kind of shipping this is; which point the buyer
+    // collects from lives on each option's own data. Sharing it means the
+    // store ends up with exactly one `pickup` type row, however many points
+    // it grows — and the script upserts that one row rather than per option.
+    expect(pickupOptionType()).toEqual({
+      label: PICKUP_OPTION_LABEL,
+      description: PICKUP_OPTION_DESCRIPTION,
+      code: PICKUP_OPTION_CODE,
+    })
   })
 
   it("carries a type label the storefront's second check also matches", () => {
