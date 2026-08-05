@@ -2,59 +2,124 @@ import type { ExecArgs } from "@medusajs/framework/types"
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils"
 import {
   createShippingOptionsWorkflow,
-  deleteShippingOptionsWorkflow,
+  updateShippingOptionsWorkflow,
 } from "@medusajs/medusa/core-flows"
 
 import {
   PICKUP_LOCATIONS,
   PICKUP_OPTION_CODE,
-  isManagedPickupOption,
+  findExistingOption,
   pickupOptionData,
   pickupOptionName,
   pickupOptionType,
+  type PickupLocation,
 } from "../lib/pickup"
 
 /**
- * Add personal collection (személyes átvétel) to checkout.
+ * Make personal collection render as collection in checkout.
  *
- * Everything else was already here: `isPickupShippingMethod` routes pickup
- * orders through their own flow, `pickup-fulfillment-cancelled` handles their
- * cancellations, and the storefront checkout already lists pickup options as
- * their own group. What was missing is the shipping option itself — so this
- * creates it, rather than leaving it as a row somebody has to click together
- * in Admin and remember to recreate after a restore.
+ * The store already has the row — "Helyszíni átvétel", free in both
+ * currencies — and the code around it was always ready: `isPickupShippingMethod`
+ * routes pickup orders through their own flow, `pickup-fulfillment-cancelled`
+ * handles their cancellations, and the checkout lists pickup as its own group
+ * with its own address.
  *
- * One free option per collection point, each carrying `type.code = "pickup"`
- * and its address on `data.pickup_address`. That is the contract the checkout
- * reads; `src/lib/pickup.ts` owns it and the unit tests hold both ends to it.
+ * What the row lacks is its *type*. Every manual option in this store carries
+ * the generic `default_shipping_option` type and a `{"id":"manual-fulfillment"}`
+ * data blob, so all three of the checkout's pickup checks miss and collection
+ * shows up as an ordinary delivery row with no address. This gives the row the
+ * pickup type and the address, and changes nothing else.
  *
- * Idempotent: re-running converges on exactly one option per point. Order
- * matters — create BEFORE delete, so a failure halfway never leaves the store
- * without a collection option.
+ * Deliberately conservative:
+ * - It CONVERTS the row that is already there rather than adding a second one
+ *   beside it, so buyers keep the wording they know and past orders keep
+ *   pointing at a live option.
+ * - It NEVER deletes. This store also carries "Osobný odber " and "Doručenie
+ *   na adresu" — Slovak leftovers from the base template. Removing those is a
+ *   separate decision with its own blast radius, not a side effect of this.
+ * - It does NOT touch prices, zone, profile or provider. Collection is already
+ *   free in EUR and HUF; silently repricing a live option is not this script's
+ *   job.
+ * - Existing `data` is merged, not replaced: `data.id` is what the manual
+ *   fulfillment provider keys off.
+ *
+ * Idempotent — a second run finds the type already correct and rewrites the
+ * same values.
  *
  * Run:  npx medusa exec src/scripts/configure-pickup-shipping.ts
  */
 const MANUAL_PROVIDER = "manual_manual"
 
-/** Collection is free — one zero price per currency the store actually sells in. */
-const freePrices = (currencyCodes: string[]) =>
-  currencyCodes.map((currency_code) => ({ currency_code, amount: 0, rules: [] }))
+type StoreOption = {
+  id: string
+  name?: string | null
+  service_zone_id?: string | null
+  shipping_profile_id?: string | null
+  type?: { code?: string | null } | null
+  data?: Record<string, unknown> | null
+}
 
 export default async function configurePickupShipping({ container }: ExecArgs) {
   const query = container.resolve(ContainerRegistrationKeys.QUERY)
   const logger = container.resolve(ContainerRegistrationKeys.LOGGER)
   const link = container.resolve(ContainerRegistrationKeys.LINK)
 
-  const { data: options } = await query.graph({
+  const { data } = await query.graph({
     entity: "shipping_option",
-    fields: ["id", "name", "service_zone_id", "shipping_profile_id", "type.code"],
+    fields: [
+      "id",
+      "name",
+      "service_zone_id",
+      "shipping_profile_id",
+      "type.code",
+      "data",
+    ],
   })
+  const options = (data ?? []) as StoreOption[]
   logger.info(
-    `[pickup-shipping] existing options: ${
-      (options ?? []).map((o: { name: string }) => o.name).join(", ") || "(none)"
+    `[pickup-shipping] ${options.length} existing option(s): ${
+      options.map((o) => `${o.name} [${o.type?.code ?? "no type"}]`).join(", ") || "(none)"
     }`
   )
 
+  const toConvert: Array<{ location: PickupLocation; option: StoreOption }> = []
+  const toCreate: PickupLocation[] = []
+
+  for (const location of PICKUP_LOCATIONS) {
+    const existing = findExistingOption(options, location)
+    if (existing) {
+      toConvert.push({ location, option: existing })
+    } else {
+      toCreate.push(location)
+    }
+  }
+
+  // 1. Convert the rows that are already there.
+  if (toConvert.length) {
+    await updateShippingOptionsWorkflow(container).run({
+      input: toConvert.map(({ location, option }) => ({
+        id: option.id,
+        type: pickupOptionType(location),
+        data: pickupOptionData(location, option.data),
+      })),
+    })
+    for (const { location, option } of toConvert) {
+      logger.info(
+        `[pickup-shipping] converted "${option.name}" (${option.id}): type ${
+          option.type?.code ?? "none"
+        } -> ${PICKUP_OPTION_CODE}, address ${location.address_1}, ${location.postal_code} ${location.city}`
+      )
+    }
+  }
+
+  if (!toCreate.length) {
+    logger.info("[pickup-shipping] done. Nothing to create; every collection point already had a row.")
+    return
+  }
+
+  // 2. Anything with no row yet gets created. Only now do we need a zone, a
+  //    profile and the store's currencies — a store where every point already
+  //    exists should not fail because one of those lookups came back empty.
   const { data: stockLocations } = await query.graph({
     entity: "stock_location",
     fields: ["id", "name"],
@@ -62,9 +127,9 @@ export default async function configurePickupShipping({ container }: ExecArgs) {
   const stockLocationId = stockLocations?.[0]?.id as string | undefined
 
   // Resolve the zone that actually covers Hungary rather than taking whichever
-  // zone happens to come back first: the API promises no order, and on a store
-  // with a second zone that gamble can hide collection from exactly the buyers
-  // it exists for. Every collection point is in Hungary.
+  // zone comes back first: the API promises no order, and on a store with a
+  // second zone that gamble can hide collection from exactly the buyers it
+  // exists for. Every collection point is in Hungary.
   const { data: sets } = await query.graph({
     entity: "fulfillment_set",
     fields: [
@@ -87,14 +152,11 @@ export default async function configurePickupShipping({ container }: ExecArgs) {
   )
   const serviceZoneId =
     huZone?.id ??
-    ((options ?? []).find((o: { service_zone_id?: string }) => o.service_zone_id)
-      ?.service_zone_id as string | undefined) ??
+    options.find((o) => o.service_zone_id)?.service_zone_id ??
     zones[0]?.id
 
-  let shippingProfileId = (options ?? []).find(
-    (o: { shipping_profile_id?: string }) => o.shipping_profile_id
-  )?.shipping_profile_id as string | undefined
-
+  let shippingProfileId = options.find((o) => o.shipping_profile_id)
+    ?.shipping_profile_id as string | undefined
   if (!shippingProfileId) {
     const { data: profiles } = await query.graph({
       entity: "shipping_profile",
@@ -103,7 +165,7 @@ export default async function configurePickupShipping({ container }: ExecArgs) {
     shippingProfileId = profiles?.[0]?.id as string | undefined
   }
 
-  // Prices come from the store's own regions. Hardcoding a currency list means
+  // Prices come from the store's own regions. A hardcoded currency list means
   // a shop that later sells in another one gets a collection option that is
   // invisible in that region.
   const { data: regions } = await query.graph({
@@ -122,20 +184,16 @@ export default async function configurePickupShipping({ container }: ExecArgs) {
 
   if (!stockLocationId || !serviceZoneId || !shippingProfileId || !currencyCodes.length) {
     logger.error(
-      `[pickup-shipping] missing stock location (${stockLocationId}) / service zone (${serviceZoneId}) / shipping profile (${shippingProfileId}) / currencies (${
+      `[pickup-shipping] cannot create ${toCreate
+        .map((l) => l.option_name)
+        .join(", ")}: missing stock location (${stockLocationId}) / service zone (${serviceZoneId}) / shipping profile (${shippingProfileId}) / currencies (${
         currencyCodes.join(", ") || "none"
       }). Set them up in Admin → Settings → Locations and Regions first.`
     )
     return
   }
 
-  logger.info(
-    `[pickup-shipping] zone ${serviceZoneId} (${
-      huZone ? `HU geo zone "${huZone.name ?? "unnamed"}"` : "NO HU geo zone found — fell back"
-    }), currencies: ${currencyCodes.join(", ")}`
-  )
-
-  // 1. Manual provider on the stock location — best-effort and idempotent.
+  // Manual provider on the stock location — best-effort and idempotent.
   try {
     await link.create({
       [Modules.STOCK_LOCATION]: { stock_location_id: stockLocationId },
@@ -150,9 +208,8 @@ export default async function configurePickupShipping({ container }: ExecArgs) {
     )
   }
 
-  // 2. Create one option per collection point, BEFORE removing the old ones.
   const { result } = await createShippingOptionsWorkflow(container).run({
-    input: PICKUP_LOCATIONS.map((location) => ({
+    input: toCreate.map((location) => ({
       name: pickupOptionName(location),
       price_type: "flat" as const,
       provider_id: MANUAL_PROVIDER,
@@ -160,36 +217,26 @@ export default async function configurePickupShipping({ container }: ExecArgs) {
       shipping_profile_id: shippingProfileId,
       type: pickupOptionType(location),
       data: pickupOptionData(location),
-      prices: freePrices(currencyCodes),
+      prices: currencyCodes.map((currency_code) => ({
+        currency_code,
+        amount: 0,
+        rules: [],
+      })),
       rules: [
         { attribute: "enabled_in_store", value: "true", operator: "eq" },
         { attribute: "is_return", value: "false", operator: "eq" },
       ],
     })),
   })
-  const createdIds = new Set((result ?? []).map((option: { id: string }) => option.id))
   logger.info(
-    `[pickup-shipping] created ${createdIds.size} option(s): ${[...createdIds].join(", ")}`
+    `[pickup-shipping] created ${(result ?? []).length} option(s): ${toCreate
+      .map((l) => l.option_name)
+      .join(", ")} (free in ${currencyCodes.join(", ")})`
   )
 
-  // 3. Drop earlier copies so a re-run converges on exactly one row per point.
-  //    Matched by type code, with a name fallback for anything created by hand
-  //    in Admin before this script existed.
-  const staleIds = (options ?? [])
-    .filter(
-      (option: { id: string; name: string; type?: { code?: string | null } | null }) =>
-        isManagedPickupOption(option) && !createdIds.has(option.id)
-    )
-    .map((option: { id: string }) => option.id)
-
-  if (staleIds.length) {
-    await deleteShippingOptionsWorkflow(container).run({ input: { ids: staleIds } })
-    logger.info(`[pickup-shipping] removed ${staleIds.length} stale pickup option(s)`)
-  }
-
   logger.info(
-    `[pickup-shipping] done. Free, code "${PICKUP_OPTION_CODE}", points: ${PICKUP_LOCATIONS.map(
-      (l) => `${l.label} (${l.address_1}, ${l.postal_code} ${l.city})`
-    ).join("; ")}.`
+    `[pickup-shipping] done. Code "${PICKUP_OPTION_CODE}", points: ${PICKUP_LOCATIONS.map(
+      (l) => `${l.option_name} @ ${l.address_1}, ${l.postal_code} ${l.city}`
+    ).join("; ")}. Nothing was deleted.`
   )
 }
