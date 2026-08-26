@@ -95,7 +95,7 @@ class ManualFulfillmentService extends AbstractFulfillmentProviderService {
       optionData.pricePerKg ??
       this.options_["price_per_kg"]
     const resolved = this.resolveNumber(candidate)
-    return resolved ?? 40
+    return resolved ?? 170
   }
 
   private resolveWeightUnit(optionData: Record<string, unknown>) {
