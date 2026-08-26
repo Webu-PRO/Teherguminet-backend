@@ -80,6 +80,8 @@ const resolveOptionalNumber = (value: string | undefined) => {
 const s3DownloadDuration = resolveOptionalNumber(
   process.env.S3_DOWNLOAD_FILE_DURATION,
 );
+const ownDeliveryPricePerKgHuf =
+  resolveOptionalNumber(process.env.OWN_DELIVERY_PRICE_PER_KG_HUF) ?? 40;
 const s3AdditionalClientConfig =
   process.env.S3_CUSTOM_AGENT && process.env.S3_CUSTOM_AGENT.trim().length > 0
     ? {
@@ -257,7 +259,7 @@ module.exports = defineConfig({
             resolve: "./src/modules/fulfillment-manual",
             id: "teherguminet",
             options: {
-              price_per_kg: 40,
+              price_per_kg: ownDeliveryPricePerKgHuf,
               weight_unit: "kg",
             },
           },

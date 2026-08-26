@@ -93,8 +93,7 @@ class ManualFulfillmentService extends AbstractFulfillmentProviderService {
     const candidate =
       optionData.price_per_kg ??
       optionData.pricePerKg ??
-      this.options_["price_per_kg"] ??
-      process.env.MANUAL_PRICE_PER_KG
+      this.options_["price_per_kg"]
     const resolved = this.resolveNumber(candidate)
     return resolved ?? 40
   }

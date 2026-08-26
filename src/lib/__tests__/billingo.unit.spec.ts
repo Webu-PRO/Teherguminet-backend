@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, jest } from "@jest/globals
 import type { OrderDTO } from "@medusajs/types"
 
 import {
+  createBillingoPartner,
   createBillingoInvoice,
   createBillingoReceipt,
   type BillingoConfig,
@@ -748,5 +749,78 @@ describe("billingo invoice generation", () => {
       unknown
     >
     expect(payload.payment_method).toBe("wire_transfer")
+  })
+
+  it("selects the Billingo bank account matching a HUF invoice", async () => {
+    let sentDocumentPayload: Record<string, unknown> | null = null
+
+    global.fetch = jest
+      .fn<typeof fetch>()
+      .mockImplementation(async (input, init) => {
+        const url = String(input)
+        if (url.endsWith("/bank-accounts")) {
+          return jsonResponse(200, {
+            data: [
+              { id: 266334, currency: "EUR" },
+              { id: 261117, currency: "HUF" },
+            ],
+          }) as unknown as Response
+        }
+
+        if (url.endsWith("/documents")) {
+          sentDocumentPayload = JSON.parse(
+            String(init?.body ?? "{}")
+          ) as Record<string, unknown>
+          return jsonResponse(200, {
+            id: 1005,
+            invoice_number: "TG-2026-1005",
+          }) as unknown as Response
+        }
+
+        throw new Error(`Unexpected fetch URL: ${url}`)
+      })
+
+    await createBillingoInvoice(buildOrder({ currency_code: "huf" }), {
+      ...baseConfig,
+      invoiceBankAccountId: undefined,
+    })
+
+    const payload = sentDocumentPayload as unknown as Record<string, unknown>
+    expect(payload.bank_account_id).toBe(261117)
+  })
+
+  it("uses billing-address tax metadata for a Billingo partner", async () => {
+    let sentPartnerPayload: Record<string, unknown> | null = null
+
+    global.fetch = jest
+      .fn<typeof fetch>()
+      .mockImplementation(async (input, init) => {
+        const url = String(input)
+        if (url.endsWith("/partners")) {
+          sentPartnerPayload = JSON.parse(
+            String(init?.body ?? "{}")
+          ) as Record<string, unknown>
+          return jsonResponse(200, { id: 2001 }) as unknown as Response
+        }
+
+        throw new Error(`Unexpected fetch URL: ${url}`)
+      })
+
+    await createBillingoPartner(
+      buildOrder({
+        billing_address: {
+          company: "Teszt Kft.",
+          address_1: "Teszt utca 1.",
+          city: "Budapest",
+          postal_code: "1111",
+          country_code: "HU",
+          metadata: { ico: "12345678-2-42" },
+        },
+      }),
+      baseConfig
+    )
+
+    const payload = sentPartnerPayload as unknown as Record<string, unknown>
+    expect(payload.taxcode).toBe("12345678-2-42")
   })
 })

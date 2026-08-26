@@ -57,6 +57,7 @@ type BillingoPublicUrl = {
 
 type BillingoBankAccount = {
   id?: number
+  currency?: string
 }
 
 type BillingoBankAccountListResponse = {
@@ -1159,12 +1160,20 @@ export const resolveBillingoPartnerId = (
 const resolvePartnerTaxcode = (order: OrderDTO) => {
   const metadata =
     (order.metadata as Record<string, unknown> | null) ?? {}
+  const billingAddress = resolveMetadataRecord(order.billing_address)
+  const shippingAddress = resolveMetadataRecord(order.shipping_address)
+  const billingMetadata = resolveMetadataRecord(billingAddress?.metadata)
+  const shippingMetadata = resolveMetadataRecord(shippingAddress?.metadata)
   const candidates: Array<unknown> = [
     metadata.billingo_taxcode,
     metadata.taxcode,
     metadata.tax_code,
     metadata.vat_number,
     metadata.vat,
+    billingMetadata?.ico,
+    billingAddress?.company_ico,
+    shippingMetadata?.ico,
+    shippingAddress?.company_ico,
   ]
   for (const candidate of candidates) {
     if (typeof candidate === "string" && candidate.trim()) {
@@ -1538,7 +1547,8 @@ const parseBillingoBankAccounts = (payload: unknown) => {
 }
 
 const resolveInvoiceBankAccountId = async (
-  config: BillingoConfig
+  config: BillingoConfig,
+  currency: string
 ) => {
   if (config.invoiceBankAccountId) {
     return config.invoiceBankAccountId
@@ -1552,7 +1562,14 @@ const resolveInvoiceBankAccountId = async (
     }
   )
   const accounts = parseBillingoBankAccounts(response)
-  for (const account of accounts) {
+  const normalizedCurrency = currency.trim().toUpperCase()
+  const currencyMatch = accounts.find(
+    (account) => account.currency?.trim().toUpperCase() === normalizedCurrency
+  )
+  const preferredAccounts = currencyMatch
+    ? [currencyMatch, ...accounts.filter((account) => account !== currencyMatch)]
+    : accounts
+  for (const account of preferredAccounts) {
     const parsedId = readNumber(account.id)
     if (parsedId && parsedId > 0) {
       return parsedId
@@ -2300,7 +2317,7 @@ export const createBillingoDocument = async (
   const invoiceBankAccountId =
     bankAccountIdOverride && bankAccountIdOverride > 0
       ? bankAccountIdOverride
-      : await resolveInvoiceBankAccountId(config)
+      : await resolveInvoiceBankAccountId(config, currency)
 
   const basePayload: BillingoInvoicePayload = {
     vendor_id: resolveVendorId(order, "invoice"),
