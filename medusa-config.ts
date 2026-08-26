@@ -81,7 +81,7 @@ const s3DownloadDuration = resolveOptionalNumber(
   process.env.S3_DOWNLOAD_FILE_DURATION,
 );
 const ownDeliveryPricePerKgHuf =
-  resolveOptionalNumber(process.env.OWN_DELIVERY_PRICE_PER_KG_HUF) ?? 40;
+  resolveOptionalNumber(process.env.OWN_DELIVERY_PRICE_PER_KG_HUF) ?? 170;
 const s3AdditionalClientConfig =
   process.env.S3_CUSTOM_AGENT && process.env.S3_CUSTOM_AGENT.trim().length > 0
     ? {
