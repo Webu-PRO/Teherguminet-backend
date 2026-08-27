@@ -8855,10 +8855,9 @@
     "@types/babel__core" "^7.20.5"
     react-refresh "^0.14.2"
 
-"@webupro/medusa-power-seo@^0.1.0":
-  version "0.1.0"
-  resolved "https://registry.yarnpkg.com/@webupro/medusa-power-seo/-/medusa-power-seo-0.1.0.tgz#072ef04c169959c1862d1108a85af154a61c3ab1"
-  integrity sha512-8+e/FcdMJHClnYEEZx+03gcWdNBf79PHWkTJ8fL0tu5Pe/94QGNept0Uc0k8Sw2asto8qYZSU/Uw5eO2iHgi+g==
+"@webupro/medusa-power-seo@file:vendor/webupro-medusa-power-seo-0.1.2.tgz":
+  version "0.1.2"
+  resolved "file:vendor/webupro-medusa-power-seo-0.1.2.tgz#bf909dd30778369092533d949437f233d09b9f79"
   dependencies:
     "@power-seo/content-analysis" "^1.0.19"
 
