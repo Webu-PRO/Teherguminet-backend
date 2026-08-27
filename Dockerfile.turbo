@@ -11,6 +11,7 @@ RUN apk add --no-cache libc6-compat python3 make g++ \
 
 FROM base AS deps
 COPY package.json yarn.lock .yarnrc.yml ./
+COPY vendor ./vendor
 
 RUN --mount=type=cache,id=yarn-cache-backend,target=/usr/local/share/.cache/yarn \
   --mount=type=cache,id=node-gyp-cache-backend,target=/root/.cache/node-gyp \
