@@ -515,7 +515,7 @@ describe("product feed utils", () => {
       expect(result).toBe("12.5 kg");
     });
 
-    it("resolves shipping weight from gls metadata keys", () => {
+    it("resolves shipping weight from legacy gls_weight metadata keys", () => {
       const result = resolveFeedShippingWeight({
         variantWeight: undefined,
         productMetadata: {

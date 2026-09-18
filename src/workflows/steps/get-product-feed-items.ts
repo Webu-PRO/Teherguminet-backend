@@ -148,6 +148,8 @@ const CERTIFICATION_METADATA_KEYS = [
   "eprel_code",
   "eprel code",
 ] as const;
+// `gls_weight_*` are legacy metadata keys written by the retired GLS integration;
+// kept so products that only carry those keys still report a shipping weight.
 const SHIPPING_WEIGHT_KG_METADATA_KEYS = [
   "shipping_weight_kg",
   "shippingWeightKg",

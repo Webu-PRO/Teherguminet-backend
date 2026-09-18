@@ -33,8 +33,6 @@ Language-aware keys are usually `hu` or `sk`.
 | `FulfillmentWorkflowEvents.SHIPMENT_CREATED` (own delivery) | 1 | `own-delivery-shipped` | `order.email` | `event.name` | `own-delivery-shipped-{fulfillmentId}` | `src/subscribers/own-delivery-shipment-created.ts` |
 | `FulfillmentWorkflowEvents.SHIPMENT_CREATED` (pickup / helyszíni átvétel) | 1 | `order-pickup-completed` | `order.email` | `event.name` | `order-pickup-completed-{fulfillmentId}` | `src/subscribers/pickup-shipment-created.ts` |
 | `FulfillmentEvents.FULFILLMENT_UPDATED` + `delivered_at` present | 1 | `order-delivered` OR `own-delivery-delivered` | `order.email` | `event.name` | `{selectedTemplate}-{fulfillmentId}` | `src/subscribers/fulfillment-delivered.ts` |
-| `order.fulfillment_created` / `fulfillment.created` (GLS shipment success path) | 1 | `gls-shipment-created` | `order.email` | `gls.shipment_created` | _(none)_ | `src/subscribers/fulfillment-created.ts` |
-| Admin API: GLS label cancel endpoint | 1 | `gls-label-cancelled` | `fulfillment.order.email` | `gls.label_cancelled` | _(none)_ | `src/api/admin/gls/fulfillments/[fulfillment_id]/route.ts` |
 
 ### User / Auth
 
@@ -72,9 +70,7 @@ These env vars are mapped in `medusa-config.ts` to `template_ids` keys:
 - `RESEND_TEMPLATE_ID_USER_INVITED` -> `user-invited`
 - `RESEND_TEMPLATE_ID_ABANDONED_CART` -> `abandoned-cart`
 - `RESEND_TEMPLATE_ID_PASSWORD_RESET` -> `password-reset`
-- `RESEND_TEMPLATE_ID_GLS_LABEL_CANCELLED` -> `gls-label-cancelled`
 - `RESEND_TEMPLATE_ID_ORDER_ITEMS_CANCELLED` -> `order-items-cancelled`
-- `RESEND_TEMPLATE_ID_GLS_SHIPMENT_CREATED` -> `gls-shipment-created`
 
 Notes:
 

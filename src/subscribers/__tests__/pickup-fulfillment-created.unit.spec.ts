@@ -53,9 +53,9 @@ describe("pickup-fulfillment-created subscriber", () => {
                   shipping_methods: [
                     {
                       id: "sm_old",
-                      shipping_option_id: "so_gls_old",
-                      name: "GLS házhozszállítás",
-                      provider_id: "gls",
+                      shipping_option_id: "so_courier_old",
+                      name: "Futár házhozszállítás",
+                      provider_id: "courier_legacy",
                       metadata: {},
                     },
                   ],
@@ -194,9 +194,9 @@ describe("pickup-fulfillment-created subscriber", () => {
                   shipping_methods: [
                     {
                       id: "sm_old",
-                      shipping_option_id: "so_gls_old",
-                      name: "GLS házhozszállítás",
-                      provider_id: "gls",
+                      shipping_option_id: "so_courier_old",
+                      name: "Futár házhozszállítás",
+                      provider_id: "courier_legacy",
                       metadata: {},
                     },
                   ],

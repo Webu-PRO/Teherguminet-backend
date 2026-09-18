@@ -6,7 +6,6 @@ import {
   ContainerRegistrationKeys,
   Modules,
 } from "@medusajs/framework/utils"
-import { createOrderFulfillmentWorkflow } from "@medusajs/medusa/core-flows"
 import { PaymentEvents } from "@medusajs/utils"
 import type {
   CreateNotificationDTO,
@@ -20,7 +19,6 @@ import type {
 } from "@medusajs/types"
 
 import { dispatchNotificationsIndividually } from "../lib/dispatch-notifications"
-import { isGlsShippingMethod } from "../lib/gls"
 import {
   isOwnDeliveryShippingMethod,
 } from "../lib/own-delivery-shipping"
@@ -88,49 +86,6 @@ const resolveLogger = (container: SubscriberArgs["container"]) => {
   }
 }
 
-const shouldSkipFulfillment = (order?: PaymentOrder | null) => {
-  if (!order) {
-    return true
-  }
-
-  if (
-    order.fulfillment_status &&
-    order.fulfillment_status !== "not_fulfilled"
-  ) {
-    return true
-  }
-
-  return Boolean(
-    order.fulfillments?.some((fulfillment) => fulfillment?.id)
-  )
-}
-
-const resolveFulfillmentItems = (items?: PaymentOrder["items"]) => {
-  if (!Array.isArray(items)) {
-    return []
-  }
-
-  return items
-    .filter(
-      (
-        item
-      ): item is {
-        id: string
-        quantity?: number | null
-        requires_shipping?: boolean | null
-      } => Boolean(item?.id)
-    )
-    .filter((item) => item.requires_shipping !== false)
-    .map((item) => ({
-      id: item.id,
-      quantity:
-        typeof item.quantity === "number" && item.quantity > 0
-          ? item.quantity
-          : 0,
-    }))
-    .filter((item) => item.quantity > 0)
-}
-
 const waitForPaymentOrderLink = async (
   container: SubscriberArgs["container"],
   paymentId: string
@@ -164,73 +119,6 @@ const waitForPaymentOrderLink = async (
   }
 
   return false
-}
-
-const maybeCreateGlsFulfillment = async (
-  container: SubscriberArgs["container"],
-  paymentId: string
-) => {
-  const logger = resolveLogger(container)
-  const query = container.resolve<Query>(ContainerRegistrationKeys.QUERY)
-
-  try {
-    const { data: payments } = await query.graph({
-      entity: "payment",
-      fields: [
-        "id",
-        "payment_collection.order.id",
-        "payment_collection.order.fulfillment_status",
-        "payment_collection.order.fulfillments.id",
-        "payment_collection.order.items.id",
-        "payment_collection.order.items.quantity",
-        "payment_collection.order.items.requires_shipping",
-        "payment_collection.order.shipping_methods.*",
-      ],
-      filters: {
-        id: paymentId,
-      },
-    })
-
-    const payment = payments?.[0] as PaymentRecord | undefined
-    const order = payment?.payment_collection?.order
-
-    if (!order?.id) {
-      return
-    }
-
-    const shippingMethods = (order.shipping_methods ?? []).filter(
-      Boolean
-    ) as OrderShippingMethodDTO[]
-    const isGlsOrder = shippingMethods.some(isGlsShippingMethod)
-
-    if (!isGlsOrder) {
-      return
-    }
-
-    if (shouldSkipFulfillment(order)) {
-      return
-    }
-
-    const itemsToFulfill = resolveFulfillmentItems(order.items)
-    if (!itemsToFulfill.length) {
-      return
-    }
-
-    await createOrderFulfillmentWorkflow(container).run({
-      input: {
-        order_id: order.id,
-        items: itemsToFulfill,
-      },
-    })
-  } catch (error) {
-    logger?.warn?.(
-      `payment-captured: failed to auto-create GLS fulfillment for payment ${paymentId}`
-    )
-    logger?.error?.(
-      `payment-captured: error auto-creating GLS fulfillment for payment ${paymentId}`,
-      error as Error
-    )
-  }
 }
 
 const fetchOrderForBillingo = async (
@@ -552,7 +440,6 @@ export default async function paymentCapturedHandler({
   }
 
   const logger = resolveLogger(container)
-  await maybeCreateGlsFulfillment(container, data.id)
   await maybeCreateBillingoReceipt(container, data.id, logger)
 
   const hasOrderLink = await waitForPaymentOrderLink(container, data.id)

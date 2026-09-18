@@ -386,8 +386,8 @@ export const mockOrderDelivered: OrderDeliveredEmailProps = {
   },
   fulfillment: {
     delivered_at: new Date().toISOString(),
-    shipping_option_name: "GLS házhozszállítás",
-    tracking_numbers: ["GLS123456789"],
+    shipping_option_name: "Futár házhozszállítás",
+    tracking_numbers: ["123456789"],
   },
 }
 
