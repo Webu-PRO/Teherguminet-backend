@@ -145,7 +145,7 @@ describe("matching the row already in the store", () => {
 
   it("finds the existing row for a collection point", () => {
     const options = [
-      { id: "so_1", name: "GLS Házhozszállítás (1-2 nap)" },
+      { id: "so_1", name: "Futár házhozszállítás (1-2 nap)" },
       { id: "so_2", name: "Helyszíni átvétel" },
       { id: "so_3", name: "Osobný odber " },
     ]
@@ -160,6 +160,6 @@ describe("matching the row already in the store", () => {
   })
 
   it("reports nothing to convert on a store without the row", () => {
-    expect(findExistingOption([{ id: "so_1", name: "GLS" }], PICKUP_LOCATIONS[0])).toBeUndefined()
+    expect(findExistingOption([{ id: "so_1", name: "Futár" }], PICKUP_LOCATIONS[0])).toBeUndefined()
   })
 })

@@ -173,10 +173,8 @@ const resolveResendTemplateIds = () => {
     "user-invited": process.env.RESEND_TEMPLATE_ID_USER_INVITED,
     "abandoned-cart": process.env.RESEND_TEMPLATE_ID_ABANDONED_CART,
     "password-reset": process.env.RESEND_TEMPLATE_ID_PASSWORD_RESET,
-    "gls-label-cancelled": process.env.RESEND_TEMPLATE_ID_GLS_LABEL_CANCELLED,
     "order-items-cancelled":
       process.env.RESEND_TEMPLATE_ID_ORDER_ITEMS_CANCELLED,
-    "gls-shipment-created": process.env.RESEND_TEMPLATE_ID_GLS_SHIPMENT_CREATED,
   };
 
   const normalizedFromEnv = Object.entries(fromEnv).reduce<
@@ -262,10 +260,6 @@ module.exports = defineConfig({
               price_per_kg: ownDeliveryPricePerKgHuf,
               weight_unit: "kg",
             },
-          },
-          {
-            resolve: "./src/modules/fulfillment-gls",
-            id: "gls",
           },
           {
             resolve: "./src/modules/fulfillment-magyar-posta",

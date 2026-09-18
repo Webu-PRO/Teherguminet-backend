@@ -66,6 +66,9 @@ const resolveNumber = (value: unknown): number | null => {
   return null
 }
 
+// `gls_weight_kg` / `gls_weight_g` are legacy product & variant metadata keys
+// written by the retired GLS integration. The rows still exist in the database,
+// so the carrier-neutral weight lookup keeps reading them as a fallback.
 const resolveWeightFromMetadata = (
   metadata?: Record<string, unknown> | null
 ) => {
@@ -190,8 +193,6 @@ export const isWeightBasedProviderId = (
     normalized.startsWith("manual_") ||
     normalized === "tomket" ||
     normalized.startsWith("tomket_") ||
-    normalized === "gls" ||
-    normalized.startsWith("gls_") ||
     normalized === "teherguminet" ||
     normalized.includes("teherguminet")
   )

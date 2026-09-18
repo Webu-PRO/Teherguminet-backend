@@ -1,5 +1,4 @@
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
-import { isGlsShippingOption } from "./gls"
 import { isTomketShippingOption } from "./tomket"
 
 type ScopedContainer = {
@@ -192,7 +191,6 @@ export const isAllowedShippingOptionForGepek = (
   }
 
   if (
-    isGlsShippingOption(option) ||
     isTomketShippingOption(option) ||
     isMagyarPostaShippingOption(option)
   ) {

@@ -45,10 +45,6 @@ import {
   mockPaymentReceipt,
   type PaymentReceiptEmailProps,
 } from "../modules/resend/emails/payment-receipt"
-import {
-  GlsLabelCancelledEmail,
-  type GlsLabelCancelledEmailProps,
-} from "../modules/resend/emails/gls-label-cancelled"
 import { buildOrderUrl } from "../modules/resend/emails/order-email-shared"
 
 type ScriptArgs = ExecArgs & {
@@ -67,7 +63,6 @@ type ResendTemplateDefinition = {
     | "order-pickup-completed"
     | "order-pickup-cancelled"
     | "payment-receipt"
-    | "gls-label-cancelled"
   language: TemplateLanguage
   name: string
   alias: string
@@ -190,8 +185,7 @@ const withLanguage = <
     | OwnDeliveryDeliveredEmailProps
     | OrderPickupReadyEmailProps
     | OrderPickupCompletedEmailProps
-    | OrderPickupCancelledEmailProps
-    | GlsLabelCancelledEmailProps,
+    | OrderPickupCancelledEmailProps,
 >(
   props: T,
   language: TemplateLanguage
@@ -216,8 +210,7 @@ const withTemplatePlaceholders = <
     | OwnDeliveryDeliveredEmailProps
     | OrderPickupReadyEmailProps
     | OrderPickupCompletedEmailProps
-    | OrderPickupCancelledEmailProps
-    | GlsLabelCancelledEmailProps,
+    | OrderPickupCancelledEmailProps,
 >(
   props: T
 ): T => {
@@ -474,32 +467,6 @@ export default async function syncResendTemplates({
   const pickupCancelledSkProps = withTemplatePlaceholders(
     withLanguage(mockOrderPickupCancelled, "sk")
   )
-  const glsBaseProps: GlsLabelCancelledEmailProps = {
-    order: {
-      id: "order_123",
-      display_id: 42,
-      email: "partner@teherguminet.hu",
-      currency_code: "HUF",
-      shipping_address: {
-        first_name: "Partner",
-        country_code: "hu",
-      },
-    },
-    parcelNumbers: ["987654321"],
-    showSupportCta: true,
-    brand: {
-      name: "TEHERGUMINET",
-      domain: "Teherguminet.hu",
-      logoUrl: "https://teherguminet.hu/assets/email/teherguminet-mark.png",
-      logoAlt: "Teherguminet",
-    },
-  }
-  const glsCancelledHuProps = withTemplatePlaceholders(
-    withLanguage(glsBaseProps, "hu")
-  )
-  const glsCancelledSkProps = withTemplatePlaceholders(
-    withLanguage(glsBaseProps, "sk")
-  )
 
   const definitions: ResendTemplateDefinition[] = [
     {
@@ -729,34 +696,6 @@ export default async function syncResendTemplates({
             OrderPickupCancelledEmail,
             pickupCancelledSkProps as OrderPickupCancelledEmailProps
           )
-        ),
-        "sk"
-      ),
-      variables: TEMPLATE_VARIABLES,
-    },
-    {
-      key: "gls-label-cancelled",
-      language: "hu",
-      name: "Teherguminet - gls-label-cancelled",
-      alias: "teherguminet-gls-label-cancelled",
-      subject: "GLS címke törölve – Teherguminet.hu",
-      html: normalizeHtmlForResendVariables(
-        await render(
-          React.createElement(GlsLabelCancelledEmail, glsCancelledHuProps)
-        ),
-        "hu"
-      ),
-      variables: TEMPLATE_VARIABLES,
-    },
-    {
-      key: "gls-label-cancelled",
-      language: "sk",
-      name: "Teherguminet - gls-label-cancelled (SK)",
-      alias: "teherguminet-gls-label-cancelled-sk",
-      subject: "GLS štítok bol zrušený – Teherguminet.hu",
-      html: normalizeHtmlForResendVariables(
-        await render(
-          React.createElement(GlsLabelCancelledEmail, glsCancelledSkProps)
         ),
         "sk"
       ),
