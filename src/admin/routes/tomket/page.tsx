@@ -74,7 +74,9 @@ type TomketStatusResponse = {
     eurHufMarkupPercent: ResolvedSetting<number>
     includeShipping: ResolvedSetting<boolean>
     hufRounding: ResolvedSetting<number>
+    autoForwardPaidOrders: ResolvedSetting<boolean>
   }
+  shipping_option: { id: string; name: string | null } | null
   catalog: { imported_variants: number; producers: number }
   tire_types: TireType[]
   status: RunStatus
@@ -89,6 +91,7 @@ type SettingsForm = {
   eurHufMarkupPercent: string
   hufRounding: string
   includeShipping: boolean
+  autoForwardPaidOrders: boolean
 }
 
 const SOURCE_LABELS: Record<SettingSource, string> = {
@@ -120,6 +123,7 @@ const settingsFormFromResponse = (
       ? String(settings.hufRounding.value)
       : "",
   includeShipping: settings.includeShipping.value,
+  autoForwardPaidOrders: settings.autoForwardPaidOrders.value,
 })
 
 const POLL_INTERVAL_MS = 3000
@@ -161,9 +165,11 @@ const TomketPage = () => {
     eurHufMarkupPercent: "",
     hufRounding: "",
     includeShipping: false,
+    autoForwardPaidOrders: true,
   })
   const settingsDirty = useRef(false)
   const [savingSettings, setSavingSettings] = useState(false)
+  const [creatingOption, setCreatingOption] = useState(false)
 
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -227,6 +233,7 @@ const TomketPage = () => {
           eurHufMarkupPercent: textOrNull(settingsForm.eurHufMarkupPercent),
           hufRounding: textOrNull(settingsForm.hufRounding),
           includeShipping: settingsForm.includeShipping,
+          autoForwardPaidOrders: settingsForm.autoForwardPaidOrders,
         },
       })
       settingsDirty.current = false
@@ -240,6 +247,21 @@ const TomketPage = () => {
       setSavingSettings(false)
     }
   }, [load, settingsForm])
+
+  const createShippingOption = useCallback(async () => {
+    setCreatingOption(true)
+    try {
+      await sdk.client.fetch("/admin/tomket/shipping-option", { method: "POST" })
+      toast.success("Tomket szállítási opció létrehozva.")
+      await load()
+    } catch (error) {
+      toast.error(
+        readErrorMessage(error, "A szállítási opció létrehozása nem sikerült.")
+      )
+    } finally {
+      setCreatingOption(false)
+    }
+  }, [load])
 
   const startImport = useCallback(async () => {
     setStarting(true)
@@ -493,6 +515,54 @@ const TomketPage = () => {
           >
             Árazás mentése
           </Button>
+        </div>
+
+        <div className="bg-ui-bg-subtle flex flex-col gap-3 rounded-lg p-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <Text size="small" weight="plus">
+              Rendelés-továbbítás a Tomketnek
+            </Text>
+            {data?.shipping_option ? (
+              <StatusBadge color="green">
+                Szállítási opció kész: {data.shipping_option.name}
+              </StatusBadge>
+            ) : (
+              <>
+                <StatusBadge color="orange">Nincs Tomket szállítási opció</StatusBadge>
+                <Button
+                  size="small"
+                  variant="secondary"
+                  onClick={createShippingOption}
+                  isLoading={creatingOption}
+                  disabled={creatingOption}
+                >
+                  Létrehozás
+                </Button>
+              </>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <Switch
+              id="tomket-auto-forward"
+              checked={settingsForm.autoForwardPaidOrders}
+              onCheckedChange={(checked) =>
+                updateSetting("autoForwardPaidOrders", Boolean(checked))
+              }
+            />
+            <Label htmlFor="tomket-auto-forward">
+              Fizetett rendelés Tomket-tételeit automatikusan továbbítja
+              (fulfillment + Tomket API rendelés)
+            </Label>
+          </div>
+          <Text size="xsmall" className="text-ui-fg-muted">
+            Kártyás fizetésnél a rendelés leadása után azonnal, utalás /
+            utánvét esetén akkor, amikor a fizetést rögzíted. Kikapcsolva a
+            rendelésnél kézzel kell „Tomket dropship” fulfillmentet
+            létrehozni. Most:{" "}
+            {data?.settings?.autoForwardPaidOrders.value ? "be" : "ki"} (
+            {SOURCE_LABELS[data?.settings?.autoForwardPaidOrders.source ?? "default"]}
+            ). A mentés az „Árazás mentése” gombbal történik.
+          </Text>
         </div>
       </Container>
 

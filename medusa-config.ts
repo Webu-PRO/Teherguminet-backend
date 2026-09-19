@@ -295,6 +295,30 @@ module.exports = defineConfig({
         ],
       },
     },
+    // Distributed locks (Redis) so subscribers that must not run twice for
+    // the same order — the Tomket auto-forward — stay single even when the
+    // server and a worker process both consume events. Falls back to the
+    // in-memory provider when no Redis URL is configured (local dev).
+    ...(process.env.LOCKING_REDIS_URL || process.env.REDIS_URL
+      ? {
+          locking: {
+            resolve: "@medusajs/locking",
+            options: {
+              providers: [
+                {
+                  resolve: "@medusajs/locking-redis",
+                  id: "locking-redis",
+                  is_default: true,
+                  options: {
+                    redisUrl:
+                      process.env.LOCKING_REDIS_URL || process.env.REDIS_URL,
+                  },
+                },
+              ],
+            },
+          },
+        }
+      : {}),
     file: {
       resolve: "@medusajs/file",
       options: {
