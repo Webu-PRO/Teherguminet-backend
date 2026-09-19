@@ -62,11 +62,17 @@ const useTomketRowBadges = (enabled: boolean) => {
         chip.textContent = "Tomket"
         chip.title = "Tomket dropship – a beszállító raktárából, rendelésre"
 
-        // Sit next to the title text: the cell wraps thumbnail + title in one
-        // flex container, so appending to it keeps the chip on the same line.
-        const target =
-          (image.parentElement?.parentElement as HTMLElement | null) ?? cell
-        target.appendChild(chip)
+        // The dashboard's ProductCell renders `div.flex > [div > Thumbnail]
+        // + span[title]` (verified against @medusajs/dashboard 2.x,
+        // chunk ProductCell). Placing the chip right after the title span
+        // keeps it on the same line; if that span is ever missing, fall back
+        // to the cell itself so the marker still shows.
+        const titleSpan = cell.querySelector<HTMLElement>("span[title]")
+        if (titleSpan) {
+          titleSpan.insertAdjacentElement("afterend", chip)
+        } else {
+          cell.appendChild(chip)
+        }
         row.setAttribute(ROW_ATTR, "true")
       }
     }
@@ -148,19 +154,32 @@ const ProductListTomketWidget = () => {
   }
 
   const params = new URLSearchParams(location.search)
-  const filtered = Boolean(tagId) && params.get("tag_id") === tagId
+  // The dashboard's tag filter is a multiselect: several tag_id values may
+  // be present, and other filters / the search box / paging live in the
+  // same query string, so only touch the Tomket tag and keep the rest.
+  const filtered = Boolean(tagId) && params.getAll("tag_id").includes(tagId!)
 
   const showTomketOnly = () => {
     if (!tagId) {
       return
     }
-    const next = new URLSearchParams()
+    const next = new URLSearchParams(location.search)
+    next.delete("tag_id")
     next.set("tag_id", tagId)
+    next.delete("offset")
     navigate(`${location.pathname}?${next.toString()}`)
   }
 
   const clearFilter = () => {
-    navigate(location.pathname)
+    const next = new URLSearchParams(location.search)
+    const others = next.getAll("tag_id").filter((id) => id !== tagId)
+    next.delete("tag_id")
+    for (const id of others) {
+      next.append("tag_id", id)
+    }
+    next.delete("offset")
+    const query = next.toString()
+    navigate(query ? `${location.pathname}?${query}` : location.pathname)
   }
 
   return (
