@@ -118,6 +118,6 @@ describe("mirrorTomketImages when the upload fails", () => {
     expect(result.copied).toBe(0)
     expect(result.failed[0].reason).toMatch(/AWS Access Key/)
     expect(resolveMirroredImageUrl(result.map, A)).toBe(A)
-    expect(messages.at(-1)).toMatch(/nem sikerült átmásolni .*AWS Access Key/)
+    expect(messages.at(-1)).toMatch(/nem sikerült átmásolni.*AWS Access Key/)
   })
 })
