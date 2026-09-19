@@ -16,6 +16,7 @@ type SettingsBody = {
   eurHufMarkupPercent?: number | string | null
   includeShipping?: boolean | string | null
   hufRounding?: number | string | null
+  autoForwardPaidOrders?: boolean | string | null
 }
 
 /**

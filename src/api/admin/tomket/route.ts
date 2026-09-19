@@ -5,6 +5,7 @@ import { resolveTomketConfig } from "../../../lib/tomket"
 import { resolveTomketCountry, TOMKET_TIRE_TYPES } from "../../../lib/tomket-feed"
 import { TOMKET_SKU_PREFIX } from "../../../lib/tomket-catalog"
 import { resolveTomketPricing } from "../../../lib/tomket-fx"
+import { findTomketShippingOption } from "../../../lib/tomket-shipping"
 import { readTomketStatus } from "../../../lib/tomket-status"
 
 export async function GET(req: MedusaRequest, res: MedusaResponse) {
@@ -51,6 +52,7 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
         }
       : null,
     settings,
+    shipping_option: await findTomketShippingOption(req.scope),
     catalog: {
       imported_variants: variants?.length ?? 0,
       producers: producers.size,

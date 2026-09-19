@@ -25,6 +25,8 @@ export type TomketSettings = {
   includeShipping: boolean | null
   /** Round HUF prices to this multiple. */
   hufRounding: number | null
+  /** Hand paid orders' Tomket items to the supplier automatically. */
+  autoForwardPaidOrders: boolean | null
   updatedAt: string | null
 }
 
@@ -34,6 +36,7 @@ export const EMPTY_TOMKET_SETTINGS: TomketSettings = {
   eurHufMarkupPercent: null,
   includeShipping: null,
   hufRounding: null,
+  autoForwardPaidOrders: null,
   updatedAt: null,
 }
 
@@ -89,31 +92,37 @@ export const parseTomketSettingsInput = (
     return value
   }
 
-  const includeShippingRaw = input.includeShipping
-  let includeShipping: boolean | null
-  if (includeShippingRaw === null || includeShippingRaw === undefined) {
-    includeShipping = null
-  } else if (typeof includeShippingRaw === "boolean") {
-    includeShipping = includeShippingRaw
-  } else {
-    const text = String(includeShippingRaw).trim().toLowerCase()
-    if (text === "true" || text === "1") {
-      includeShipping = true
-    } else if (text === "false" || text === "0" || text === "") {
-      includeShipping = text === "" ? null : false
-    } else {
-      throw new TomketSettingsValidationError(
-        "Szállítás beépítése: true/false kell."
-      )
+  const boolean = (key: string, label: string): boolean | null => {
+    const raw = input[key]
+    if (raw === null || raw === undefined) {
+      return null
     }
+    if (typeof raw === "boolean") {
+      return raw
+    }
+    const text = String(raw).trim().toLowerCase()
+    if (text === "true" || text === "1") {
+      return true
+    }
+    if (text === "false" || text === "0") {
+      return false
+    }
+    if (text === "") {
+      return null
+    }
+    throw new TomketSettingsValidationError(`${label}: true/false kell.`)
   }
 
   return {
     marginPercentHuf: numeric("marginPercentHuf", "Árrés (HUF)"),
     marginPercentEur: numeric("marginPercentEur", "Árrés (EUR)"),
     eurHufMarkupPercent: numeric("eurHufMarkupPercent", "Árfolyam felár"),
-    includeShipping,
+    includeShipping: boolean("includeShipping", "Szállítás beépítése"),
     hufRounding: numeric("hufRounding", "Kerekítés"),
+    autoForwardPaidOrders: boolean(
+      "autoForwardPaidOrders",
+      "Automatikus továbbítás"
+    ),
   }
 }
 
@@ -138,6 +147,10 @@ export const readTomketSettings = async (
         ? candidate.includeShipping
         : null,
     hufRounding: num(candidate.hufRounding),
+    autoForwardPaidOrders:
+      typeof candidate.autoForwardPaidOrders === "boolean"
+        ? candidate.autoForwardPaidOrders
+        : null,
     updatedAt:
       typeof candidate.updatedAt === "string" ? candidate.updatedAt : null,
   }
@@ -172,6 +185,8 @@ export type ResolvedTomketSettings = {
   eurHufMarkupPercent: ResolvedTomketSetting<number>
   includeShipping: ResolvedTomketSetting<boolean>
   hufRounding: ResolvedTomketSetting<number>
+  /** Default on: the shop only lists, the supplier ships. */
+  autoForwardPaidOrders: ResolvedTomketSetting<boolean>
 }
 
 /**
@@ -237,6 +252,13 @@ export const resolveTomketSettings = (
     10
   )
 
+  const envAutoForward = (process.env.TOMKET_AUTO_FORWARD ?? "").trim().toLowerCase()
+  const autoForward = pick(
+    settings.autoForwardPaidOrders,
+    envAutoForward ? envAutoForward === "true" : null,
+    true
+  )
+
   return {
     marginPercentHuf,
     marginPercentEur,
@@ -251,6 +273,10 @@ export const resolveTomketSettings = (
     hufRounding: {
       value: rounding.value && rounding.value > 0 ? rounding.value : 10,
       source: rounding.source,
+    },
+    autoForwardPaidOrders: {
+      value: autoForward.value ?? true,
+      source: autoForward.source,
     },
   }
 }
