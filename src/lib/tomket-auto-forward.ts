@@ -143,8 +143,8 @@ const ORDER_FIELDS = [
   "payment_collections.payments.canceled_at",
 ]
 
-/** Seconds to wait for the per-order lock before giving up this attempt. */
-const LOCK_TIMEOUT_SECONDS = 30
+/** Lock wait and TTL in seconds; the job itself takes 2–10 s, this is headroom. */
+const LOCK_TIMEOUT_SECONDS = 60
 
 export type AutoForwardResult =
   | { outcome: "skipped"; reason: string }
