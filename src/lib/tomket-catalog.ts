@@ -47,14 +47,22 @@ const parseNonNegativeNumber = (value: string | undefined) => {
 /**
  * Both the FX rate and the markup are required. Defaulting either one would
  * silently publish the supplier's cost price as our retail price.
+ *
+ * The rate normally comes from the daily ECB fetch (see tomket-fx.ts), passed
+ * in as `overrides.eurHufRate`; TOMKET_EUR_HUF_RATE is the manual fallback.
  */
-export const resolveTomketPricingConfig = (): {
+export const resolveTomketPricingConfig = (
+  overrides: { eurHufRate?: number } = {}
+): {
   config?: TomketPricingConfig
   missing: string[]
 } => {
   const missing: string[] = []
 
-  const eurHufRate = parsePositiveNumber(process.env.TOMKET_EUR_HUF_RATE)
+  const eurHufRate =
+    overrides.eurHufRate !== undefined && overrides.eurHufRate > 0
+      ? overrides.eurHufRate
+      : parsePositiveNumber(process.env.TOMKET_EUR_HUF_RATE)
   if (eurHufRate === undefined) {
     missing.push("TOMKET_EUR_HUF_RATE")
   }

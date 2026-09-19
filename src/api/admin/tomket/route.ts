@@ -3,18 +3,19 @@ import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
 
 import { resolveTomketConfig } from "../../../lib/tomket"
 import { resolveTomketCountry, TOMKET_TIRE_TYPES } from "../../../lib/tomket-feed"
-import {
-  resolveTomketPricingConfig,
-  TOMKET_SKU_PREFIX,
-} from "../../../lib/tomket-catalog"
+import { TOMKET_SKU_PREFIX } from "../../../lib/tomket-catalog"
+import { resolveTomketPricing } from "../../../lib/tomket-fx"
 import { readTomketStatus } from "../../../lib/tomket-status"
 
 export async function GET(req: MedusaRequest, res: MedusaResponse) {
   const query = req.scope.resolve(ContainerRegistrationKeys.QUERY)
 
   const { config, missing } = resolveTomketConfig()
-  const { config: pricing, missing: missingPricing } =
-    resolveTomketPricingConfig()
+  const {
+    config: pricing,
+    missing: missingPricing,
+    fx,
+  } = await resolveTomketPricing(req.scope)
 
   const { data: variants } = await query.graph({
     entity: "product_variant",
@@ -39,6 +40,9 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
     pricing: pricing
       ? {
           eur_huf_rate: pricing.eurHufRate,
+          eur_huf_source: fx?.source ?? null,
+          eur_huf_date: fx?.date ?? null,
+          eur_huf_markup_percent: fx?.markupPercent ?? 0,
           margin_percent_huf: pricing.marginPercentHuf,
           margin_percent_eur: pricing.marginPercentEur,
           include_shipping: pricing.includeShipping,

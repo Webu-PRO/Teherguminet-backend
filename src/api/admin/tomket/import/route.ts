@@ -6,6 +6,7 @@ import {
   TomketImportConfigError,
 } from "../../../../lib/tomket-import"
 import {
+  isTomketRunActive,
   readTomketStatus,
   releaseTomketRun,
   tryAcquireTomketRun,
@@ -47,7 +48,7 @@ export async function POST(
     throw error
   }
 
-  if (current.state === "running") {
+  if (isTomketRunActive(current)) {
     releaseTomketRun()
     throw new MedusaError(
       MedusaError.Types.NOT_ALLOWED,

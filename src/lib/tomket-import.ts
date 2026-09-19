@@ -11,6 +11,7 @@ import {
 import type { MedusaContainer } from "@medusajs/types"
 
 import { resolveTomketConfig } from "./tomket"
+import { resolveTomketPricing } from "./tomket-fx"
 import {
   fetchTomketFullFeed,
   fetchTomketStockFeed,
@@ -22,7 +23,6 @@ import {
   calculateTomketPrices,
   mapTomketRowsToDrafts,
   parseTomketSku,
-  resolveTomketPricingConfig,
   type TomketProductDraft,
 } from "./tomket-catalog"
 
@@ -350,6 +350,17 @@ const syncInventoryLevels = async (
   }
 }
 
+const describeFx = (
+  fx: Awaited<ReturnType<typeof resolveTomketPricing>>["fx"]
+) =>
+  !fx
+    ? "Árfolyam: nincs."
+    : fx.source === "env"
+      ? `Árfolyam: ${fx.rate} Ft/EUR (kézi, TOMKET_EUR_HUF_RATE).`
+      : `Árfolyam: ${fx.rate} Ft/EUR (ECB ${fx.date}${
+          fx.markupPercent ? `, +${fx.markupPercent}% felár` : ""
+        }).`
+
 export const runTomketImport = async (
   container: MedusaContainer,
   options: TomketImportOptions = {}
@@ -358,13 +369,18 @@ export const runTomketImport = async (
   const report = options.onProgress ?? (() => {})
 
   const { config, missing } = resolveTomketConfig()
-  const { config: pricing, missing: missingPricing } =
-    resolveTomketPricingConfig()
+  const {
+    config: pricing,
+    missing: missingPricing,
+    fx,
+  } = await resolveTomketPricing(container)
 
   const allMissing = [...missing, ...missingPricing]
   if (!config || !pricing) {
     throw new TomketImportConfigError(allMissing)
   }
+
+  report(describeFx(fx))
 
   const country = resolveTomketCountry()
   report(`Feed letöltése: ${country} …`)
@@ -559,12 +575,17 @@ export const runTomketStockSync = async (
 ) => {
   const report = options.onProgress ?? (() => {})
   const { config, missing } = resolveTomketConfig()
-  const { config: pricing, missing: missingPricing } =
-    resolveTomketPricingConfig()
+  const {
+    config: pricing,
+    missing: missingPricing,
+    fx,
+  } = await resolveTomketPricing(container)
 
   if (!config || !pricing) {
     throw new TomketImportConfigError([...missing, ...missingPricing])
   }
+
+  report(describeFx(fx))
 
   const country = resolveTomketCountry()
   const feed = await fetchTomketStockFeed(config, country)
