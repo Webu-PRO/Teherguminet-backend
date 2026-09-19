@@ -68,10 +68,59 @@ type TomketStatusResponse = {
     include_shipping: boolean
     huf_rounding: number
   } | null
+  settings: {
+    marginPercentHuf: ResolvedSetting<number | null>
+    marginPercentEur: ResolvedSetting<number | null>
+    eurHufMarkupPercent: ResolvedSetting<number>
+    includeShipping: ResolvedSetting<boolean>
+    hufRounding: ResolvedSetting<number>
+  }
   catalog: { imported_variants: number; producers: number }
   tire_types: TireType[]
   status: RunStatus
 }
+
+type SettingSource = "admin" | "env" | "default" | "inherited" | "missing"
+type ResolvedSetting<T> = { value: T; source: SettingSource }
+
+type SettingsForm = {
+  marginPercentHuf: string
+  marginPercentEur: string
+  eurHufMarkupPercent: string
+  hufRounding: string
+  includeShipping: boolean
+}
+
+const SOURCE_LABELS: Record<SettingSource, string> = {
+  admin: "admin beállítás",
+  env: "env változó",
+  default: "alapértelmezés",
+  inherited: "mint a HUF",
+  missing: "nincs megadva",
+}
+
+const settingsFormFromResponse = (
+  settings: TomketStatusResponse["settings"]
+): SettingsForm => ({
+  marginPercentHuf:
+    settings.marginPercentHuf.source === "admin"
+      ? String(settings.marginPercentHuf.value ?? "")
+      : "",
+  marginPercentEur:
+    settings.marginPercentEur.source === "admin" &&
+    settings.marginPercentEur.value !== null
+      ? String(settings.marginPercentEur.value)
+      : "",
+  eurHufMarkupPercent:
+    settings.eurHufMarkupPercent.source === "admin"
+      ? String(settings.eurHufMarkupPercent.value)
+      : "",
+  hufRounding:
+    settings.hufRounding.source === "admin"
+      ? String(settings.hufRounding.value)
+      : "",
+  includeShipping: settings.includeShipping.value,
+})
 
 const POLL_INTERVAL_MS = 3000
 
@@ -106,6 +155,16 @@ const TomketPage = () => {
   const [types, setTypes] = useState<string[]>([])
   const [skipOutOfStock, setSkipOutOfStock] = useState(true)
 
+  const [settingsForm, setSettingsForm] = useState<SettingsForm>({
+    marginPercentHuf: "",
+    marginPercentEur: "",
+    eurHufMarkupPercent: "",
+    hufRounding: "",
+    includeShipping: false,
+  })
+  const settingsDirty = useRef(false)
+  const [savingSettings, setSavingSettings] = useState(false)
+
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const load = useCallback(async () => {
@@ -115,6 +174,9 @@ const TomketPage = () => {
       })) as TomketStatusResponse
 
       setData(payload)
+      if (!settingsDirty.current && payload.settings) {
+        setSettingsForm(settingsFormFromResponse(payload.settings))
+      }
     } catch (error) {
       toast.error(readErrorMessage(error, "Nem sikerült betölteni a Tomket állapotot."))
     } finally {
@@ -142,6 +204,42 @@ const TomketPage = () => {
       }
     }
   }, [data, load])
+
+  const updateSetting = <K extends keyof SettingsForm>(
+    key: K,
+    value: SettingsForm[K]
+  ) => {
+    settingsDirty.current = true
+    setSettingsForm((current) => ({ ...current, [key]: value }))
+  }
+
+  const saveSettings = useCallback(async () => {
+    setSavingSettings(true)
+    try {
+      // Empty field = "use the env default"; the API parses the numbers.
+      const textOrNull = (value: string) =>
+        value.trim() === "" ? null : value.trim()
+      await sdk.client.fetch("/admin/tomket/settings", {
+        method: "POST",
+        body: {
+          marginPercentHuf: textOrNull(settingsForm.marginPercentHuf),
+          marginPercentEur: textOrNull(settingsForm.marginPercentEur),
+          eurHufMarkupPercent: textOrNull(settingsForm.eurHufMarkupPercent),
+          hufRounding: textOrNull(settingsForm.hufRounding),
+          includeShipping: settingsForm.includeShipping,
+        },
+      })
+      settingsDirty.current = false
+      toast.success(
+        "Árazás mentve. A készlet-szinkron 15 percen belül átárazza a katalógust."
+      )
+      await load()
+    } catch (error) {
+      toast.error(readErrorMessage(error, "Az árazás mentése nem sikerült."))
+    } finally {
+      setSavingSettings(false)
+    }
+  }, [load, settingsForm])
 
   const startImport = useCallback(async () => {
     setStarting(true)
@@ -276,6 +374,125 @@ const TomketPage = () => {
               </Text>
             )}
           </div>
+        </div>
+      </Container>
+
+      <Container className="flex flex-col gap-4 p-6">
+        <div className="flex flex-col gap-1">
+          <Heading level="h2">Árazás beállításai</Heading>
+          <Text size="small" className="text-ui-fg-subtle">
+            Itt állítod a hasznot; üres mező = a TOMKET_* env változó
+            értéke. Az árfolyam az ECB-től jön naponta. Mentés után a
+            15 perces készlet-szinkron átárazza a teljes Tomket katalógust.
+          </Text>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="tomket-margin-huf">Árrés, HUF régió (%)</Label>
+            <Input
+              id="tomket-margin-huf"
+              type="number"
+              min={0}
+              step="0.5"
+              placeholder={
+                data?.settings?.marginPercentHuf.value !== null &&
+                data?.settings?.marginPercentHuf.value !== undefined
+                  ? String(data.settings.marginPercentHuf.value)
+                  : "pl. 20"
+              }
+              value={settingsForm.marginPercentHuf}
+              onChange={(event) =>
+                updateSetting("marginPercentHuf", event.target.value)
+              }
+            />
+            <Text size="xsmall" className="text-ui-fg-muted">
+              Most: {data?.settings?.marginPercentHuf.value ?? "—"}% (
+              {SOURCE_LABELS[data?.settings?.marginPercentHuf.source ?? "missing"]})
+            </Text>
+            {(settingsForm.marginPercentHuf.trim() === "0" ||
+              data?.settings?.marginPercentHuf.value === 0) && (
+              <Text size="xsmall" className="text-ui-fg-error">
+                0% árrés: a katalógus a beszerzési áron menne ki.
+              </Text>
+            )}
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="tomket-margin-eur">Árrés, EUR régió (%)</Label>
+            <Input
+              id="tomket-margin-eur"
+              type="number"
+              min={0}
+              step="0.5"
+              placeholder="üres = mint a HUF"
+              value={settingsForm.marginPercentEur}
+              onChange={(event) =>
+                updateSetting("marginPercentEur", event.target.value)
+              }
+            />
+            <Text size="xsmall" className="text-ui-fg-muted">
+              Most: {data?.settings?.marginPercentEur.value ?? "—"}% (
+              {SOURCE_LABELS[data?.settings?.marginPercentEur.source ?? "missing"]})
+            </Text>
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="tomket-fx-markup">Árfolyam felár az ECB-re (%)</Label>
+            <Input
+              id="tomket-fx-markup"
+              type="number"
+              min={0}
+              step="0.1"
+              placeholder="0"
+              value={settingsForm.eurHufMarkupPercent}
+              onChange={(event) =>
+                updateSetting("eurHufMarkupPercent", event.target.value)
+              }
+            />
+            <Text size="xsmall" className="text-ui-fg-muted">
+              Most: +{data?.settings?.eurHufMarkupPercent.value ?? 0}% (
+              {SOURCE_LABELS[data?.settings?.eurHufMarkupPercent.source ?? "default"]})
+            </Text>
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="tomket-rounding">HUF ár kerekítése (Ft)</Label>
+            <Input
+              id="tomket-rounding"
+              type="number"
+              min={1}
+              step="1"
+              placeholder="10"
+              value={settingsForm.hufRounding}
+              onChange={(event) => updateSetting("hufRounding", event.target.value)}
+            />
+            <Text size="xsmall" className="text-ui-fg-muted">
+              Most: {data?.settings?.hufRounding.value ?? 10} Ft (
+              {SOURCE_LABELS[data?.settings?.hufRounding.source ?? "default"]})
+            </Text>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Switch
+              id="tomket-include-shipping"
+              checked={settingsForm.includeShipping}
+              onCheckedChange={(checked) =>
+                updateSetting("includeShipping", Boolean(checked))
+              }
+            />
+            <Label htmlFor="tomket-include-shipping">
+              Tomket darabonkénti szállítási díj beépítése az árba
+            </Label>
+          </div>
+          <Button
+            size="small"
+            variant="primary"
+            onClick={saveSettings}
+            isLoading={savingSettings}
+            disabled={savingSettings}
+          >
+            Árazás mentése
+          </Button>
         </div>
       </Container>
 
