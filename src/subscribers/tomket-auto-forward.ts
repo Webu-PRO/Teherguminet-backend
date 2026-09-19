@@ -45,12 +45,9 @@ const resolveOrderIdFromPayment = async (
 export default async function tomketAutoForward({
   event: { name, data },
   container,
-}: SubscriberArgs<{ id?: string }>) {
+}: SubscriberArgs<{ id: string }>) {
   const logger = container.resolve(ContainerRegistrationKeys.LOGGER)
-  const id = data?.id
-  if (!id) {
-    return
-  }
+  const id = data.id
 
   const orderId =
     name === "order.placed"

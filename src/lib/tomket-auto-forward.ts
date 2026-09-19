@@ -143,9 +143,8 @@ const ORDER_FIELDS = [
   "payment_collections.payments.canceled_at",
 ]
 
-// One order at a time: order.placed and payment.captured can arrive within
-// the same second for a card payment.
-const inFlight = new Set<string>()
+/** Seconds to wait for the per-order lock before giving up this attempt. */
+const LOCK_TIMEOUT_SECONDS = 30
 
 export type AutoForwardResult =
   | { outcome: "skipped"; reason: string }
@@ -160,65 +159,63 @@ export const autoForwardTomketOrder = async (
     return { outcome: "skipped", reason: "automatikus továbbítás kikapcsolva" }
   }
 
-  if (inFlight.has(orderId)) {
-    return { outcome: "skipped", reason: "már folyamatban" }
+  // order.placed and payment.captured arrive within the same second for a
+  // card payment, possibly in different processes (server + worker). The
+  // lock serialises them across processes; the plan inside it re-reads the
+  // order, so the second run sees the first run's fulfillment and skips.
+  const locking = container.resolve(Modules.LOCKING)
+  return locking.execute(
+    `tomket-auto-forward:${orderId}`,
+    () => forwardUnderLock(container, orderId),
+    { timeout: LOCK_TIMEOUT_SECONDS }
+  )
+}
+
+const forwardUnderLock = async (
+  container: MedusaContainer,
+  orderId: string
+): Promise<AutoForwardResult> => {
+  const query = container.resolve(ContainerRegistrationKeys.QUERY)
+  const { data } = await query.graph({
+    entity: "order",
+    fields: ORDER_FIELDS,
+    filters: { id: orderId },
+  })
+  const order = (data?.[0] ?? null) as ForwardableOrder | null
+  if (!order) {
+    return { outcome: "skipped", reason: "a rendelés nem található" }
   }
-  inFlight.add(orderId)
 
-  try {
-    const query = container.resolve(ContainerRegistrationKeys.QUERY)
-    const { data } = await query.graph({
-      entity: "order",
-      fields: ORDER_FIELDS,
-      filters: { id: orderId },
-    })
-    const order = (data?.[0] ?? null) as ForwardableOrder | null
-    if (!order) {
-      return { outcome: "skipped", reason: "a rendelés nem található" }
-    }
+  const plan = planTomketForward(order)
+  if (plan.action === "skip") {
+    return { outcome: "skipped", reason: plan.reason }
+  }
 
-    const plan = planTomketForward(order)
-    if (plan.action === "skip") {
-      return { outcome: "skipped", reason: plan.reason }
-    }
+  const { option } = await ensureTomketShippingOption(container)
 
-    const { option } = await ensureTomketShippingOption(container)
-
-    const { result } = await createOrderFulfillmentWorkflow(container).run({
-      input: {
-        order_id: order.id,
-        items: plan.items,
-        shipping_option_id: option.id,
-        requires_shipping: true,
-        no_notification: false,
-        metadata: {
-          [TOMKET_AUTO_FORWARD_METADATA_KEY]: {
-            at: new Date().toISOString(),
-            internal_ids: plan.internalIds,
-          },
-        },
-      },
-    })
-
-    const orderService = container.resolve(Modules.ORDER)
-    await orderService.updateOrders(order.id, {
+  const { result } = await createOrderFulfillmentWorkflow(container).run({
+    input: {
+      order_id: order.id,
+      items: plan.items,
+      shipping_option_id: option.id,
+      requires_shipping: true,
+      no_notification: false,
       metadata: {
-        ...(order.metadata ?? {}),
         [TOMKET_AUTO_FORWARD_METADATA_KEY]: {
-          state: "fulfillment_created",
-          fulfillment_id: result.id,
-          items: plan.items.length,
           at: new Date().toISOString(),
+          internal_ids: plan.internalIds,
         },
       },
-    })
+    },
+  })
 
-    return {
-      outcome: "fulfilled",
-      fulfillmentId: result.id,
-      items: plan.items.length,
-    }
-  } finally {
-    inFlight.delete(orderId)
+  // The run is recorded on the fulfillment's metadata (above) and by the
+  // Tomket subscriber's own record; the order's metadata is deliberately
+  // left alone — other subscribers (Billingo) write it concurrently and a
+  // read-spread-write here would race with them.
+  return {
+    outcome: "fulfilled",
+    fulfillmentId: result.id,
+    items: plan.items.length,
   }
 }
