@@ -80,7 +80,7 @@ type TomketStatusResponse = {
   status: RunStatus
 }
 
-type SettingSource = "admin" | "env" | "default" | "missing"
+type SettingSource = "admin" | "env" | "default" | "inherited" | "missing"
 type ResolvedSetting<T> = { value: T; source: SettingSource }
 
 type SettingsForm = {
@@ -95,6 +95,7 @@ const SOURCE_LABELS: Record<SettingSource, string> = {
   admin: "admin beállítás",
   env: "env változó",
   default: "alapértelmezés",
+  inherited: "mint a HUF",
   missing: "nincs megadva",
 }
 
@@ -215,15 +216,16 @@ const TomketPage = () => {
   const saveSettings = useCallback(async () => {
     setSavingSettings(true)
     try {
-      const toNumberOrNull = (value: string) =>
+      // Empty field = "use the env default"; the API parses the numbers.
+      const textOrNull = (value: string) =>
         value.trim() === "" ? null : value.trim()
       await sdk.client.fetch("/admin/tomket/settings", {
         method: "POST",
         body: {
-          marginPercentHuf: toNumberOrNull(settingsForm.marginPercentHuf),
-          marginPercentEur: toNumberOrNull(settingsForm.marginPercentEur),
-          eurHufMarkupPercent: toNumberOrNull(settingsForm.eurHufMarkupPercent),
-          hufRounding: toNumberOrNull(settingsForm.hufRounding),
+          marginPercentHuf: textOrNull(settingsForm.marginPercentHuf),
+          marginPercentEur: textOrNull(settingsForm.marginPercentEur),
+          eurHufMarkupPercent: textOrNull(settingsForm.eurHufMarkupPercent),
+          hufRounding: textOrNull(settingsForm.hufRounding),
           includeShipping: settingsForm.includeShipping,
         },
       })
@@ -408,6 +410,12 @@ const TomketPage = () => {
               Most: {data?.settings?.marginPercentHuf.value ?? "—"}% (
               {SOURCE_LABELS[data?.settings?.marginPercentHuf.source ?? "missing"]})
             </Text>
+            {(settingsForm.marginPercentHuf.trim() === "0" ||
+              data?.settings?.marginPercentHuf.value === 0) && (
+              <Text size="xsmall" className="text-ui-fg-error">
+                0% árrés: a katalógus a beszerzési áron menne ki.
+              </Text>
+            )}
           </div>
           <div className="flex flex-col gap-1">
             <Label htmlFor="tomket-margin-eur">Árrés, EUR régió (%)</Label>

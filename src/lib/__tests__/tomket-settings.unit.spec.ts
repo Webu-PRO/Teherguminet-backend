@@ -94,7 +94,7 @@ describe("resolveTomketSettings", () => {
       marginPercentHuf: 30,
     })
     expect(resolved.marginPercentHuf).toEqual({ value: 30, source: "admin" })
-    expect(resolved.marginPercentEur).toEqual({ value: 30, source: "admin" })
+    expect(resolved.marginPercentEur).toEqual({ value: 30, source: "inherited" })
     expect(resolved.hufRounding).toEqual({ value: 10, source: "default" })
   })
 
@@ -160,5 +160,28 @@ describe("catalogue enrichment", () => {
       label: "Személy nyári",
     })
     expect(buildTomketTypeCategory("AG").handle).toBe("mezogazdasagi-gumi")
+  })
+})
+
+describe("settings edge cases", () => {
+  it("accepts a zero margin explicitly (B2B / cost-price mode) but never by accident", () => {
+    expect(parseTomketSettingsInput({ marginPercentHuf: "0" }).marginPercentHuf).toBe(0)
+    expect(parseTomketSettingsInput({ marginPercentHuf: "" }).marginPercentHuf).toBeNull()
+  })
+
+  it("reads includeShipping from booleans and 1/0 strings, rejects garbage", () => {
+    expect(parseTomketSettingsInput({ includeShipping: "1" }).includeShipping).toBe(true)
+    expect(parseTomketSettingsInput({ includeShipping: 0 }).includeShipping).toBe(false)
+    expect(() => parseTomketSettingsInput({ includeShipping: "maybe" })).toThrow(
+      TomketSettingsValidationError
+    )
+  })
+
+  it("marks the EUR margin as inherited when only HUF is set", () => {
+    const resolved = resolveTomketSettings({
+      ...EMPTY_TOMKET_SETTINGS,
+      marginPercentHuf: 30,
+    })
+    expect(resolved.marginPercentEur).toEqual({ value: 30, source: "inherited" })
   })
 })

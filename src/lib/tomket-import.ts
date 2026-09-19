@@ -623,9 +623,13 @@ export const runTomketImport = async (
           },
         ]
       })
-      if (productUpdates.length) {
+      // One update per product even if two SKUs ever map to the same one.
+      const uniqueProductUpdates = Array.from(
+        new Map(productUpdates.map((update) => [update.id, update])).values()
+      )
+      if (uniqueProductUpdates.length) {
         await updateProductsWorkflow(container).run({
-          input: { products: productUpdates },
+          input: { products: uniqueProductUpdates },
         })
       }
 

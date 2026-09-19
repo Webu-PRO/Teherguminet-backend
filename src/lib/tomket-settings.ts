@@ -37,7 +37,12 @@ export const EMPTY_TOMKET_SETTINGS: TomketSettings = {
   updatedAt: null,
 }
 
-export type TomketSettingsSource = "admin" | "env" | "default" | "missing"
+export type TomketSettingsSource =
+  | "admin"
+  | "env"
+  | "default"
+  | "inherited"
+  | "missing"
 
 const LIMITS = {
   marginPercentHuf: { min: 0, max: 500 },
@@ -85,12 +90,23 @@ export const parseTomketSettingsInput = (
   }
 
   const includeShippingRaw = input.includeShipping
-  const includeShipping =
-    includeShippingRaw === null || includeShippingRaw === undefined
-      ? null
-      : typeof includeShippingRaw === "boolean"
-        ? includeShippingRaw
-        : String(includeShippingRaw).trim().toLowerCase() === "true"
+  let includeShipping: boolean | null
+  if (includeShippingRaw === null || includeShippingRaw === undefined) {
+    includeShipping = null
+  } else if (typeof includeShippingRaw === "boolean") {
+    includeShipping = includeShippingRaw
+  } else {
+    const text = String(includeShippingRaw).trim().toLowerCase()
+    if (text === "true" || text === "1") {
+      includeShipping = true
+    } else if (text === "false" || text === "0" || text === "") {
+      includeShipping = text === "" ? null : false
+    } else {
+      throw new TomketSettingsValidationError(
+        "Szállítás beépítése: true/false kell."
+      )
+    }
+  }
 
   return {
     marginPercentHuf: numeric("marginPercentHuf", "Árrés (HUF)"),
@@ -190,10 +206,15 @@ export const resolveTomketSettings = (
     parseEnvNumber(process.env.TOMKET_MARGIN_PERCENT_EUR),
     null
   )
+  // No EUR margin of its own → it follows the HUF margin; say so, rather
+  // than reporting the HUF value's source as if EUR had been set.
   const marginPercentEur: ResolvedTomketSetting<number | null> =
     marginPercentEurRaw.value !== null
       ? marginPercentEurRaw
-      : { value: marginPercentHuf.value, source: marginPercentHuf.source }
+      : {
+          value: marginPercentHuf.value,
+          source: marginPercentHuf.value !== null ? "inherited" : "missing",
+        }
 
   const markup = pick(
     settings.eurHufMarkupPercent,
