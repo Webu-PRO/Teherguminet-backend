@@ -14,6 +14,7 @@ import type { MedusaContainer } from "@medusajs/types"
 
 import { resolveTomketConfig } from "./tomket"
 import { resolveTomketPricing } from "./tomket-fx"
+import { mirrorTomketImages, resolveMirroredImageUrl } from "./tomket-images"
 import {
   fetchTomketFullFeed,
   fetchTomketStockFeed,
@@ -521,6 +522,20 @@ export const runTomketImport = async (
 
   report(`${toCreate.length} új termék, ${toUpdate.length} meglévő frissítése.`)
 
+  // Serve the photos from the shop's own storage instead of hot-linking the
+  // supplier's CDN. Failures fall back to the supplier URL per photo.
+  const mirrored = await mirrorTomketImages(
+    container,
+    drafts.map((draft) => draft.imageUrl).filter((url): url is string => Boolean(url)),
+    { onProgress: report }
+  )
+  for (const draft of drafts) {
+    draft.imageUrl = resolveMirroredImageUrl(mirrored.map, draft.imageUrl)
+  }
+  if (mirrored.copied) {
+    report(`Képek: ${mirrored.copied} új fotó átmásolva, ${mirrored.reused} újrahasznált.`)
+  }
+
   const failed: TomketImportResult["failed"] = []
   let created = 0
   let updated = 0
@@ -615,6 +630,7 @@ export const runTomketImport = async (
             subtitle: payload.subtitle,
             description: payload.description,
             thumbnail: payload.thumbnail,
+            images: payload.images,
             type_id: payload.type_id,
             collection_id: payload.collection_id,
             category_ids: payload.category_ids,
