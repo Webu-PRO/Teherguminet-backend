@@ -1,9 +1,10 @@
 import type { MedusaContainer } from "@medusajs/framework/types"
 
 import { resolveTomketConfig } from "../lib/tomket"
-import { resolveTomketPricingConfig } from "../lib/tomket-catalog"
+import { resolveTomketPricing } from "../lib/tomket-fx"
 import { runTomketStockSync } from "../lib/tomket-import"
 import {
+  isTomketRunActive,
   readTomketStatus,
   releaseTomketRun,
   tryAcquireTomketRun,
@@ -17,7 +18,7 @@ export default async function syncTomketStockJob(container: MedusaContainer) {
   const logger = container.resolve("logger")
 
   const { missing } = resolveTomketConfig()
-  const { missing: missingPricing } = resolveTomketPricingConfig()
+  const { missing: missingPricing } = await resolveTomketPricing(container)
   const allMissing = [...missing, ...missingPricing]
 
   if (allMissing.length) {
@@ -36,8 +37,7 @@ export default async function syncTomketStockJob(container: MedusaContainer) {
   }
 
   try {
-    const { state } = await readTomketStatus(container)
-    if (state === "running") {
+    if (isTomketRunActive(await readTomketStatus(container))) {
       logger.info("[tomket] Készlet szinkron kihagyva: import fut.")
       return
     }

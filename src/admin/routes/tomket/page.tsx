@@ -60,6 +60,9 @@ type TomketStatusResponse = {
   country: string
   pricing: {
     eur_huf_rate: number
+    eur_huf_source: "env" | "ecb" | null
+    eur_huf_date: string | null
+    eur_huf_markup_percent: number
     margin_percent_huf: number
     margin_percent_eur: number
     include_shipping: boolean
@@ -254,7 +257,15 @@ const TomketPage = () => {
             </Text>
             {data?.pricing ? (
               <Text size="small" className="mt-1">
-                {data.pricing.eur_huf_rate} Ft/EUR · +
+                {data.pricing.eur_huf_rate} Ft/EUR
+                {data.pricing.eur_huf_source === "ecb"
+                  ? ` (ECB ${data.pricing.eur_huf_date ?? ""}${
+                      data.pricing.eur_huf_markup_percent
+                        ? `, +${data.pricing.eur_huf_markup_percent}%`
+                        : ""
+                    }, naponta frissül)`
+                  : " (kézi)"}{" "}
+                · +
                 {data.pricing.margin_percent_huf}% (HUF) · +
                 {data.pricing.margin_percent_eur}% (EUR)
                 {data.pricing.include_shipping ? " · szállítás beépítve" : ""}
