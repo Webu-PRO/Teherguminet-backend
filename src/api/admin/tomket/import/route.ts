@@ -5,6 +5,7 @@ import {
   runTomketImport,
   TomketImportConfigError,
 } from "../../../../lib/tomket-import"
+import { notifyStorefrontFacetRevalidate } from "../../../../lib/storefront-revalidate"
 import {
   isTomketRunActive,
   readTomketStatus,
@@ -110,6 +111,10 @@ export async function POST(
         log,
         result,
       })
+
+      if (!dryRun) {
+        await notifyStorefrontFacetRevalidate(logger)
+      }
     } catch (error) {
       const message =
         error instanceof TomketImportConfigError

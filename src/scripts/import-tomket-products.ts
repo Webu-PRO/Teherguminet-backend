@@ -5,6 +5,7 @@ import {
   TomketImportConfigError,
   type TomketImportOptions,
 } from "../lib/tomket-import"
+import { notifyStorefrontFacetRevalidate } from "../lib/storefront-revalidate"
 
 const readFlag = (args: string[], name: string) =>
   args.includes(`--${name}`)
@@ -59,6 +60,10 @@ export default async function importTomketProducts({
       `[tomket] Kész — feed: ${result.feed.rows} sor, feldolgozható: ${result.eligible}, ` +
         `létrehozva: ${result.created}, frissítve: ${result.updated}, hiba: ${result.failed.length}.`
     )
+
+    if (!result.dryRun) {
+      await notifyStorefrontFacetRevalidate(logger)
+    }
 
     if (result.dryRun) {
       logger.info("[tomket] Minta az első tételekből:")
