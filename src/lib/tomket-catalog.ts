@@ -51,8 +51,17 @@ const parseNonNegativeNumber = (value: string | undefined) => {
  * The rate normally comes from the daily ECB fetch (see tomket-fx.ts), passed
  * in as `overrides.eurHufRate`; TOMKET_EUR_HUF_RATE is the manual fallback.
  */
+export type TomketPricingOverrides = {
+  eurHufRate?: number
+  /** From the admin settings (store metadata); env is the fallback. */
+  marginPercentHuf?: number | null
+  marginPercentEur?: number | null
+  includeShipping?: boolean | null
+  hufRounding?: number | null
+}
+
 export const resolveTomketPricingConfig = (
-  overrides: { eurHufRate?: number } = {}
+  overrides: TomketPricingOverrides = {}
 ): {
   config?: TomketPricingConfig
   missing: string[]
@@ -67,9 +76,11 @@ export const resolveTomketPricingConfig = (
     missing.push("TOMKET_EUR_HUF_RATE")
   }
 
-  const marginPercentHuf = parseNonNegativeNumber(
-    process.env.TOMKET_MARGIN_PERCENT
-  )
+  const marginPercentHuf =
+    typeof overrides.marginPercentHuf === "number" &&
+    overrides.marginPercentHuf >= 0
+      ? overrides.marginPercentHuf
+      : parseNonNegativeNumber(process.env.TOMKET_MARGIN_PERCENT)
   if (marginPercentHuf === undefined) {
     missing.push("TOMKET_MARGIN_PERCENT")
   }
@@ -78,20 +89,33 @@ export const resolveTomketPricingConfig = (
     return { missing }
   }
 
+  const marginPercentEur =
+    typeof overrides.marginPercentEur === "number" &&
+    overrides.marginPercentEur >= 0
+      ? overrides.marginPercentEur
+      : (parseNonNegativeNumber(process.env.TOMKET_MARGIN_PERCENT_EUR) ??
+        marginPercentHuf)
+
+  const includeShipping =
+    typeof overrides.includeShipping === "boolean"
+      ? overrides.includeShipping
+      : (process.env.TOMKET_INCLUDE_SHIPPING_IN_PRICE || "")
+          .trim()
+          .toLowerCase() === "true"
+
+  const hufRounding =
+    typeof overrides.hufRounding === "number" && overrides.hufRounding > 0
+      ? overrides.hufRounding
+      : (parsePositiveNumber(process.env.TOMKET_HUF_ROUNDING) ?? 10)
+
   return {
     missing,
     config: {
       eurHufRate,
       marginPercentHuf,
-      marginPercentEur:
-        parseNonNegativeNumber(process.env.TOMKET_MARGIN_PERCENT_EUR) ??
-        marginPercentHuf,
-      includeShipping:
-        (process.env.TOMKET_INCLUDE_SHIPPING_IN_PRICE || "")
-          .trim()
-          .toLowerCase() === "true",
-      hufRounding:
-        parsePositiveNumber(process.env.TOMKET_HUF_ROUNDING) ?? 10,
+      marginPercentEur,
+      includeShipping,
+      hufRounding,
     },
   }
 }
@@ -180,43 +204,131 @@ const LABEL_CLASS_LABELS: Record<string, string> = {
 const formatLabelClass = (value?: string) =>
   value ? LABEL_CLASS_LABELS[value.toLowerCase()] ?? value.toUpperCase() : null
 
+/** Storefront category per tyre type: "Személy nyári gumi" → szemely-nyari-gumi. */
+export const buildTomketTypeCategory = (tireType: string) => {
+  const info = TOMKET_TIRE_TYPES[tireType]
+  const label = info?.label ?? tireType
+  const name = `${label} gumi`
+  return { name, handle: slugify(name), label }
+}
+
+const VEHICLE_NOTES: Record<string, string> = {
+  személy:
+    "Személyautókhoz és kisebb haszongépjárművekhez fejlesztett abroncs. A méret, a terhelési index és a sebességjel a jármű forgalmi engedélyében vagy a gyári adattáblán megadott értékekkel egyezzen; tengelyenként azonos mintázatú párokat javasolt szerelni.",
+  teher:
+    "Kis- és nagyhaszonjárművekhez, teherautókhoz készült abroncs. A terhelési indexet a tengelyterheléssel együtt kell értékelni, a mintázat pedig a tengelypozícióhoz (kormányzott, hajtott, pótkocsi) és a jellemző útvonalhoz igazodjon.",
+  terep:
+    "SUV, 4x4 és terepjáró felhasználásra tervezett abroncs, megerősített szerkezettel. Vegyes használatnál a burkolt és burkolatlan utak arányát is érdemes figyelembe venni a mintázat kiválasztásakor.",
+  motor:
+    "Motorkerékpár-abroncs. Első és hátsó kerékre eltérő méret és mintázat tartozhat, ezért szerelés előtt ellenőrizze a gyártó előírását és a felni szélességét.",
+  verseny:
+    "Sport- és versenycélú abroncs, amelyet elsősorban zárt pályás vagy sportos használatra fejlesztettek. Közúti használhatóságát a jelölések és a hatályos előírások alapján ellenőrizze.",
+  mezőgazdasági:
+    "Mezőgazdasági gépekhez és munkagépekhez való abroncs. A talajkímélés, a vonóerő és a megengedett terhelés a gép feladatától és a felni méretétől függ.",
+}
+
+const SEASON_NOTES: Record<string, string> = {
+  nyári:
+    "Nyári abroncs: 7 °C feletti hőmérsékleten adja a legjobb tapadást és a legrövidebb féktávot, száraz és nedves úton egyaránt.",
+  téli:
+    "Téli abroncs: 7 °C alatt, havas és latyakos úton is megőrzi a rugalmasságát és a tapadását. A téli használatra való alkalmasságot a 3PMSF (hópehely) jelölés igazolja.",
+  négyévszakos:
+    "Négyévszakos abroncs: egész évben használható kompromisszum a nyári és a téli abroncs között, mérsékelt téli körülményekre és városi használatra.",
+}
+
+const formatWeight = (row: TomketTireRow) =>
+  row.weightKg !== undefined
+    ? `${new Intl.NumberFormat("hu-HU", { maximumFractionDigits: 1 }).format(
+        row.weightKg
+      )} kg`
+    : ""
+
+/**
+ * Follows the existing catalogue's description style: a short intro, "- "
+ * bullet facts, then plain paragraphs and a "Választási útmutató" section.
+ * The storefront renders it with whitespace-pre-line.
+ */
 export const buildTomketDescription = (row: TomketTireRow) => {
   const typeInfo = TOMKET_TIRE_TYPES[row.tireType]
-  const lines: string[] = []
+  const producer = row.producer.trim()
+  const design = row.design.trim()
+  const designation = buildTomketDesignation(row)
+  const typeLabel = typeInfo?.label ?? row.tireType
 
-  lines.push(
-    `${row.producer} ${row.design} ${buildTomketDesignation(row)} gumiabroncs.`
-  )
-
-  if (typeInfo) {
-    lines.push(`Kategória: ${typeInfo.label}.`)
-  }
+  const facts: string[] = [
+    `- méret: ${buildTomketSize(row)}`,
+    `${row.loadIndex.trim()}${row.speedIndex.trim()}`.trim()
+      ? `- terhelési index / sebességjel: ${row.loadIndex.trim()}${row.speedIndex.trim()}`
+      : "",
+    `- gyártó: ${producer}`,
+    design ? `- mintázat: ${design}` : "",
+    `- kategória: ${typeLabel}`,
+  ]
 
   const labelParts = [
     formatLabelClass(row.label.rollingResistance) &&
       `gördülési ellenállás ${formatLabelClass(row.label.rollingResistance)}`,
     formatLabelClass(row.label.wetGrip) &&
       `nedves tapadás ${formatLabelClass(row.label.wetGrip)}`,
-    row.label.noiseValue && `zajszint ${row.label.noiseValue} dB`,
+    row.label.noiseValue &&
+      `zajszint ${row.label.noiseValue} dB${
+        row.label.noiseClass ? ` (${row.label.noiseClass})` : ""
+      }`,
   ].filter(Boolean)
-
   if (labelParts.length) {
-    lines.push(`EU címke: ${labelParts.join(", ")}.`)
+    facts.push(`- EU címke: ${labelParts.join(", ")}`)
   }
 
   const features = [
     row.extraLoad && "Extra Load (XL)",
     row.runflat && "Runflat",
     row.rimFringeProtector && "felnivédő perem",
-    row.label.snowGrip && "3PMSF hó szimbólum",
+    row.label.snowGrip && "3PMSF hópehely jelölés",
     row.label.iceGrip && "jégtapadás jelölés",
   ].filter(Boolean)
-
   if (features.length) {
-    lines.push(`Jellemzők: ${features.join(", ")}.`)
+    facts.push(`- jellemzők: ${features.join(", ")}`)
   }
 
-  return lines.join(" ")
+  const weight = formatWeight(row)
+  if (weight) {
+    facts.push(`- tömeg: ${weight}`)
+  }
+  if (row.ean) {
+    facts.push(`- EAN: ${row.ean}`)
+  }
+
+  const paragraphs = [
+    `${producer} ${design} ${designation} — ${typeLabel.toLowerCase()} gumiabroncs.`,
+    facts.filter(Boolean).join("\n\n"),
+    typeInfo?.vehicle ? VEHICLE_NOTES[typeInfo.vehicle] : "",
+    typeInfo?.season ? SEASON_NOTES[typeInfo.season] : "",
+    "Választási útmutató",
+    `A ${designation} jelölés a termék pontos azonosítását segíti. Rendelés előtt hasonlítsa össze a teljes méretjelölést a jelenlegi abroncs oldalfalával és a jármű gyártói előírásával: a méretnek, a terhelési indexnek és a sebességjelnek egyeznie kell, vagy azoknál magasabbnak kell lennie.`,
+    "Tengelyenként azonos mintázatú és azonos állapotú abroncsokat javasolt használni. A felszerelést megfelelő géppel rendelkező szakműhely végezze, a légnyomást a jármű terheléséhez kell beállítani. Átvételkor ellenőrizze a méretet és az oldalfali jelöléseket; eltérés esetén felszerelés előtt jelezze.",
+    "A termék a beszállító raktárából, rendelésre érkezik. A készletadat naponta többször frissül; a feltüntetett darabszám a rendelés pillanatában elérhető mennyiséget mutatja.",
+  ].filter(Boolean)
+
+  return paragraphs.join("\n\n")
+}
+
+const truncate = (value: string, max: number) =>
+  value.length <= max ? value : `${value.slice(0, max - 1).trimEnd()}…`
+
+/** Same keys the hand-made catalogue uses (see existing products' metadata). */
+export const buildTomketSeo = (row: TomketTireRow) => {
+  const typeInfo = TOMKET_TIRE_TYPES[row.tireType]
+  const typeLabel = (typeInfo?.label ?? row.tireType).toLowerCase()
+  const producer = row.producer.trim()
+  const title = buildTomketTitle(row)
+
+  return {
+    seo_title: truncate(`${title} ${producer} ${typeLabel} gumi | TehergumiNet`, 70),
+    seo_description: truncate(
+      `${producer} ${row.design.trim()} ${buildTomketDesignation(row)} ${typeLabel} gumiabroncs: méretadatok, EU címke, aktuális készlet és ár. Rendelés online, kiszállítás raktárról.`,
+      160
+    ),
+  }
 }
 
 export const buildTomketVariantMetadata = (
@@ -259,6 +371,9 @@ export type TomketProductDraft = {
   producer: string
   producerHandle: string
   tireType: string
+  /** "Személy nyári gumi" / szemely-nyari-gumi — the storefront category. */
+  typeCategory: { name: string; handle: string; label: string }
+  subtitle: string
   tags: string[]
   /** Grams — the shop stores variant weight in grams (see lib/cart-weight.ts). */
   weightGrams?: number
@@ -330,6 +445,10 @@ export const mapTomketRowsToDrafts = (
       producer: row.producer.trim(),
       producerHandle,
       tireType: row.tireType,
+      typeCategory: buildTomketTypeCategory(row.tireType),
+      subtitle: `${row.producer.trim()} · ${
+        TOMKET_TIRE_TYPES[row.tireType]?.label ?? row.tireType
+      }`,
       tags: buildTomketTags(row),
       weightGrams:
         row.weightKg !== undefined
@@ -340,6 +459,7 @@ export const mapTomketRowsToDrafts = (
       prices,
       variantMetadata: buildTomketVariantMetadata(row, prices),
       productMetadata: {
+        ...buildTomketSeo(row),
         tomket_internal_id: row.internalId,
         tomket_producer: row.producer.trim(),
         tomket_type: row.tireType,
