@@ -1,0 +1,5 @@
+- [x] Measure existing live pagination and inspect the dashboard query contract.
+- [x] Add a regression check for adjacent-page prefetch and filter preservation.
+- [x] Implement a product-list-only prefetch widget using the existing query cache.
+- [x] Verify boundaries, invalidation, errors and cleanup; run unit tests and admin build.
+- [x] Compare browser pagination timings and validate release artifacts before PR delivery.
