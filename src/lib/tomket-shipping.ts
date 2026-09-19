@@ -1,30 +1,43 @@
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils"
-import { createShippingOptionsWorkflow } from "@medusajs/medusa/core-flows"
+import {
+  createShippingOptionsWorkflow,
+  updateShippingOptionsWorkflow,
+} from "@medusajs/medusa/core-flows"
 import type { Link } from "@medusajs/modules-sdk"
 import type { MedusaContainer } from "@medusajs/types"
 
 import { resolveTomketCountry } from "./tomket-feed"
+import { readTomketSettings, resolveTomketSettings } from "./tomket-settings"
 
 /**
- * The shipping option the shop uses to hand an order (or the Tomket part of
- * it) to the supplier. Creating a fulfillment with it fires
- * subscribers/tomket-fulfillment-created.ts, which places the order on the
- * Tomket API. It is admin-only: `enabled_in_store=false` keeps it out of the
- * checkout, shoppers keep choosing the normal delivery options and pay the
- * shop's shipping fee; the supplier's per-piece fee is already in the price
- * (or absorbed, see TOMKET_INCLUDE_SHIPPING_IN_PRICE).
+ * The shipping option a shopper picks for Tomket tyres: the supplier ships
+ * from its own warehouse straight to the buyer. It is shown at checkout
+ * (enabled_in_store=true) and, by tomket-cart-rules.ts, it is the only
+ * option offered when the cart holds a Tomket tyre — and never offered
+ * otherwise. Creating a fulfillment with it (the auto-forward, or the
+ * operator) fires subscribers/tomket-fulfillment-created.ts, which places
+ * the order on the Tomket API.
+ *
+ * The price the shopper pays is a flat amount from the admin Tomket
+ * settings (HUF / EUR). The supplier's own per-piece fee is separate: fold
+ * it into the product price with "szállítási díj beépítése", or cover it
+ * with this flat amount.
  */
 
 /** module id "tomket" + provider identifier "tomket" */
 export const TOMKET_PROVIDER_ID = "tomket_tomket"
-export const TOMKET_SHIPPING_OPTION_NAME = "Tomket dropship"
+export const TOMKET_SHIPPING_OPTION_NAME = "Tomket szállítás"
 export const TOMKET_SHIPPING_TYPE_CODE = "tomket-dropship"
+export const TOMKET_SHIPPING_DESCRIPTION =
+  "A gumit a beszállító (Tomket) raktárából szállítjuk közvetlenül Önnek."
 
 export type TomketShippingOption = {
   id: string
   name: string | null
   provider_id: string | null
   service_zone_id: string | null
+  price_type?: string | null
+  rules?: Array<{ attribute?: string | null; value?: unknown }> | null
 }
 
 type StockLocationRecord = {
@@ -46,7 +59,16 @@ export const findTomketShippingOption = async (
   const query = container.resolve(ContainerRegistrationKeys.QUERY)
   const { data } = await query.graph({
     entity: "shipping_option",
-    fields: ["id", "name", "provider_id", "service_zone_id", "deleted_at"],
+    fields: [
+      "id",
+      "name",
+      "provider_id",
+      "service_zone_id",
+      "price_type",
+      "deleted_at",
+      "rules.attribute",
+      "rules.value",
+    ],
     filters: { provider_id: TOMKET_PROVIDER_ID },
   })
 
@@ -57,16 +79,51 @@ export const findTomketShippingOption = async (
   return option ?? null
 }
 
+/** The flat shopper price per currency, from the admin settings. */
+export const resolveTomketShippingPrices = async (
+  container: MedusaContainer
+) => {
+  const settings = resolveTomketSettings(await readTomketSettings(container))
+  return [
+    { currency_code: "huf", amount: settings.shippingPriceHuf.value },
+    { currency_code: "eur", amount: settings.shippingPriceEur.value },
+  ]
+}
+
+export const isStoreEnabled = (option: TomketShippingOption) =>
+  (option.rules ?? []).some(
+    (rule) =>
+      rule.attribute === "enabled_in_store" && String(rule.value) === "true"
+  )
+
 /**
- * Creates the admin-only Tomket shipping option once. Reuses the existing
- * one on later calls, so it is safe to run from a button and from the
- * auto-forward path alike.
+ * Creates the Tomket shipping option once, or upgrades an earlier
+ * admin-only one (the first revision hid it from the store) to the
+ * shopper-facing definition. Idempotent.
  */
-export const ensureTomketShippingOption = async (
+let ensureInFlight: Promise<{
+  option: TomketShippingOption
+  created: boolean
+}> | null = null
+
+export const ensureTomketShippingOption = (
+  container: MedusaContainer
+): Promise<{ option: TomketShippingOption; created: boolean }> => {
+  // Two carts hitting the store listing at once must not create two
+  // options; the second caller waits for the first run.
+  if (!ensureInFlight) {
+    ensureInFlight = ensureTomketShippingOptionOnce(container).finally(() => {
+      ensureInFlight = null
+    })
+  }
+  return ensureInFlight
+}
+
+const ensureTomketShippingOptionOnce = async (
   container: MedusaContainer
 ): Promise<{ option: TomketShippingOption; created: boolean }> => {
   const existing = await findTomketShippingOption(container)
-  if (existing) {
+  if (existing && isStoreEnabled(existing)) {
     return { option: existing, created: false }
   }
 
@@ -128,27 +185,30 @@ export const ensureTomketShippingOption = async (
     })
   }
 
+  // An admin-only option from the first revision is retired rather than
+  // edited in place: the rule set and the name both change, and a fresh
+  // row is the one path the create workflow fully supports.
+  if (existing) {
+    await fulfillment.softDeleteShippingOptions([existing.id])
+  }
+
   const { result } = await createShippingOptionsWorkflow(container).run({
     input: [
       {
         name: TOMKET_SHIPPING_OPTION_NAME,
         price_type: "flat",
         provider_id: TOMKET_PROVIDER_ID,
-        service_zone_id: serviceZoneId,
+        service_zone_id: existing?.service_zone_id ?? serviceZoneId,
         shipping_profile_id: shippingProfile.id,
         data: { id: "tomket" },
         type: {
           label: TOMKET_SHIPPING_OPTION_NAME,
-          description:
-            "A beszállító (Tomket) raktárából, közvetlenül a vevőnek. Csak admin használatra.",
+          description: TOMKET_SHIPPING_DESCRIPTION,
           code: TOMKET_SHIPPING_TYPE_CODE,
         },
-        prices: [
-          { currency_code: "huf", amount: 0 },
-          { currency_code: "eur", amount: 0 },
-        ],
+        prices: await resolveTomketShippingPrices(container),
         rules: [
-          { attribute: "enabled_in_store", operator: "eq", value: "false" },
+          { attribute: "enabled_in_store", operator: "eq", value: "true" },
           { attribute: "is_return", operator: "eq", value: "false" },
         ],
       },
@@ -162,7 +222,34 @@ export const ensureTomketShippingOption = async (
       name: created.name,
       provider_id: created.provider_id ?? TOMKET_PROVIDER_ID,
       service_zone_id: created.service_zone_id ?? serviceZoneId,
+      price_type: "flat",
     },
     created: true,
   }
+}
+
+/**
+ * Re-applies the flat prices from the settings to the live option. Called
+ * after the operator saves the settings, so a price change reaches the
+ * checkout without recreating anything.
+ */
+export const syncTomketShippingOptionPrices = async (
+  container: MedusaContainer
+) => {
+  const option = await findTomketShippingOption(container)
+  if (!option || !isStoreEnabled(option)) {
+    return null
+  }
+
+  await updateShippingOptionsWorkflow(container).run({
+    input: [
+      {
+        id: option.id,
+        price_type: "flat",
+        prices: await resolveTomketShippingPrices(container),
+      },
+    ],
+  })
+
+  return option
 }

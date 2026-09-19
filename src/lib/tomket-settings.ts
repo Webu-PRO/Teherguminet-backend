@@ -27,6 +27,9 @@ export type TomketSettings = {
   hufRounding: number | null
   /** Hand paid orders' Tomket items to the supplier automatically. */
   autoForwardPaidOrders: boolean | null
+  /** Flat price the shopper pays for the Tomket shipping option. */
+  shippingPriceHuf: number | null
+  shippingPriceEur: number | null
   updatedAt: string | null
 }
 
@@ -37,6 +40,8 @@ export const EMPTY_TOMKET_SETTINGS: TomketSettings = {
   includeShipping: null,
   hufRounding: null,
   autoForwardPaidOrders: null,
+  shippingPriceHuf: null,
+  shippingPriceEur: null,
   updatedAt: null,
 }
 
@@ -52,6 +57,8 @@ const LIMITS = {
   marginPercentEur: { min: 0, max: 500 },
   eurHufMarkupPercent: { min: 0, max: 50 },
   hufRounding: { min: 1, max: 10000 },
+  shippingPriceHuf: { min: 0, max: 1000000 },
+  shippingPriceEur: { min: 0, max: 10000 },
 } as const
 
 const finiteOrNull = (value: unknown) => {
@@ -123,6 +130,8 @@ export const parseTomketSettingsInput = (
       "autoForwardPaidOrders",
       "Automatikus továbbítás"
     ),
+    shippingPriceHuf: numeric("shippingPriceHuf", "Tomket szállítás díja (HUF)"),
+    shippingPriceEur: numeric("shippingPriceEur", "Tomket szállítás díja (EUR)"),
   }
 }
 
@@ -151,6 +160,8 @@ export const readTomketSettings = async (
       typeof candidate.autoForwardPaidOrders === "boolean"
         ? candidate.autoForwardPaidOrders
         : null,
+    shippingPriceHuf: num(candidate.shippingPriceHuf),
+    shippingPriceEur: num(candidate.shippingPriceEur),
     updatedAt:
       typeof candidate.updatedAt === "string" ? candidate.updatedAt : null,
   }
@@ -187,6 +198,9 @@ export type ResolvedTomketSettings = {
   hufRounding: ResolvedTomketSetting<number>
   /** Default on: the shop only lists, the supplier ships. */
   autoForwardPaidOrders: ResolvedTomketSetting<boolean>
+  /** Flat shopper price of the Tomket shipping option; default 0. */
+  shippingPriceHuf: ResolvedTomketSetting<number>
+  shippingPriceEur: ResolvedTomketSetting<number>
 }
 
 /**
@@ -252,6 +266,17 @@ export const resolveTomketSettings = (
     10
   )
 
+  const shippingHuf = pick(
+    settings.shippingPriceHuf,
+    parseEnvNumber(process.env.TOMKET_SHIPPING_PRICE_HUF),
+    0
+  )
+  const shippingEur = pick(
+    settings.shippingPriceEur,
+    parseEnvNumber(process.env.TOMKET_SHIPPING_PRICE_EUR),
+    0
+  )
+
   const envAutoForward = (process.env.TOMKET_AUTO_FORWARD ?? "").trim().toLowerCase()
   const autoForward = pick(
     settings.autoForwardPaidOrders,
@@ -277,6 +302,14 @@ export const resolveTomketSettings = (
     autoForwardPaidOrders: {
       value: autoForward.value ?? true,
       source: autoForward.source,
+    },
+    shippingPriceHuf: {
+      value: Math.max(0, shippingHuf.value ?? 0),
+      source: shippingHuf.source,
+    },
+    shippingPriceEur: {
+      value: Math.max(0, shippingEur.value ?? 0),
+      source: shippingEur.source,
     },
   }
 }

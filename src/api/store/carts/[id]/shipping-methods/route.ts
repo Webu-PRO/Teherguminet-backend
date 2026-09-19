@@ -15,6 +15,12 @@ import {
   isMagyarPostaShippingOption,
   resolveShippingOptionForRules,
 } from "../../../../../lib/gepek-cart-rules"
+import {
+  cartContainsTomketItems,
+  isTomketCheckoutOption,
+  TOMKET_NOT_APPLICABLE_MESSAGE,
+  TOMKET_ONLY_MESSAGE,
+} from "../../../../../lib/tomket-cart-rules"
 
 type AddShippingMethodPayload = {
   option_id: string
@@ -39,7 +45,23 @@ export async function POST(
     )
   }
 
-  const hasGepekItems = await cartContainsGepekItems(req.scope, req.params.id)
+  const hasTomketItems = await cartContainsTomketItems(req.scope, req.params.id)
+  const optionIsTomket = isTomketCheckoutOption(option)
+  if (hasTomketItems && !optionIsTomket) {
+    throw new MedusaError(MedusaError.Types.NOT_ALLOWED, TOMKET_ONLY_MESSAGE)
+  }
+  if (!hasTomketItems && optionIsTomket) {
+    throw new MedusaError(
+      MedusaError.Types.NOT_ALLOWED,
+      TOMKET_NOT_APPLICABLE_MESSAGE
+    )
+  }
+
+  // With a Tomket tyre the Tomket option is the answer; the machine rule
+  // only constrains carts without one (see store/shipping-options).
+  const hasGepekItems = hasTomketItems
+    ? false
+    : await cartContainsGepekItems(req.scope, req.params.id)
 
   if (hasGepekItems && !isAllowedShippingOptionForGepek(option)) {
     throw new MedusaError(

@@ -58,6 +58,8 @@ describe("parseTomketSettingsInput", () => {
       hufRounding: 100,
       includeShipping: true,
       autoForwardPaidOrders: null,
+      shippingPriceHuf: null,
+      shippingPriceEur: null,
     })
   })
 

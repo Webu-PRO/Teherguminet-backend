@@ -11,6 +11,11 @@ import {
   cartContainsGepekItems,
   isAllowedShippingOptionForGepek,
 } from "../../../lib/gepek-cart-rules"
+import {
+  cartContainsTomketItems,
+  filterShippingOptionsForTomket,
+} from "../../../lib/tomket-cart-rules"
+import { ensureTomketShippingOption } from "../../../lib/tomket-shipping"
 
 type ShippingOptionsQuery = {
   cart_id?: string
@@ -68,25 +73,59 @@ export async function GET(
 
   const isReturnRaw = query.is_return ?? filterable.is_return
 
-  const baseWorkflow = listShippingOptionsForCartWorkflow(req.scope)
-  const { result: baseOptions } = await baseWorkflow.run({
-    input: {
-      cart_id: cartId,
-      is_return: isReturnRaw === "true" || isReturnRaw === true,
-    },
-  })
+  const isReturn = isReturnRaw === "true" || isReturnRaw === true
+  const listBaseOptions = async () => {
+    const { result } = await listShippingOptionsForCartWorkflow(req.scope).run({
+      input: { cart_id: cartId, is_return: isReturn },
+    })
+    return result ?? []
+  }
+
+  let baseOptions = await listBaseOptions()
+
+  // Dropship tyres ship from the supplier: with a Tomket tyre in the cart
+  // only the Tomket option is offered, without one it is never offered.
+  const hasTomketItems = await cartContainsTomketItems(req.scope, cartId)
+
+  // A Tomket cart with no shopper-facing Tomket option would have nothing
+  // to choose (the rule below hides everything else), so create or upgrade
+  // the option on the spot — once; later requests find it in the list.
+  if (
+    hasTomketItems &&
+    !isReturn &&
+    !filterShippingOptionsForTomket(baseOptions, true).length
+  ) {
+    try {
+      await ensureTomketShippingOption(req.scope)
+      baseOptions = await listBaseOptions()
+    } catch (error) {
+      resolveLogger(req)?.warn?.(
+        "[store/shipping-options] could not ensure the Tomket shipping option",
+        error instanceof Error ? error.message : String(error)
+      )
+    }
+  }
 
   if (!baseOptions?.length) {
     res.json({ shipping_options: [] })
     return
   }
 
-  const hasGepekItems = await cartContainsGepekItems(req.scope, cartId)
-  const eligibleOptions = hasGepekItems
-    ? baseOptions.filter((option) =>
-        isAllowedShippingOptionForGepek(option)
-      )
-    : baseOptions
+  // Precedence: a Tomket tyre decides the shipping on its own (the machine
+  // rule would strip the Tomket option and leave a mixed cart with nothing
+  // to choose); the machine rule applies only to carts without one.
+  let eligibleOptions: typeof baseOptions
+  if (hasTomketItems) {
+    eligibleOptions = filterShippingOptionsForTomket(baseOptions, true)
+  } else {
+    const hasGepekItems = await cartContainsGepekItems(req.scope, cartId)
+    const gepekFiltered = hasGepekItems
+      ? baseOptions.filter((option) =>
+          isAllowedShippingOptionForGepek(option)
+        )
+      : baseOptions
+    eligibleOptions = filterShippingOptionsForTomket(gepekFiltered, false)
+  }
 
   if (!eligibleOptions.length) {
     res.json({ shipping_options: [] })
@@ -111,7 +150,7 @@ export async function GET(
   const pricingWorkflow = listShippingOptionsForCartWithPricingWorkflow(req.scope)
   const pricingInput = {
     cart_id: cartId,
-    is_return: isReturnRaw === "true" || isReturnRaw === true,
+    is_return: isReturn,
   }
 
   try {
