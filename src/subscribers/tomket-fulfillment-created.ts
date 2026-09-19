@@ -136,6 +136,11 @@ export default async function tomketFulfillmentCreated({
       "order.shipping_address.*",
       "order.billing_address.*",
       "order.items.*",
+      // Imported dropship tyres carry the supplier id in variant metadata, so
+      // it has to be selected explicitly — "order.items.*" does not include it.
+      "order.items.variant.id",
+      "order.items.variant.sku",
+      "order.items.variant.metadata",
       "order.shipping_methods.*",
     ],
     filters: {

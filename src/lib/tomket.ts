@@ -96,6 +96,25 @@ type ExpandedOrderLineItem = OrderLineItemDTO & {
 
 const DEFAULT_TIMEOUT_MS = 15000
 
+/**
+ * SKU prefix for tyres pulled from the Tomket dropship catalogue. Lives here,
+ * not in tomket-catalog, so the order path can read it without importing the
+ * import machinery (and without a module cycle).
+ */
+export const TOMKET_SKU_PREFIX = "TOMKET-"
+
+export const buildTomketSku = (internalId: string) =>
+  `${TOMKET_SKU_PREFIX}${internalId}`
+
+export const parseTomketSku = (sku: string | null | undefined) => {
+  if (typeof sku !== "string" || !sku.startsWith(TOMKET_SKU_PREFIX)) {
+    return null
+  }
+
+  const id = sku.slice(TOMKET_SKU_PREFIX.length).trim()
+  return /^\d{1,7}$/.test(id) ? id : null
+}
+
 const normalizeString = (value?: string | null) => {
   if (typeof value !== "string") {
     return ""
@@ -382,6 +401,15 @@ const resolveItemInternalId = (item: ExpandedOrderLineItem) => {
     { source: "metadata.tire_id", value: metadata.tire_id },
     { source: "metadata.internal_id", value: metadata.internal_id },
     { source: "metadata.supplier_id", value: metadata.supplier_id },
+    {
+      source: "variant_sku.tomket_prefix",
+      value: parseTomketSku(item.variant_sku),
+    },
+    { source: "sku.tomket_prefix", value: parseTomketSku(item.sku) },
+    {
+      source: "variant.sku.tomket_prefix",
+      value: parseTomketSku(item.variant?.sku),
+    },
     { source: "variant_sku", value: item.variant_sku },
     { source: "sku", value: item.sku },
     { source: "variant.sku", value: item.variant?.sku },
