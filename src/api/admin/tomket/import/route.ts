@@ -5,6 +5,7 @@ import {
   runTomketImport,
   TomketImportConfigError,
 } from "../../../../lib/tomket-import"
+import { notifyStorefrontFacetRevalidate } from "../../../../lib/storefront-revalidate"
 import {
   isTomketRunActive,
   readTomketStatus,
@@ -110,6 +111,13 @@ export async function POST(
         log,
         result,
       })
+
+      if (!dryRun) {
+        // Not awaited: the finally below releases the import lock, and the
+        // ping (up to 10s timeout) must not extend the locked window. The
+        // helper never rejects, so detaching is safe.
+        void notifyStorefrontFacetRevalidate(logger)
+      }
     } catch (error) {
       const message =
         error instanceof TomketImportConfigError
