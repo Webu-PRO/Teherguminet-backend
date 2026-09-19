@@ -15,6 +15,7 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
     config: pricing,
     missing: missingPricing,
     fx,
+    settings,
   } = await resolveTomketPricing(req.scope)
 
   const { data: variants } = await query.graph({
@@ -49,6 +50,7 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
           huf_rounding: pricing.hufRounding,
         }
       : null,
+    settings,
     catalog: {
       imported_variants: variants?.length ?? 0,
       producers: producers.size,

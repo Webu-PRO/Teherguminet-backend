@@ -1,5 +1,6 @@
 import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils"
 import {
+  createCollectionsWorkflow,
   createInventoryLevelsWorkflow,
   createProductCategoriesWorkflow,
   createProductTagsWorkflow,
@@ -7,6 +8,7 @@ import {
   createProductsWorkflow,
   updateInventoryLevelsWorkflow,
   updateProductVariantsWorkflow,
+  updateProductsWorkflow,
 } from "@medusajs/medusa/core-flows"
 import type { MedusaContainer } from "@medusajs/types"
 
@@ -141,12 +143,21 @@ const ensureTaxonomy = async (
   const producers = Array.from(new Set(drafts.map((d) => d.producer)))
   const tagValues = Array.from(new Set(drafts.flatMap((d) => d.tags)))
 
-  const [{ data: types }, { data: tags }, { data: categories }] =
-    await Promise.all([
-      query.graph({ entity: "product_type", fields: ["id", "value"] }),
-      query.graph({ entity: "product_tag", fields: ["id", "value"] }),
-      query.graph({ entity: "product_category", fields: ["id", "handle"] }),
-    ])
+  const [
+    { data: types },
+    { data: tags },
+    { data: categories },
+    { data: collections },
+  ] = await Promise.all([
+    query.graph({ entity: "product_type", fields: ["id", "value"] }),
+    query.graph({ entity: "product_tag", fields: ["id", "value"] }),
+    query.graph({ entity: "product_category", fields: ["id", "handle"] }),
+    query.graph({ entity: "product_collection", fields: ["id", "handle"] }),
+  ])
+
+  const collectionByHandle = new Map<string, string>(
+    (collections ?? []).map((collection) => [collection.handle, collection.id])
+  )
 
   const typeByValue = new Map<string, string>(
     (types ?? []).map((type) => [type.value, type.id])
@@ -198,7 +209,48 @@ const ensureTaxonomy = async (
     }
   }
 
-  return { typeByValue, tagByValue, categoryByHandle }
+  // One category per tyre type ("Személy nyári gumi") so the storefront can
+  // list by vehicle + season, next to the per-brand category above.
+  const missingTypeCategories = new Map<string, string>()
+  for (const draft of drafts) {
+    if (!categoryByHandle.has(draft.typeCategory.handle)) {
+      missingTypeCategories.set(draft.typeCategory.handle, draft.typeCategory.name)
+    }
+  }
+  if (missingTypeCategories.size) {
+    const { result } = await createProductCategoriesWorkflow(container).run({
+      input: {
+        product_categories: Array.from(missingTypeCategories.entries()).map(
+          ([handle, name]) => ({ name, handle, is_active: true })
+        ),
+      },
+    })
+    for (const category of result) {
+      categoryByHandle.set(category.handle, category.id)
+    }
+  }
+
+  // The hand-made catalogue keeps one collection per brand; mirror that.
+  const missingCollections = new Map<string, string>()
+  for (const draft of drafts) {
+    if (!collectionByHandle.has(draft.producerHandle)) {
+      missingCollections.set(draft.producerHandle, draft.producer)
+    }
+  }
+  if (missingCollections.size) {
+    const { result } = await createCollectionsWorkflow(container).run({
+      input: {
+        collections: Array.from(missingCollections.entries()).map(
+          ([handle, title]) => ({ title, handle })
+        ),
+      },
+    })
+    for (const collection of result) {
+      collectionByHandle.set(collection.handle, collection.id)
+    }
+  }
+
+  return { typeByValue, tagByValue, categoryByHandle, collectionByHandle }
 }
 
 type Taxonomy = Awaited<ReturnType<typeof ensureTaxonomy>>
@@ -224,14 +276,17 @@ const buildProductPayload = (
 
   return {
     title: draft.title,
+    subtitle: draft.subtitle,
     handle: draft.handle,
     description: draft.description,
     status: "published" as const,
     shipping_profile_id: context.shippingProfileId,
     type_id: taxonomy.typeByValue.get(draft.producer),
-    category_ids: [taxonomy.categoryByHandle.get(draft.producerHandle)].filter(
-      (id): id is string => Boolean(id)
-    ),
+    collection_id: taxonomy.collectionByHandle.get(draft.producerHandle),
+    category_ids: [
+      taxonomy.categoryByHandle.get(draft.producerHandle),
+      taxonomy.categoryByHandle.get(draft.typeCategory.handle),
+    ].filter((id): id is string => Boolean(id)),
     tag_ids: draft.tags
       .map((tag) => taxonomy.tagByValue.get(tag))
       .filter((id): id is string => Boolean(id)),
@@ -264,7 +319,7 @@ const findExistingVariants = async (
   const query = container.resolve(ContainerRegistrationKeys.QUERY)
   const found = new Map<
     string,
-    { id: string; inventory_item_id?: string }
+    { id: string; product_id?: string; inventory_item_id?: string }
   >()
 
   for (const chunk of CHUNK(skus, 300)) {
@@ -280,6 +335,7 @@ const findExistingVariants = async (
       }
       found.set(variant.sku, {
         id: variant.id,
+        product_id: variant.product_id ?? undefined,
         inventory_item_id:
           (variant.inventory_items ?? [])[0]?.inventory_item_id ?? undefined,
       })
@@ -543,6 +599,35 @@ export const runTomketImport = async (
         },
       })
       updated += batch.length
+
+      // Product-level fields too, so a better description template or a new
+      // category reaches tyres imported earlier. Prices/stock are above.
+      const productUpdates = batch.flatMap((draft) => {
+        const productId = existing.get(draft.sku)?.product_id
+        if (!productId) {
+          return []
+        }
+        const payload = buildProductPayload(draft, context, taxonomy)
+        return [
+          {
+            id: productId,
+            title: payload.title,
+            subtitle: payload.subtitle,
+            description: payload.description,
+            thumbnail: payload.thumbnail,
+            type_id: payload.type_id,
+            collection_id: payload.collection_id,
+            category_ids: payload.category_ids,
+            tag_ids: payload.tag_ids,
+            metadata: payload.metadata,
+          },
+        ]
+      })
+      if (productUpdates.length) {
+        await updateProductsWorkflow(container).run({
+          input: { products: productUpdates },
+        })
+      }
 
       if (context.stockLocationId) {
         const entries = batch.flatMap((draft) => {
