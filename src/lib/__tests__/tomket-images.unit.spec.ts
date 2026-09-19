@@ -94,3 +94,30 @@ describe("mirrorTomketImages", () => {
     expect(state.uploads).toHaveLength(0)
   })
 })
+
+describe("mirrorTomketImages when the upload fails", () => {
+  it("keeps the supplier URL and reports the storage error", async () => {
+    const container = {
+      resolve: (key: string) =>
+        key === "file"
+          ? {
+              createFiles: async () => {
+                throw new Error("The AWS Access Key Id you provided does not exist in our records.")
+              },
+            }
+          : {
+              listStores: async () => [{ id: "store_1", metadata: {} }],
+              updateStores: async () => undefined,
+            },
+    } as never
+    const messages: string[] = []
+    const result = await mirrorTomketImages(container, [A], {
+      fetchImage: fakeFetch,
+      onProgress: (message) => messages.push(message),
+    })
+    expect(result.copied).toBe(0)
+    expect(result.failed[0].reason).toMatch(/AWS Access Key/)
+    expect(resolveMirroredImageUrl(result.map, A)).toBe(A)
+    expect(messages.at(-1)).toMatch(/nem sikerült átmásolni .*AWS Access Key/)
+  })
+})

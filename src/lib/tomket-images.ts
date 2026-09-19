@@ -92,12 +92,21 @@ export const fetchTomketImage: FetchImage = async (url) => {
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
 
   try {
+    // The host allow-list is checked on the URL we were given; refusing
+    // redirects keeps a CDN-side redirect from pointing the fetch anywhere
+    // else (internal addresses included).
     const response = await fetch(url, {
       headers: IMAGE_FETCH_HEADERS,
       signal: controller.signal,
+      redirect: "error",
     })
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`)
+    }
+
+    const declaredLength = Number(response.headers.get("content-length") ?? "")
+    if (Number.isFinite(declaredLength) && declaredLength > MAX_IMAGE_BYTES) {
+      throw new Error(`túl nagy (${Math.round(declaredLength / 1024)} kB)`)
     }
 
     const mimeType = (response.headers.get("content-type") ?? "")
