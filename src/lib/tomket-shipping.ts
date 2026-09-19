@@ -3,6 +3,8 @@ import { createShippingOptionsWorkflow } from "@medusajs/medusa/core-flows"
 import type { Link } from "@medusajs/modules-sdk"
 import type { MedusaContainer } from "@medusajs/types"
 
+import { resolveTomketCountry } from "./tomket-feed"
+
 /**
  * The shipping option the shop uses to hand an order (or the Tomket part of
  * it) to the supplier. Creating a fulfillment with it fires
@@ -30,7 +32,10 @@ type StockLocationRecord = {
   name?: string | null
   fulfillment_sets?: Array<{
     id: string
-    service_zones?: Array<{ id: string }> | null
+    service_zones?: Array<{
+      id: string
+      geo_zones?: Array<{ country_code?: string | null }> | null
+    }> | null
   }> | null
   fulfillment_providers?: Array<{ id: string }> | null
 }
@@ -76,19 +81,28 @@ export const ensureTomketShippingOption = async (
       "name",
       "fulfillment_sets.id",
       "fulfillment_sets.service_zones.id",
+      "fulfillment_sets.service_zones.geo_zones.country_code",
       "fulfillment_providers.id",
     ],
   })
 
   // The location that already has delivery configured (a service zone) is
-  // where the shop's other shipping options live; use the same zone so the
-  // option applies to the same countries.
+  // where the shop's other shipping options live. Prefer the zone that
+  // covers the Tomket country (hu), so the option sits next to the domestic
+  // delivery options rather than in, say, the Slovak zone.
+  const country = resolveTomketCountry()
   const location = ((locations ?? []) as StockLocationRecord[]).find((row) =>
     (row.fulfillment_sets ?? []).some((set) => (set.service_zones ?? []).length)
   )
-  const serviceZoneId = location?.fulfillment_sets
-    ?.flatMap((set) => set.service_zones ?? [])
-    .map((zone) => zone.id)[0]
+  const zones =
+    location?.fulfillment_sets?.flatMap((set) => set.service_zones ?? []) ?? []
+  const serviceZoneId = (
+    zones.find((zone) =>
+      (zone.geo_zones ?? []).some(
+        (geo) => (geo.country_code ?? "").toLowerCase() === country
+      )
+    ) ?? zones[0]
+  )?.id
 
   if (!location || !serviceZoneId) {
     throw new Error(
