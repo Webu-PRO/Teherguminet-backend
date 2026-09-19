@@ -89,6 +89,10 @@ const resolvePrimaryStore = async (container: MedusaContainer) => {
 let metadataQueue: Promise<unknown> = Promise.resolve()
 
 const enqueueStoreMetadataWrite = <T>(task: () => Promise<T>): Promise<T> => {
+  // `metadataQueue` always resolves (see the catch below), so the rejection
+  // handler never fires; it is there so a write still runs even if the tail
+  // ever rejects. Do not drop the catch: a failed write must not block the
+  // next one.
   const run = metadataQueue.then(task, task)
   metadataQueue = run.catch(() => undefined)
   return run

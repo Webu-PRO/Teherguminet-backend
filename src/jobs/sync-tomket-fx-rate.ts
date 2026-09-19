@@ -12,6 +12,9 @@ export default async function syncTomketFxRateJob(container: MedusaContainer) {
 
   if ((process.env.TOMKET_EUR_HUF_RATE ?? "").trim()) {
     // Manual override in place — nothing to refresh.
+    logger.debug?.(
+      "[tomket] ECB árfolyam frissítés kihagyva: TOMKET_EUR_HUF_RATE be van állítva."
+    )
     return
   }
 
