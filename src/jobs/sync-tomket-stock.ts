@@ -3,6 +3,11 @@ import type { MedusaContainer } from "@medusajs/framework/types"
 import { resolveTomketConfig } from "../lib/tomket"
 import { resolveTomketPricingConfig } from "../lib/tomket-catalog"
 import { runTomketStockSync } from "../lib/tomket-import"
+import {
+  readTomketStatus,
+  releaseTomketRun,
+  tryAcquireTomketRun,
+} from "../lib/tomket-status"
 
 /**
  * Tomket refreshes the stock and price file every ten minutes (API docs 4.2).
@@ -23,7 +28,20 @@ export default async function syncTomketStockJob(container: MedusaContainer) {
     return
   }
 
+  // Never overlap with a catalogue import (or a still-running earlier sync):
+  // both write inventory levels for the same SKUs.
+  if (!tryAcquireTomketRun("stock-sync")) {
+    logger.info("[tomket] Készlet szinkron kihagyva: import vagy szinkron fut.")
+    return
+  }
+
   try {
+    const { state } = await readTomketStatus(container)
+    if (state === "running") {
+      logger.info("[tomket] Készlet szinkron kihagyva: import fut.")
+      return
+    }
+
     const result = await runTomketStockSync(container, {
       onProgress: (message) => logger.info(`[tomket] ${message}`),
     })
@@ -37,6 +55,8 @@ export default async function syncTomketStockJob(container: MedusaContainer) {
         error instanceof Error ? error.message : String(error)
       }`
     )
+  } finally {
+    releaseTomketRun()
   }
 }
 

@@ -5,6 +5,28 @@ import type { TomketImportResult } from "./tomket-import"
 
 export const TOMKET_STATUS_METADATA_KEY = "tomket_import"
 
+/**
+ * In-process guard so an import and the scheduled stock sync never run at the
+ * same time. The persisted status alone is not enough: two admin requests can
+ * both read "idle" before either has written "running". The flag is taken
+ * synchronously, before the first await, so the check-and-set cannot interleave.
+ */
+let runInFlight: TomketRunStatus["mode"] | null = null
+
+export const tryAcquireTomketRun = (mode: TomketRunStatus["mode"]) => {
+  if (runInFlight) {
+    return false
+  }
+  runInFlight = mode
+  return true
+}
+
+export const releaseTomketRun = () => {
+  runInFlight = null
+}
+
+export const tomketRunInFlight = () => runInFlight
+
 export type TomketRunState = "idle" | "running" | "done" | "error"
 
 export type TomketRunStatus = {

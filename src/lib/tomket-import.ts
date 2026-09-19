@@ -432,6 +432,11 @@ export const runTomketImport = async (
   report(
     `Cél: ${context.currencyCodes.join(", ")} árak, ${context.salesChannelIds.length} sales channel.`
   )
+  if (!context.stockLocationId) {
+    report(
+      "Figyelem: nincs stock location a boltban, a készletszintek nem jönnek létre (minden tétel 0 készlettel jelenik meg)."
+    )
+  }
 
   const taxonomy = await ensureTaxonomy(container, drafts)
   const existing = await findExistingVariants(
