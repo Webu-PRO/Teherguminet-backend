@@ -45,13 +45,23 @@ export async function POST(
 
   const settings = await writeTomketSettings(req.scope, parsed)
   const resolved = resolveTomketSettings(settings)
-  // The shopper-facing option carries the flat price; keep it in step.
-  await syncTomketShippingOptionPrices(req.scope)
+  // The shopper-facing option carries the flat price; keep it in step. The
+  // settings are already saved, so a failure here is reported, not thrown.
+  let syncWarning: string | null = null
+  try {
+    await syncTomketShippingOptionPrices(req.scope)
+  } catch (error) {
+    syncWarning = error instanceof Error ? error.message : String(error)
+    req.scope
+      .resolve("logger")
+      .warn(`[tomket] Szállítási opció ár-szinkron hiba: ${syncWarning}`)
+  }
   const pricing = await resolveTomketPricing(req.scope, { allowLiveFetch: false })
 
   res.status(200).json({
     settings,
     resolved,
+    sync_warning: syncWarning,
     configured: Boolean(pricing.config),
     missing: pricing.missing,
     pricing: pricing.config

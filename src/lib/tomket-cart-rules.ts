@@ -1,6 +1,7 @@
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
 
-import { isTomketShippingOption, parseTomketSku } from "./tomket"
+import { parseTomketSku } from "./tomket"
+import { TOMKET_PROVIDER_ID } from "./tomket-shipping"
 
 /**
  * Checkout rule for dropship tyres: a cart that holds a Tomket tyre ships
@@ -69,16 +70,39 @@ export const cartContainsTomketItems = async (
   return (cart?.items ?? []).some((item) => isTomketCartItem(item))
 }
 
-/** Pure: which of the cart's candidate options remain selectable. */
-export const filterShippingOptionsForTomket = <
-  T extends Parameters<typeof isTomketShippingOption>[0],
->(
+type CheckoutOptionLike = {
+  provider_id?: string | null
+  name?: string | null
+}
+
+/**
+ * The checkout-side test is stricter than the fulfillment-side one in
+ * tomket.ts: the provider id, or the word "tomket" in the name for a legacy
+ * row, never a generic token like "dropship" that another carrier's option
+ * could carry.
+ */
+export const isTomketCheckoutOption = (
+  option: CheckoutOptionLike | null | undefined
+) =>
+  Boolean(
+    option &&
+      (option.provider_id === TOMKET_PROVIDER_ID ||
+        (option.name ?? "").toLowerCase().includes("tomket"))
+  )
+
+/**
+ * Pure: which of the cart's candidate options remain selectable. A Tomket
+ * tyre in the cart wins over every other rule (the machine rule included):
+ * the supplier delivers the tyre, the shop ships anything else in the order
+ * itself, and the shopper pays the one Tomket shipping price.
+ */
+export const filterShippingOptionsForTomket = <T extends CheckoutOptionLike>(
   options: T[],
   hasTomketItems: boolean
 ): T[] =>
   hasTomketItems
-    ? options.filter((option) => isTomketShippingOption(option))
-    : options.filter((option) => !isTomketShippingOption(option))
+    ? options.filter((option) => isTomketCheckoutOption(option))
+    : options.filter((option) => !isTomketCheckoutOption(option))
 
 export const TOMKET_ONLY_MESSAGE =
   "Tomket termék esetén csak a Tomket szállítás választható: a gumit a beszállító raktárából közvetlenül Önnek szállítjuk."

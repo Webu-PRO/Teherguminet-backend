@@ -111,17 +111,21 @@ export async function GET(
     return
   }
 
-  const hasGepekItems = await cartContainsGepekItems(req.scope, cartId)
-  const gepekFiltered = hasGepekItems
-    ? baseOptions.filter((option) =>
-        isAllowedShippingOptionForGepek(option)
-      )
-    : baseOptions
-
-  const eligibleOptions = filterShippingOptionsForTomket(
-    gepekFiltered,
-    hasTomketItems
-  )
+  // Precedence: a Tomket tyre decides the shipping on its own (the machine
+  // rule would strip the Tomket option and leave a mixed cart with nothing
+  // to choose); the machine rule applies only to carts without one.
+  let eligibleOptions: typeof baseOptions
+  if (hasTomketItems) {
+    eligibleOptions = filterShippingOptionsForTomket(baseOptions, true)
+  } else {
+    const hasGepekItems = await cartContainsGepekItems(req.scope, cartId)
+    const gepekFiltered = hasGepekItems
+      ? baseOptions.filter((option) =>
+          isAllowedShippingOptionForGepek(option)
+        )
+      : baseOptions
+    eligibleOptions = filterShippingOptionsForTomket(gepekFiltered, false)
+  }
 
   if (!eligibleOptions.length) {
     res.json({ shipping_options: [] })

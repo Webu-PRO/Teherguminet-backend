@@ -38,3 +38,19 @@ describe("shipping price settings", () => {
     process.env = env
   })
 })
+
+describe("checkout option recognition and precedence", () => {
+  it("recognises the Tomket option by provider or name, not by a generic 'dropship' token", () => {
+    const dhl = { id: "so_d", name: "DHL dropship express", provider_id: "manual_manual" }
+    expect(filterShippingOptionsForTomket([tomket, dhl, normal], true)).toEqual([tomket])
+    expect(filterShippingOptionsForTomket([tomket, dhl, normal], false)).toEqual([dhl, normal])
+    expect(filterShippingOptionsForTomket([{ id: "x", name: "Tomket dropship", provider_id: null }], true)).toHaveLength(1)
+  })
+
+  it("a mixed cart (Tomket tyre + machine) still gets the Tomket option", () => {
+    // The store route applies the Tomket rule before the machine rule; the
+    // machine rule alone would have removed the Tomket option.
+    const afterMachineRule = [normal, pickup]
+    expect(filterShippingOptionsForTomket([tomket, ...afterMachineRule], true)).toEqual([tomket])
+  })
+})

@@ -101,7 +101,25 @@ export const isStoreEnabled = (option: TomketShippingOption) =>
  * admin-only one (the first revision hid it from the store) to the
  * shopper-facing definition. Idempotent.
  */
-export const ensureTomketShippingOption = async (
+let ensureInFlight: Promise<{
+  option: TomketShippingOption
+  created: boolean
+}> | null = null
+
+export const ensureTomketShippingOption = (
+  container: MedusaContainer
+): Promise<{ option: TomketShippingOption; created: boolean }> => {
+  // Two carts hitting the store listing at once must not create two
+  // options; the second caller waits for the first run.
+  if (!ensureInFlight) {
+    ensureInFlight = ensureTomketShippingOptionOnce(container).finally(() => {
+      ensureInFlight = null
+    })
+  }
+  return ensureInFlight
+}
+
+const ensureTomketShippingOptionOnce = async (
   container: MedusaContainer
 ): Promise<{ option: TomketShippingOption; created: boolean }> => {
   const existing = await findTomketShippingOption(container)
