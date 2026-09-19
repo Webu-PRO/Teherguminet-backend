@@ -9,6 +9,7 @@ import {
   TomketSettingsValidationError,
   writeTomketSettings,
 } from "../../../../lib/tomket-settings"
+import { syncTomketShippingOptionPrices } from "../../../../lib/tomket-shipping"
 
 type SettingsBody = {
   marginPercentHuf?: number | string | null
@@ -17,6 +18,8 @@ type SettingsBody = {
   includeShipping?: boolean | string | null
   hufRounding?: number | string | null
   autoForwardPaidOrders?: boolean | string | null
+  shippingPriceHuf?: number | string | null
+  shippingPriceEur?: number | string | null
 }
 
 /**
@@ -42,6 +45,8 @@ export async function POST(
 
   const settings = await writeTomketSettings(req.scope, parsed)
   const resolved = resolveTomketSettings(settings)
+  // The shopper-facing option carries the flat price; keep it in step.
+  await syncTomketShippingOptionPrices(req.scope)
   const pricing = await resolveTomketPricing(req.scope, { allowLiveFetch: false })
 
   res.status(200).json({

@@ -75,8 +75,14 @@ type TomketStatusResponse = {
     includeShipping: ResolvedSetting<boolean>
     hufRounding: ResolvedSetting<number>
     autoForwardPaidOrders: ResolvedSetting<boolean>
+    shippingPriceHuf: ResolvedSetting<number>
+    shippingPriceEur: ResolvedSetting<number>
   }
-  shipping_option: { id: string; name: string | null } | null
+  shipping_option: {
+    id: string
+    name: string | null
+    store_enabled: boolean
+  } | null
   catalog: { imported_variants: number; producers: number }
   tire_types: TireType[]
   status: RunStatus
@@ -92,6 +98,8 @@ type SettingsForm = {
   hufRounding: string
   includeShipping: boolean
   autoForwardPaidOrders: boolean
+  shippingPriceHuf: string
+  shippingPriceEur: string
 }
 
 const SOURCE_LABELS: Record<SettingSource, string> = {
@@ -124,6 +132,14 @@ const settingsFormFromResponse = (
       : "",
   includeShipping: settings.includeShipping.value,
   autoForwardPaidOrders: settings.autoForwardPaidOrders.value,
+  shippingPriceHuf:
+    settings.shippingPriceHuf.source === "admin"
+      ? String(settings.shippingPriceHuf.value)
+      : "",
+  shippingPriceEur:
+    settings.shippingPriceEur.source === "admin"
+      ? String(settings.shippingPriceEur.value)
+      : "",
 })
 
 const POLL_INTERVAL_MS = 3000
@@ -166,6 +182,8 @@ const TomketPage = () => {
     hufRounding: "",
     includeShipping: false,
     autoForwardPaidOrders: true,
+    shippingPriceHuf: "",
+    shippingPriceEur: "",
   })
   const settingsDirty = useRef(false)
   const [savingSettings, setSavingSettings] = useState(false)
@@ -234,6 +252,8 @@ const TomketPage = () => {
           hufRounding: textOrNull(settingsForm.hufRounding),
           includeShipping: settingsForm.includeShipping,
           autoForwardPaidOrders: settingsForm.autoForwardPaidOrders,
+          shippingPriceHuf: textOrNull(settingsForm.shippingPriceHuf),
+          shippingPriceEur: textOrNull(settingsForm.shippingPriceEur),
         },
       })
       settingsDirty.current = false
@@ -522,13 +542,17 @@ const TomketPage = () => {
             <Text size="small" weight="plus">
               Rendelés-továbbítás a Tomketnek
             </Text>
-            {data?.shipping_option ? (
+            {data?.shipping_option?.store_enabled ? (
               <StatusBadge color="green">
-                Szállítási opció kész: {data.shipping_option.name}
+                Pénztári opció kész: {data.shipping_option.name}
               </StatusBadge>
             ) : (
               <>
-                <StatusBadge color="orange">Nincs Tomket szállítási opció</StatusBadge>
+                <StatusBadge color="orange">
+                  {data?.shipping_option
+                    ? "Régi, csak admin Tomket opció – frissítés kell"
+                    : "Nincs Tomket szállítási opció"}
+                </StatusBadge>
                 <Button
                   size="small"
                   variant="secondary"
@@ -536,7 +560,7 @@ const TomketPage = () => {
                   isLoading={creatingOption}
                   disabled={creatingOption}
                 >
-                  Létrehozás
+                  {data?.shipping_option ? "Frissítés" : "Létrehozás"}
                 </Button>
               </>
             )}
@@ -554,11 +578,53 @@ const TomketPage = () => {
               (fulfillment + Tomket API rendelés)
             </Label>
           </div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="tomket-ship-huf">Tomket szállítás díja a vevőnek (Ft)</Label>
+              <Input
+                id="tomket-ship-huf"
+                type="number"
+                min={0}
+                step="10"
+                placeholder="0"
+                value={settingsForm.shippingPriceHuf}
+                onChange={(event) =>
+                  updateSetting("shippingPriceHuf", event.target.value)
+                }
+              />
+              <Text size="xsmall" className="text-ui-fg-muted">
+                Most: {data?.settings?.shippingPriceHuf.value ?? 0} Ft (
+                {SOURCE_LABELS[data?.settings?.shippingPriceHuf.source ?? "default"]})
+              </Text>
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="tomket-ship-eur">Tomket szállítás díja a vevőnek (EUR)</Label>
+              <Input
+                id="tomket-ship-eur"
+                type="number"
+                min={0}
+                step="0.5"
+                placeholder="0"
+                value={settingsForm.shippingPriceEur}
+                onChange={(event) =>
+                  updateSetting("shippingPriceEur", event.target.value)
+                }
+              />
+              <Text size="xsmall" className="text-ui-fg-muted">
+                Most: {data?.settings?.shippingPriceEur.value ?? 0} € (
+                {SOURCE_LABELS[data?.settings?.shippingPriceEur.source ?? "default"]})
+              </Text>
+            </div>
+          </div>
           <Text size="xsmall" className="text-ui-fg-muted">
-            Kártyás fizetésnél a rendelés leadása után azonnal, utalás /
-            utánvét esetén akkor, amikor a fizetést rögzíted. Kikapcsolva a
-            rendelésnél kézzel kell „Tomket dropship” fulfillmentet
-            létrehozni. Most:{" "}
+            A pénztárban Tomket-terméknél csak a „Tomket szállítás” választható
+            (a beszállító raktárából közvetlenül a vevőnek); ez a díj kerül a
+            rendelésre. A Tomket darabonkénti díját (kb. 6–7,5 €/db) vagy a
+            fenti „szállítási díj beépítése” kapcsolóval építed az árba, vagy
+            itt fedezed. Kártyás fizetésnél a továbbítás a rendelés leadása
+            után azonnal, utalás / utánvét esetén akkor, amikor a fizetést
+            rögzíted. Kikapcsolva a rendelésnél kézzel kell „Tomket szállítás”
+            fulfillmentet létrehozni. Most:{" "}
             {data?.settings?.autoForwardPaidOrders.value ? "be" : "ki"} (
             {SOURCE_LABELS[data?.settings?.autoForwardPaidOrders.source ?? "default"]}
             ). A mentés az „Árazás mentése” gombbal történik.

@@ -15,6 +15,12 @@ import {
   isMagyarPostaShippingOption,
   resolveShippingOptionForRules,
 } from "../../../../../lib/gepek-cart-rules"
+import { isTomketShippingOption } from "../../../../../lib/tomket"
+import {
+  cartContainsTomketItems,
+  TOMKET_NOT_APPLICABLE_MESSAGE,
+  TOMKET_ONLY_MESSAGE,
+} from "../../../../../lib/tomket-cart-rules"
 
 type AddShippingMethodPayload = {
   option_id: string
@@ -36,6 +42,18 @@ export async function POST(
     throw new MedusaError(
       MedusaError.Types.NOT_ALLOWED,
       "A Magyar Posta szállítási mód jelenleg nem elérhető."
+    )
+  }
+
+  const hasTomketItems = await cartContainsTomketItems(req.scope, req.params.id)
+  const optionIsTomket = isTomketShippingOption(option)
+  if (hasTomketItems && !optionIsTomket) {
+    throw new MedusaError(MedusaError.Types.NOT_ALLOWED, TOMKET_ONLY_MESSAGE)
+  }
+  if (!hasTomketItems && optionIsTomket) {
+    throw new MedusaError(
+      MedusaError.Types.NOT_ALLOWED,
+      TOMKET_NOT_APPLICABLE_MESSAGE
     )
   }
 
