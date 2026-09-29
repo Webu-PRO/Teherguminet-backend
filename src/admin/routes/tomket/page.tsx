@@ -617,13 +617,13 @@ const TomketPage = () => {
             </div>
           </div>
           <Text size="xsmall" className="text-ui-fg-muted">
-            A pénztárban Tomket-terméknél csak a „Tomket szállítás” választható
+            A pénztárban Tomket-terméknél csak az „Ingyenes szállítás” (Tomket) választható
             (a beszállító raktárából közvetlenül a vevőnek); ez a díj kerül a
             rendelésre. A Tomket darabonkénti díját (kb. 6–7,5 €/db) vagy a
             fenti „szállítási díj beépítése” kapcsolóval építed az árba, vagy
             itt fedezed. Kártyás fizetésnél a továbbítás a rendelés leadása
             után azonnal, utalás / utánvét esetén akkor, amikor a fizetést
-            rögzíted. Kikapcsolva a rendelésnél kézzel kell „Tomket szállítás”
+            rögzíted. Kikapcsolva a rendelésnél kézzel kell „Ingyenes szállítás” (Tomket)
             fulfillmentet létrehozni. Most:{" "}
             {data?.settings?.autoForwardPaidOrders.value ? "be" : "ki"} (
             {SOURCE_LABELS[data?.settings?.autoForwardPaidOrders.source ?? "default"]}

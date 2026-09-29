@@ -26,7 +26,8 @@ import { readTomketSettings, resolveTomketSettings } from "./tomket-settings"
 
 /** module id "tomket" + provider identifier "tomket" */
 export const TOMKET_PROVIDER_ID = "tomket_tomket"
-export const TOMKET_SHIPPING_OPTION_NAME = "Tomket szállítás"
+// Shopper-facing label (owner rule, 2026-09-29): Tomket tyres ship free.
+export const TOMKET_SHIPPING_OPTION_NAME = "Ingyenes szállítás"
 export const TOMKET_SHIPPING_TYPE_CODE = "tomket-dropship"
 export const TOMKET_SHIPPING_DESCRIPTION =
   "A gumit a beszállító (Tomket) raktárából szállítjuk közvetlenül Önnek."
@@ -229,9 +230,9 @@ const ensureTomketShippingOptionOnce = async (
 }
 
 /**
- * Re-applies the flat prices from the settings to the live option. Called
- * after the operator saves the settings, so a price change reaches the
- * checkout without recreating anything.
+ * Re-applies the flat prices and the shopper-facing name to the live
+ * option. Called after the operator saves the settings, so a price or label
+ * change reaches the checkout without recreating anything.
  */
 export const syncTomketShippingOptionPrices = async (
   container: MedusaContainer
@@ -245,6 +246,7 @@ export const syncTomketShippingOptionPrices = async (
     input: [
       {
         id: option.id,
+        name: TOMKET_SHIPPING_OPTION_NAME,
         price_type: "flat",
         prices: await resolveTomketShippingPrices(container),
       },

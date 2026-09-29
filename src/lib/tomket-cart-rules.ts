@@ -105,7 +105,7 @@ export const filterShippingOptionsForTomket = <T extends CheckoutOptionLike>(
     : options.filter((option) => !isTomketCheckoutOption(option))
 
 export const TOMKET_ONLY_MESSAGE =
-  "Tomket termék esetén csak a Tomket szállítás választható: a gumit a beszállító raktárából közvetlenül Önnek szállítjuk."
+  "Tomket termék esetén csak az Ingyenes szállítás választható: a gumit a beszállító raktárából közvetlenül Önnek szállítjuk."
 
 export const TOMKET_NOT_APPLICABLE_MESSAGE =
-  "A Tomket szállítás csak Tomket termékekhez választható."
+  "Az Ingyenes szállítás csak Tomket termékekhez választható."
