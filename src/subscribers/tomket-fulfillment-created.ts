@@ -25,6 +25,7 @@ import {
   resolveTomketItems,
   resolveTomketRecipient,
 } from "../lib/tomket"
+import { sendTomketFailureAlert } from "../lib/tomket-alert"
 
 type FulfillmentEventPayload = {
   id?: string
@@ -188,11 +189,20 @@ export default async function tomketFulfillmentCreated({
     return
   }
 
+  const alert = (reason: string, details?: string[]) =>
+    sendTomketFailureAlert(container, {
+      orderId: order.id,
+      displayId: order.display_id,
+      reason,
+      details,
+    })
+
   const { config, missing } = resolveTomketConfig()
   if (!config) {
     logger?.warn?.(
       `Tomket: missing config (${missing.join(", ")})`
     )
+    await alert(`hiányzó Tomket beállítás (${missing.join(", ")})`)
     return
   }
 
@@ -204,6 +214,9 @@ export default async function tomketFulfillmentCreated({
         ", "
       )}) for fulfillment ${fulfillment.id}`
     )
+    await alert(
+      `hiányzó szállítási adat (${missingRecipient.join(", ")})`
+    )
     return
   }
 
@@ -214,6 +227,7 @@ export default async function tomketFulfillmentCreated({
     logger?.warn?.(
       `Tomket: no items to fulfill for order ${order.id}`
     )
+    await alert("a teljesítésben nincs Tomket-tétel")
     return
   }
 
@@ -223,6 +237,7 @@ export default async function tomketFulfillmentCreated({
         ", "
       )}) in order ${order.id}`
     )
+    await alert("hiányzó Tomket gumi-azonosító", missingItems)
     return
   }
 
@@ -288,6 +303,18 @@ export default async function tomketFulfillmentCreated({
         },
       },
     })
+  }
+
+  if (hadErrors) {
+    await alert(
+      "a Tomket API elutasította a rendelést",
+      orders
+        .filter((entry) => entry.error)
+        .map(
+          (entry) =>
+            `gumi ${entry.internal_id} × ${entry.quantity}: ${entry.error}`
+        )
+    )
   }
 }
 

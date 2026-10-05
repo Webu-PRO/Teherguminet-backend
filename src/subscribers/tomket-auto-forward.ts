@@ -3,6 +3,7 @@ import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
 import { PaymentEvents } from "@medusajs/utils"
 
 import { autoForwardTomketOrder } from "../lib/tomket-auto-forward"
+import { sendTomketFailureAlert } from "../lib/tomket-alert"
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -69,11 +70,14 @@ export default async function tomketAutoForward({
       )
     }
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
     logger.error(
-      `[tomket] Rendelés ${orderId}: automatikus továbbítás hiba: ${
-        error instanceof Error ? error.message : String(error)
-      }`
+      `[tomket] Rendelés ${orderId}: automatikus továbbítás hiba: ${message}`
     )
+    await sendTomketFailureAlert(container, {
+      orderId,
+      reason: `az automatikus továbbítás hibára futott: ${message}`,
+    })
   }
 }
 
