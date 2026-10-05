@@ -164,6 +164,12 @@ describe("catalogue enrichment", () => {
     })
     expect(buildTomketTypeCategory("AG").handle).toBe("mezogazdasagi-gumi")
   })
+
+  it("lists Tomket van ('Teher') tyres with the passenger tyres, never under Teher", () => {
+    expect(buildTomketTypeCategory("TS").handle).toBe("szemely-nyari-gumi")
+    expect(buildTomketTypeCategory("TW").handle).toBe("szemely-teli-gumi")
+    expect(buildTomketTypeCategory("TA").handle).toBe("szemely-negyevszakos-gumi")
+  })
 })
 
 describe("settings edge cases", () => {
