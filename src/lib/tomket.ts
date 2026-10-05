@@ -128,6 +128,20 @@ const normalizeOptionalString = (value?: string | null) => {
   return normalized ? normalized : undefined
 }
 
+/**
+ * Tomket rejects a phone number with separators: "+36 203534752" came back
+ * as "error 308" (order #97), the same order with "+36203534752" was
+ * accepted. Keep only the leading "+" and the digits.
+ */
+export const normalizeTomketPhone = (value: unknown) => {
+  const raw = typeof value === "string" ? value.trim() : ""
+  const digits = raw.replace(/\D/g, "")
+  if (!digits) {
+    return ""
+  }
+  return `${raw.startsWith("+") ? "+" : ""}${digits}`.slice(0, 20)
+}
+
 const sanitizeField = (
   value: unknown,
   maxLength: number,
@@ -337,9 +351,8 @@ export const resolveTomketRecipient = (
     missing.push("zip")
   }
 
-  const phone = sanitizeField(
-    address?.phone ?? order.billing_address?.phone,
-    20
+  const phone = normalizeTomketPhone(
+    address?.phone ?? order.billing_address?.phone
   )
   if (!phone) {
     missing.push("phone")

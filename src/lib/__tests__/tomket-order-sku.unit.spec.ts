@@ -1,7 +1,25 @@
 import { describe, expect, it } from "@jest/globals"
 import type { OrderLineItemDTO } from "@medusajs/types"
 
-import { buildTomketSku, parseTomketSku, resolveTomketItems } from "../tomket"
+import {
+  buildTomketSku,
+  normalizeTomketPhone,
+  parseTomketSku,
+  resolveTomketItems,
+} from "../tomket"
+
+describe("normalizeTomketPhone", () => {
+  it("drops the separators Tomket rejects with error 308", () => {
+    expect(normalizeTomketPhone("+36 203534752")).toBe("+36203534752")
+    expect(normalizeTomketPhone(" +36 (20) 353-4752 ")).toBe("+36203534752")
+    expect(normalizeTomketPhone("06/20 353 4752")).toBe("06203534752")
+  })
+
+  it("returns empty for a missing or digit-less phone", () => {
+    expect(normalizeTomketPhone(undefined)).toBe("")
+    expect(normalizeTomketPhone(" - ")).toBe("")
+  })
+})
 
 type LineItem = OrderLineItemDTO & {
   sku?: string | null

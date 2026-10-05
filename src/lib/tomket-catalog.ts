@@ -204,9 +204,20 @@ const LABEL_CLASS_LABELS: Record<string, string> = {
 const formatLabelClass = (value?: string) =>
   value ? LABEL_CLASS_LABELS[value.toLowerCase()] ?? value.toUpperCase() : null
 
+/**
+ * Tomket's "Teher" types are van/C tyres (215/65R16C…), not trucks. The
+ * storefront's Teher categories hold only the house truck brands, so these
+ * are listed with the passenger tyres of the same season.
+ */
+const CATEGORY_TIRE_TYPE: Record<string, string> = {
+  TS: "PS",
+  TW: "PW",
+  TA: "PA",
+}
+
 /** Storefront category per tyre type: "Személy nyári gumi" → szemely-nyari-gumi. */
 export const buildTomketTypeCategory = (tireType: string) => {
-  const info = TOMKET_TIRE_TYPES[tireType]
+  const info = TOMKET_TIRE_TYPES[CATEGORY_TIRE_TYPE[tireType] ?? tireType]
   const label = info?.label ?? tireType
   const name = `${label} gumi`
   return { name, handle: slugify(name), label }
