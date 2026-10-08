@@ -18,9 +18,11 @@ services:
           "CMD-SHELL",
           "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"
         ]
-      interval: 5s
+      interval: 30s
       timeout: 5s
-      retries: 10
+      retries: 5
+      start_period: 30s
+      start_interval: 2s
 
   # Redis
   redis:
@@ -31,9 +33,11 @@ services:
       - medusa_network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
+      interval: 30s
       timeout: 5s
-      retries: 10
+      retries: 5
+      start_period: 30s
+      start_interval: 2s
 
   # Medusa Server
   medusa:
