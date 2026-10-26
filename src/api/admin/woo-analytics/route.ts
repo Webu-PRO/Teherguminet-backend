@@ -35,17 +35,12 @@ const ORDER_FIELDS = [
   "shipping_total",
   "tax_total",
   "discount_total",
-  "items.id",
-  "items.title",
-  "items.product_id",
-  "items.product_title",
-  "items.variant_sku",
-  "items.quantity",
-  "items.unit_price",
-  "items.total",
-  "items.tax_total",
-  "items.adjustments.code",
-  "items.adjustments.amount",
+  // A teljes tételsor kell: a Medusa a raw_quantity / raw_unit_price mezőkből
+  // számolja a végösszegeket. Csak néhány tételmezővel a tétel- és
+  // rendelésösszegek 0-k lesznek (a total csak a szállítást tartalmazza) —
+  // ezért tölt az admin saját get-orders-list workflow-ja is `items.*`-ot.
+  "items.*",
+  "items.adjustments.*",
 ]
 
 const num = (v: unknown): number => {
