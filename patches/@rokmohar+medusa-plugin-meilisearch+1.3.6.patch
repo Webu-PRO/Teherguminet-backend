@@ -1,0 +1,182 @@
+diff --git a/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-image-upsert.js b/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-image-upsert.js
+index bdae993..d67ad07 100644
+--- a/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-image-upsert.js
++++ b/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-image-upsert.js
+@@ -5,6 +5,9 @@ exports.default = meilisearchImageUpsertHandler;
+ const utils_1 = require("@medusajs/utils");
+ const upsert_image_1 = require("../workflows/upsert-image");
+ async function meilisearchImageUpsertHandler({ container, event: { data }, }) {
++    // teherguminet patch: the index holds no variant/price/stock/option data, and
++    // sync-tomket-stock emits these events in bulk every 15 min (backend overload).
++    return;
+     const logger = container.resolve('logger');
+     try {
+         await (0, upsert_image_1.upsertImageWorkflow)(container).run({
+diff --git a/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-inventory-delete.js b/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-inventory-delete.js
+index 3585918..87e255c 100644
+--- a/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-inventory-delete.js
++++ b/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-inventory-delete.js
+@@ -5,6 +5,9 @@ exports.default = meilisearchInventoryDeleteHandler;
+ const utils_1 = require("@medusajs/utils");
+ const delete_inventory_1 = require("../workflows/delete-inventory");
+ async function meilisearchInventoryDeleteHandler({ container, event: { data }, }) {
++    // teherguminet patch: the index holds no variant/price/stock/option data, and
++    // sync-tomket-stock emits these events in bulk every 15 min (backend overload).
++    return;
+     const logger = container.resolve('logger');
+     try {
+         await (0, delete_inventory_1.deleteInventoryWorkflow)(container).run({
+diff --git a/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-inventory-level-delete.js b/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-inventory-level-delete.js
+index be3dc6b..5f4f72c 100644
+--- a/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-inventory-level-delete.js
++++ b/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-inventory-level-delete.js
+@@ -5,6 +5,9 @@ exports.default = meilisearchInventoryLevelDeleteHandler;
+ const utils_1 = require("@medusajs/utils");
+ const delete_inventory_level_1 = require("../workflows/delete-inventory-level");
+ async function meilisearchInventoryLevelDeleteHandler({ container, event: { data }, }) {
++    // teherguminet patch: the index holds no variant/price/stock/option data, and
++    // sync-tomket-stock emits these events in bulk every 15 min (backend overload).
++    return;
+     const logger = container.resolve('logger');
+     try {
+         await (0, delete_inventory_level_1.deleteInventoryLevelWorkflow)(container).run({
+diff --git a/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-inventory-level-upsert.js b/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-inventory-level-upsert.js
+index 437d353..b967484 100644
+--- a/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-inventory-level-upsert.js
++++ b/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-inventory-level-upsert.js
+@@ -5,6 +5,9 @@ exports.default = meilisearchInventoryLevelUpsertHandler;
+ const utils_1 = require("@medusajs/utils");
+ const upsert_inventory_level_1 = require("../workflows/upsert-inventory-level");
+ async function meilisearchInventoryLevelUpsertHandler({ container, event: { data }, }) {
++    // teherguminet patch: the index holds no variant/price/stock/option data, and
++    // sync-tomket-stock emits these events in bulk every 15 min (backend overload).
++    return;
+     const logger = container.resolve('logger');
+     try {
+         await (0, upsert_inventory_level_1.upsertInventoryLevelWorkflow)(container).run({
+diff --git a/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-inventory-upsert.js b/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-inventory-upsert.js
+index 4600317..60d779f 100644
+--- a/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-inventory-upsert.js
++++ b/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-inventory-upsert.js
+@@ -5,6 +5,9 @@ exports.default = meilisearchInventoryUpsertHandler;
+ const utils_1 = require("@medusajs/utils");
+ const upsert_inventory_1 = require("../workflows/upsert-inventory");
+ async function meilisearchInventoryUpsertHandler({ container, event: { data }, }) {
++    // teherguminet patch: the index holds no variant/price/stock/option data, and
++    // sync-tomket-stock emits these events in bulk every 15 min (backend overload).
++    return;
+     const logger = container.resolve('logger');
+     try {
+         await (0, upsert_inventory_1.upsertInventoryWorkflow)(container).run({
+diff --git a/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-option-delete.js b/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-option-delete.js
+index 75203c1..8b60b4c 100644
+--- a/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-option-delete.js
++++ b/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-option-delete.js
+@@ -5,6 +5,9 @@ exports.default = meilisearchOptionDeleteHandler;
+ const utils_1 = require("@medusajs/utils");
+ const delete_option_1 = require("../workflows/delete-option");
+ async function meilisearchOptionDeleteHandler({ container, event: { data }, }) {
++    // teherguminet patch: the index holds no variant/price/stock/option data, and
++    // sync-tomket-stock emits these events in bulk every 15 min (backend overload).
++    return;
+     const logger = container.resolve('logger');
+     try {
+         await (0, delete_option_1.deleteOptionWorkflow)(container).run({
+diff --git a/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-option-upsert.js b/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-option-upsert.js
+index 6f46070..45fe55e 100644
+--- a/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-option-upsert.js
++++ b/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-option-upsert.js
+@@ -5,6 +5,9 @@ exports.default = meilisearchOptionUpsertHandler;
+ const utils_1 = require("@medusajs/utils");
+ const upsert_option_1 = require("../workflows/upsert-option");
+ async function meilisearchOptionUpsertHandler({ container, event: { data }, }) {
++    // teherguminet patch: the index holds no variant/price/stock/option data, and
++    // sync-tomket-stock emits these events in bulk every 15 min (backend overload).
++    return;
+     const logger = container.resolve('logger');
+     try {
+         await (0, upsert_option_1.upsertOptionWorkflow)(container).run({
+diff --git a/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-option-value-delete.js b/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-option-value-delete.js
+index 9fe81fa..2300b57 100644
+--- a/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-option-value-delete.js
++++ b/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-option-value-delete.js
+@@ -5,6 +5,9 @@ exports.default = meilisearchOptionValueDeleteHandler;
+ const utils_1 = require("@medusajs/utils");
+ const delete_option_value_1 = require("../workflows/delete-option-value");
+ async function meilisearchOptionValueDeleteHandler({ container, event: { data }, }) {
++    // teherguminet patch: the index holds no variant/price/stock/option data, and
++    // sync-tomket-stock emits these events in bulk every 15 min (backend overload).
++    return;
+     const logger = container.resolve('logger');
+     try {
+         await (0, delete_option_value_1.deleteOptionValueWorkflow)(container).run({
+diff --git a/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-option-value-upsert.js b/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-option-value-upsert.js
+index f8f8b70..8487de1 100644
+--- a/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-option-value-upsert.js
++++ b/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-option-value-upsert.js
+@@ -5,6 +5,9 @@ exports.default = meilisearchOptionValueUpsertHandler;
+ const utils_1 = require("@medusajs/utils");
+ const upsert_option_value_1 = require("../workflows/upsert-option-value");
+ async function meilisearchOptionValueUpsertHandler({ container, event: { data }, }) {
++    // teherguminet patch: the index holds no variant/price/stock/option data, and
++    // sync-tomket-stock emits these events in bulk every 15 min (backend overload).
++    return;
+     const logger = container.resolve('logger');
+     try {
+         await (0, upsert_option_value_1.upsertOptionValueWorkflow)(container).run({
+diff --git a/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-price-delete.js b/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-price-delete.js
+index c164d83..55ccc81 100644
+--- a/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-price-delete.js
++++ b/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-price-delete.js
+@@ -5,6 +5,9 @@ exports.default = meilisearchPriceDeleteHandler;
+ const utils_1 = require("@medusajs/utils");
+ const delete_price_1 = require("../workflows/delete-price");
+ async function meilisearchPriceDeleteHandler({ container, event: { data }, }) {
++    // teherguminet patch: the index holds no variant/price/stock/option data, and
++    // sync-tomket-stock emits these events in bulk every 15 min (backend overload).
++    return;
+     const logger = container.resolve('logger');
+     try {
+         await (0, delete_price_1.deletePriceWorkflow)(container).run({
+diff --git a/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-price-upsert.js b/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-price-upsert.js
+index 7ac295e..d4a6fd7 100644
+--- a/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-price-upsert.js
++++ b/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-price-upsert.js
+@@ -5,6 +5,9 @@ exports.default = meilisearchPriceUpsertHandler;
+ const utils_1 = require("@medusajs/utils");
+ const upsert_price_1 = require("../workflows/upsert-price");
+ async function meilisearchPriceUpsertHandler({ container, event: { data }, }) {
++    // teherguminet patch: the index holds no variant/price/stock/option data, and
++    // sync-tomket-stock emits these events in bulk every 15 min (backend overload).
++    return;
+     const logger = container.resolve('logger');
+     try {
+         await (0, upsert_price_1.upsertPriceWorkflow)(container).run({
+diff --git a/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-variant-delete.js b/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-variant-delete.js
+index 62618c6..74173e9 100644
+--- a/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-variant-delete.js
++++ b/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-variant-delete.js
+@@ -5,6 +5,9 @@ exports.default = meilisearchVariantDeleteHandler;
+ const utils_1 = require("@medusajs/utils");
+ const delete_variant_1 = require("../workflows/delete-variant");
+ async function meilisearchVariantDeleteHandler({ container, event: { data }, }) {
++    // teherguminet patch: the index holds no variant/price/stock/option data, and
++    // sync-tomket-stock emits these events in bulk every 15 min (backend overload).
++    return;
+     const logger = container.resolve('logger');
+     try {
+         await (0, delete_variant_1.deleteVariantWorkflow)(container).run({
+diff --git a/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-variant-upsert.js b/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-variant-upsert.js
+index 47bd2ae..2347d4b 100644
+--- a/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-variant-upsert.js
++++ b/node_modules/@rokmohar/medusa-plugin-meilisearch/.medusa/server/src/subscribers/meilisearch-variant-upsert.js
+@@ -5,6 +5,9 @@ exports.default = meilisearchVariantUpsertHandler;
+ const utils_1 = require("@medusajs/utils");
+ const upsert_variant_1 = require("../workflows/upsert-variant");
+ async function meilisearchVariantUpsertHandler({ container, event: { data }, }) {
++    // teherguminet patch: the index holds no variant/price/stock/option data, and
++    // sync-tomket-stock emits these events in bulk every 15 min (backend overload).
++    return;
+     const logger = container.resolve('logger');
+     try {
+         await (0, upsert_variant_1.upsertVariantWorkflow)(container).run({
