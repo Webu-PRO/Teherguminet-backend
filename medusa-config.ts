@@ -1,6 +1,7 @@
 import { loadEnv, defineConfig } from "@medusajs/utils";
 import fs from "fs";
 import path from "path";
+import { buildMeilisearchPlugin } from "./src/lib/meilisearch-products";
 
 const DEFAULT_STORE_CORS = [
   "http://localhost:8000",
@@ -419,6 +420,18 @@ module.exports = defineConfig({
       resolve: "@alpha-solutions/medusa-image-alt",
       options: {},
     },
+    // Storefront search index. Only registered when configured: the plugin
+    // throws on boot without host/apiKey. See src/lib/meilisearch-products.ts.
+    ...(process.env.MEILISEARCH_HOST?.trim() &&
+    process.env.MEILISEARCH_API_KEY?.trim()
+      ? [
+          buildMeilisearchPlugin(
+            process.env.MEILISEARCH_HOST.trim(),
+            process.env.MEILISEARCH_API_KEY.trim(),
+            process.env.MEILISEARCH_PRODUCTS_INDEX?.trim() || "products"
+          ),
+        ]
+      : []),
   ],
   auth: {
     customer: {

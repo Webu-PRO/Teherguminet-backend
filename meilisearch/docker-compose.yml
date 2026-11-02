@@ -1,0 +1,54 @@
+# Meilisearch — search engine behind the storefront's product search.
+#
+# Deployed as its own Coolify "Docker Compose" resource on the Hostinger VPS
+# (2.24.161.87), fronted by the shared Traefik. Deliberately publishes NO host
+# port: the only way in is HTTPS through Traefik, so the API key is the boundary.
+#
+# Required env (set in Coolify, not committed):
+#   MEILI_MASTER_KEY   long random string, min 16 bytes
+#   MEILI_SEARCH_HOST  public FQDN, e.g. search.teherguminet.hu
+#
+# See ./README.md for the full first-deploy runbook.
+
+services:
+  meilisearch:
+    image: getmeili/meilisearch:v1.53
+    container_name: ${COMPOSE_PROJECT_NAME:-teherguminet}_meilisearch
+    restart: unless-stopped
+    environment:
+      - MEILI_MASTER_KEY=${MEILI_MASTER_KEY:?MEILI_MASTER_KEY is required}
+      - MEILI_ENV=${MEILI_ENV:-production}
+      - MEILI_NO_ANALYTICS=${MEILI_NO_ANALYTICS:-true}
+      - MEILI_DB_PATH=/meili_data
+    volumes:
+      - meili-data:/meili_data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -fsS http://localhost:7700/health || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - coolify
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=coolify
+      - traefik.http.services.${TRAEFIK_NAMESPACE:-teherguminet-meili}.loadbalancer.server.port=7700
+      - traefik.http.routers.${TRAEFIK_NAMESPACE:-teherguminet-meili}.rule=Host(`${MEILI_SEARCH_HOST:-search.localhost}`)
+      - traefik.http.routers.${TRAEFIK_NAMESPACE:-teherguminet-meili}.entrypoints=https
+      - traefik.http.routers.${TRAEFIK_NAMESPACE:-teherguminet-meili}.tls=true
+      - traefik.http.routers.${TRAEFIK_NAMESPACE:-teherguminet-meili}.tls.certresolver=letsencrypt
+      - traefik.http.routers.${TRAEFIK_NAMESPACE:-teherguminet-meili}.service=${TRAEFIK_NAMESPACE:-teherguminet-meili}
+      - traefik.http.routers.${TRAEFIK_NAMESPACE:-teherguminet-meili}-http.rule=Host(`${MEILI_SEARCH_HOST:-search.localhost}`)
+      - traefik.http.routers.${TRAEFIK_NAMESPACE:-teherguminet-meili}-http.entrypoints=http
+      - traefik.http.routers.${TRAEFIK_NAMESPACE:-teherguminet-meili}-http.middlewares=${TRAEFIK_NAMESPACE:-teherguminet-meili}-redirect
+      - traefik.http.middlewares.${TRAEFIK_NAMESPACE:-teherguminet-meili}-redirect.redirectscheme.scheme=https
+
+volumes:
+  meili-data:
+
+networks:
+  coolify:
+    external: true

@@ -6723,6 +6723,13 @@
   resolved "https://registry.yarnpkg.com/@remix-run/router/-/router-1.23.2.tgz#156c4b481c0bee22a19f7924728a67120de06971"
   integrity sha512-Ic6m2U/rMjTkhERIa/0ZtXJP17QUi2CbWE7cqx4J58M8aA3QTfW+2UlQ4psvTX9IO1RfNVhK3pcpdjej7L+t2w==
 
+"@rokmohar/medusa-plugin-meilisearch@1.3.6":
+  version "1.3.6"
+  resolved "https://registry.yarnpkg.com/@rokmohar/medusa-plugin-meilisearch/-/medusa-plugin-meilisearch-1.3.6.tgz#9376aa22bddd7193ae04105e4627faf361ac19bf"
+  integrity sha512-H7NhdH/Vme0OcaeJamS9ezJWsuRaqi96by1qKjoTqpTObOj1+m4Y/huoDG4byN+6g7kR/1slLK+7sQqtESTshw==
+  dependencies:
+    meilisearch "^0.53.0"
+
 "@rollup/rollup-android-arm-eabi@4.32.0":
   version "4.32.0"
   resolved "https://registry.yarnpkg.com/@rollup/rollup-android-arm-eabi/-/rollup-android-arm-eabi-4.32.0.tgz#42a8e897c7b656adb4edebda3a8b83a57526452f"
@@ -13161,6 +13168,11 @@ medusa-test-utils@^1.1.45:
     "@mikro-orm/postgresql" "5.9.7"
     medusa-core-utils "^1.2.3"
     randomatic "^3.1.1"
+
+meilisearch@^0.53.0:
+  version "0.53.0"
+  resolved "https://registry.yarnpkg.com/meilisearch/-/meilisearch-0.53.0.tgz#77d0d1e8b499e141a582fdebee39d3a57b0ec3a9"
+  integrity sha512-nG4VXbEOSzUmtbfsgOo+t6yX1ECEgXaT4hC0ap9MBpQGK5xwT+NWYDENYsKWR75cVaWaAqva+ok4zHlgtdXlLw==
 
 merge-descriptors@1.0.3:
   version "1.0.3"
