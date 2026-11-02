@@ -9,6 +9,8 @@ RUN apk add --no-cache python3 make g++
 
 # Copy package files and yarn config
 COPY package.json yarn.lock .yarnrc.yml ./
+# patch-package runs in postinstall and needs the patches before install.
+COPY patches ./patches
 
 # Install dependencies with the Yarn version pinned in package.json
 RUN corepack enable \
