@@ -17,10 +17,7 @@ echo "Working directory: $(pwd)"
 
 if [ "$RUN_MIGRATIONS" = "true" ]; then
   echo "Running database migrations..."
-  # db:migrate prompts (no TTY check) when a link table changed or was removed,
-  # which hangs container startup. Safe mode applies only additive link changes;
-  # updates/deletes of link tables must be run by hand: `yarn medusa db:sync-links`.
-  yarn medusa db:migrate --execute-safe-links < /dev/null
+  yarn medusa db:migrate
 else
   echo "Skipping database migrations (RUN_MIGRATIONS=$RUN_MIGRATIONS)."
 fi

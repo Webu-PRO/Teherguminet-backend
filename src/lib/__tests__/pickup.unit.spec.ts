@@ -120,7 +120,7 @@ describe("the option this config produces", () => {
     // data.id is what the manual fulfillment provider keys off. Replacing the
     // blob instead of merging it would break fulfilling these orders.
     const merged = pickupOptionData(PICKUP_LOCATIONS[0], { id: "manual-fulfillment" })
-    expect((merged as Record<string, unknown>).id).toBe("manual-fulfillment")
+    expect(merged.id).toBe("manual-fulfillment")
     expect(merged.type).toBe(PICKUP_OPTION_CODE)
   })
 
