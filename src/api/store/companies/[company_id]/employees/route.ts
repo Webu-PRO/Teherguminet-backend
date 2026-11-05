@@ -8,7 +8,7 @@ const createEmployeeSchema = z.object({
   customer_id: z.string().min(1),
   spending_limit: z.number().nonnegative(),
   is_admin: z.boolean(),
-  metadata: z.record(z.unknown()).optional().nullable(),
+  metadata: z.record(z.string(), z.unknown()).optional().nullable(),
 })
 
 type AuthenticatedRequest = MedusaRequest & {
