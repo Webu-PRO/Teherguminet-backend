@@ -51,7 +51,7 @@
     "awilix": "^8.0.1",
     "medusa-customer-analytics": "^0.2.0",
     "medusa-file-s3": "^1.4.2",
-    "nodemailer": "^6.9.16",
+    "nodemailer": "^10.1.4",
     "pg": "^8.16.3",
     "posthog-node": "^4.17.1",
     "resend": "^6.3.0"
