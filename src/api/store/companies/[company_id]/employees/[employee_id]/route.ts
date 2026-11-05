@@ -7,7 +7,7 @@ import type B2BModuleService from "@modules/b2b/service"
 const updateEmployeeSchema = z.object({
   spending_limit: z.number().nonnegative().optional(),
   is_admin: z.boolean().optional(),
-  metadata: z.record(z.string(), z.unknown()).optional().nullable(),
+  metadata: z.record(z.unknown()).optional().nullable(),
 })
 
 type AuthenticatedRequest = MedusaRequest & {

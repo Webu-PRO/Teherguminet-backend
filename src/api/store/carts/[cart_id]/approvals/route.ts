@@ -6,7 +6,7 @@ import type B2BModuleService from "@modules/b2b/service"
 
 const approvalSchema = z
   .object({
-    metadata: z.record(z.string(), z.unknown()).optional().nullable(),
+    metadata: z.record(z.unknown()).optional().nullable(),
   })
   .optional()
 
