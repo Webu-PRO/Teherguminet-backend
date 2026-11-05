@@ -172,7 +172,7 @@ describe("discount-generator service", () => {
     })
 
     const query = { graph: graphMock } as unknown as Query
-    const createPromotion = jest.fn()
+    const createPromotion = jest.fn() as never
     const suffixes = ["AAAAAA", "BBBBBB"]
 
     const service = new DiscountGeneratorService(createScope(query), {
