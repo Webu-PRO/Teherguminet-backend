@@ -42,9 +42,9 @@ fi
 if [ "$RUN_VARIANTS_BACKFILL_DEFAULT_DIMENSIONS" = "true" ]; then
   echo "Backfilling missing default-variant dimensions (weight/width/height) from inventory items..."
   if [ "$RUN_VARIANTS_BACKFILL_FAIL_ON_ERROR" = "true" ]; then
-    yarn variants:backfill-default-dimensions -- --apply
+    yarn variants:backfill-default-dimensions apply
   else
-    yarn variants:backfill-default-dimensions -- --apply || echo "default-variant dimension backfill failed, continuing startup..."
+    yarn variants:backfill-default-dimensions apply || echo "default-variant dimension backfill failed, continuing startup..."
   fi
 else
   echo "Skipping default-variant dimension backfill (RUN_VARIANTS_BACKFILL_DEFAULT_DIMENSIONS=$RUN_VARIANTS_BACKFILL_DEFAULT_DIMENSIONS)."

@@ -418,7 +418,9 @@ export default async function syncResendTemplates({
   const apiKey = requireEnv("RESEND_API_KEY")
   const from = requireEnv("RESEND_FROM_EMAIL")
   const replyTo = process.env.RESEND_REPLY_TO?.trim()
-  const noWriteIds = args.includes("--no-write-ids")
+  // `medusa exec` (2.18+) rejects unknown --flags; pass `no-write-ids` positionally.
+  const noWriteIds =
+    args.includes("no-write-ids") || args.includes("--no-write-ids")
 
   const resend = new Resend(apiKey)
   const templatesApi = getTemplatesApi(resend)
