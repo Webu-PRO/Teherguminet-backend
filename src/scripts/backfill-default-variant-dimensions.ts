@@ -107,7 +107,9 @@ export default async function backfillDefaultVariantDimensions({
   const productService = container.resolve<ProductModuleService>("product")
 
   const argsSet = readArgsSet(args)
-  const apply = argsSet.has("--apply")
+  // `medusa exec` (2.18+) rejects unknown --flags, so the positional `apply`
+  // is the working form; `--apply` is kept for older CLIs.
+  const apply = argsSet.has("apply") || argsSet.has("--apply")
   const dryRun = !apply
 
   const inventoryBySku = new Map<string, QueryInventoryItem>()
@@ -251,7 +253,7 @@ export default async function backfillDefaultVariantDimensions({
 
   if (dryRun) {
     logger.info(
-      "Dry-run only. Re-run with '--apply' to write updates: npx medusa exec ./src/scripts/backfill-default-variant-dimensions.ts --apply"
+      "Dry-run only. Re-run with 'apply' to write updates: npx medusa exec ./src/scripts/backfill-default-variant-dimensions.ts apply"
     )
   }
 }
