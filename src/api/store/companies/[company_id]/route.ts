@@ -14,7 +14,7 @@ const updateCompanySchema = z.object({
   zip: z.string().optional().nullable(),
   country: z.string().optional().nullable(),
   currency_code: z.string().min(1).optional(),
-  metadata: z.record(z.unknown()).optional().nullable(),
+  metadata: z.record(z.string(), z.unknown()).optional().nullable(),
 })
 
 type AuthenticatedRequest = MedusaRequest & {
