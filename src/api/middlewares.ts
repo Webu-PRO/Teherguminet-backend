@@ -7,6 +7,7 @@ import { adminDiscountCodeMiddlewares } from "./admin/discount-code/middlewares"
 import { adminFeedStatusMiddlewares } from "./admin/feed-status/middlewares";
 import { adminSeoSettingsMiddlewares } from "./admin/seo-settings/middlewares";
 import { adminProductLocalizationMiddlewares } from "./admin/products/localization/middlewares";
+import { stripSupplierCostMiddleware } from "./store/strip-supplier-cost-middleware";
 
 const productFeedQuerySchema = z
   .object({
@@ -25,6 +26,11 @@ const productFeedQuerySchema = z
 
 export default defineMiddlewares({
   routes: [
+    {
+      // never leak supplier purchase data (Tomket cost, shipping fee, internal id) in Store API responses
+      matcher: "/store/*",
+      middlewares: [stripSupplierCostMiddleware],
+    },
     {
       matcher: "/product-feed",
       methods: ["GET"],
