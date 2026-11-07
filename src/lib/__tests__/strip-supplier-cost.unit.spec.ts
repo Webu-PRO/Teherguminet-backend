@@ -54,7 +54,7 @@ describe("stripSensitiveMetadata", () => {
   })
 
   it("classifies keys", () => {
-    for (const k of ["tomket_cost_eur_net", "cost_price", "purchase_price", "beszerzesi_ar", "tomket_shipping_eur_net", "tomket_internal_id", "margin_pct"]) {
+    for (const k of ["tomket_cost_eur_net", "cost_price", "purchase_price", "beszerzesi_ar", "tomket_shipping_eur_net", "tomket_internal_id", "internal_id", "supplier_id", "tomket_supplier_id", "margin_pct"]) {
       expect(isSensitiveMetadataKey(k)).toBe(true)
     }
     for (const k of ["tomket_ean", "tomket_dot", "tomket_label_noise_class", "seo_title", "min_qty"]) {

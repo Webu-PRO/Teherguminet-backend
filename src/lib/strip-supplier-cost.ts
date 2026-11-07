@@ -8,7 +8,7 @@
  * `metadata` object it finds. Keys a shopper may see (EAN, size, EU label, DOT…) stay.
  */
 
-const SENSITIVE_KEY = /cost|purchase|beszerz|margin|_shipping_eur_net$|_internal_id$/i
+const SENSITIVE_KEY = /cost|purchase|beszerz|margin|_shipping_eur_net$|(^|_)internal_id$|(^|_)supplier_id$/i
 
 export function isSensitiveMetadataKey(key: string): boolean {
   return SENSITIVE_KEY.test(key)
