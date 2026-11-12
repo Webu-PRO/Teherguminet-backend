@@ -68,6 +68,35 @@ export type TomketImportResult = {
   }>
 }
 
+export type TomketExistingPrice = {
+  amount?: number | string | null
+  currency_code?: string | null
+}
+
+/**
+ * True when the variant already holds exactly the computed prices (one per
+ * currency, same amounts), so the sync can skip rewriting them.
+ */
+export const tomketPricesUnchanged = (
+  existing: TomketExistingPrice[] | null | undefined,
+  next: Array<{ amount: number; currency_code: string }>
+): boolean => {
+  const current = (existing ?? []).filter(Boolean)
+  if (current.length !== next.length) {
+    return false
+  }
+  return next.every((price) => {
+    const matches = current.filter(
+      (candidate) =>
+        (candidate.currency_code ?? "").toLowerCase() === price.currency_code
+    )
+    return (
+      matches.length === 1 &&
+      Math.abs(Number(matches[0].amount) - price.amount) < 1e-6
+    )
+  })
+}
+
 const CHUNK = <T,>(items: T[], size: number): T[][] => {
   const chunks: T[][] = []
   for (let i = 0; i < items.length; i += size) {
@@ -699,7 +728,14 @@ export const runTomketStockSync = async (
   const query = container.resolve(ContainerRegistrationKeys.QUERY)
   const { data: variants } = await query.graph({
     entity: "product_variant",
-    fields: ["id", "sku", "metadata", "inventory_items.inventory_item_id"],
+    fields: [
+      "id",
+      "sku",
+      "metadata",
+      "inventory_items.inventory_item_id",
+      "prices.amount",
+      "prices.currency_code",
+    ],
     filters: { sku: feed.rows.map((row) => `TOMKET-${row.internalId}`) },
   })
 
@@ -731,9 +767,7 @@ export const runTomketStockSync = async (
       pricing
     )
 
-    priceUpdates.push({
-      id: variant.id,
-      prices: context.currencyCodes
+    const nextPrices = context.currencyCodes
         .map((currency) =>
           currency === "huf"
             ? { amount: prices.huf, currency_code: "huf" }
@@ -744,8 +778,18 @@ export const runTomketStockSync = async (
         .filter(
           (price): price is { amount: number; currency_code: string } =>
             Boolean(price)
-        ),
-    })
+        )
+    // Only write what changed: rewriting all ~3k variant prices every 15
+    // minutes ran 60+ update workflows (and their product events) per sync
+    // even when no price had moved.
+    if (
+      !tomketPricesUnchanged(
+        (variant as { prices?: TomketExistingPrice[] | null }).prices,
+        nextPrices
+      )
+    ) {
+      priceUpdates.push({ id: variant.id, prices: nextPrices })
+    }
 
     const itemId = (variant.inventory_items ?? [])[0]?.inventory_item_id
     if (itemId) {
@@ -778,11 +822,12 @@ export const runTomketStockSync = async (
   }
 
   report(
-    `Szinkron kész: ${priceUpdates.length} ár, ${stockEntries.length} készlet frissítve.`
+    `Szinkron kész: ${priceUpdates.length}/${inFeed.size} ár változott, ${stockEntries.length} készlet ellenőrizve.`
   )
 
   return {
-    matched: priceUpdates.length,
+    matched: inFeed.size,
+    priceUpdates: priceUpdates.length,
     stockUpdates: stockEntries.length,
     feedRows: feed.rows.length,
   }
